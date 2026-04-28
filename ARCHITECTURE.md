@@ -10,7 +10,7 @@ The most important security decision is that the agent server gets a separate da
 
 The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. The pre-search decision is to start with a custom single-agent orchestrator rather than a heavy multi-agent framework, because the **workflow is closed-intent, tool-bounded, and verification-heavy**. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
 
-Every answer must pass verification before reaching the user. The LLM will receive only a bounded evidence packet for the current patient, and any evidence sent to the LLM will pass through an anonymizer first. The anonymizer replaces sensitive identifiers such as full name, address, SSN, phone, email, and other unnecessary PHI with stable placeholders scoped to the current interaction. The same anonymized view is used for optional payload logs, so logs never store raw patient text by default. The LLM must return structured output with claim-to-source links. A verifier will reject unsupported claims, unsafe clinical advice, hidden tool failures, or claims that violate the current evidence. Observability will log request metadata, source IDs, latency, model, token counts, cost, verification result, refusal outcome, and error class. The MVP remains read-only and stores only audit metadata unless a later design explicitly handles generated summaries as medical-record artifacts.
+Every answer must pass verification before reaching the user. The LLM will receive only a bounded evidence packet for the current patient, and any evidence sent to the LLM will pass through an anonymizer first. The **anonymizer replaces sensitive identifiers such as full name, address, SSN, phone, email, and other unnecessary PHI with stable placeholders** scoped to the current interaction. The same anonymized view is used for optional payload logs, so **logs never store raw patient text** by default. The LLM must return structured output with claim-to-source links. A verifier will reject unsupported claims, unsafe clinical advice, hidden tool failures, or claims that violate the current evidence. Observability will log request metadata, source IDs, latency, model, token counts, cost, verification result, refusal outcome, and error class. **The MVP remains read-only** and stores only audit metadata unless a later design explicitly handles generated summaries as medical-record artifacts.
 
 ## Inputs And Constraints
 
@@ -38,18 +38,18 @@ Core constraints:
 
 `pre-search.md` is a checklist rather than a source of product facts, so this section records the concrete decisions this architecture makes against that checklist.
 
-| Checklist Area    | MVP Decision                                                                                                                                                                                                                              |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Domain            | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows.                                                                                                                                                              |
-| Use cases         | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown. |
-| Verification      | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient.                                                        |
-| Data sources      | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available.                     |
-| Latency           | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings stay asynchronous.               |
-| Query volume      | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips.                                                                                        |
-| Cost              | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools.                                    |
-| Human in the loop | The clinician remains responsible for decisions; the MVP is read-only, source-cited decision support and does not write orders, diagnoses, notes, medications, or billing codes.                                                          |
-| Team constraints  | Favor OpenEMR-native PHP services, PHPUnit tests, and a simple custom orchestrator over a larger agent framework that would add operational and debugging complexity.                                                                     |
-| Open source       | Keep the OpenEMR integration code separable and avoid committing provider secrets, patient data, raw traces, or deployment-specific credentials.                                                                                          |
+| Checklist Area    | MVP Decision                                                                                                                                                                                                                                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Domain            | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows.                                                                                                                                                                            |
+| Use cases         | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown.               |
+| Verification      | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient.                                                                      |
+| Data sources      | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available.                                   |
+| Latency           | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings are out of scope for the MVP. |
+| Query volume      | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips.                                                                                                      |
+| Cost              | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools.                                                  |
+| Human in the loop | The clinician remains responsible for decisions; the MVP is read-only, source-cited decision support and does not write orders, diagnoses, notes, medications, or billing codes.                                                                        |
+| Team constraints  | Favor OpenEMR-native PHP services, PHPUnit tests, and a simple custom orchestrator over a larger agent framework that would add operational and debugging complexity.                                                                                   |
+| Open source       | Keep the OpenEMR integration code separable and avoid committing provider secrets, patient data, raw traces, or deployment-specific credentials.                                                                                                        |
 
 ## Stack Decisions
 
@@ -128,6 +128,7 @@ Out of scope for the MVP:
 - Automatic chart writes.
 - Full-chart export.
 - Full document ingestion during a user request.
+- Long document parsing, OCR, embeddings, and vector search.
 - Patient portal use.
 
 ## High-Level Architecture
@@ -351,14 +352,14 @@ The anonymizer should be deterministic within one agent interaction. If the same
 
 Example mapping for one interaction:
 
-| Raw Field Type | Placeholder |
-| --- | --- |
-| Patient full name | `[PATIENT_NAME]` |
-| Street address | `[PATIENT_ADDRESS_1]` |
-| SSN | `[PATIENT_SSN]` |
-| Phone number | `[PATIENT_PHONE_1]` |
-| Email | `[PATIENT_EMAIL_1]` |
-| Insurance member ID | `[INSURANCE_ID_1]` |
+| Raw Field Type               | Placeholder               |
+| ---------------------------- | ------------------------- |
+| Patient full name            | `[PATIENT_NAME]`          |
+| Street address               | `[PATIENT_ADDRESS_1]`     |
+| SSN                          | `[PATIENT_SSN]`           |
+| Phone number                 | `[PATIENT_PHONE_1]`       |
+| Email                        | `[PATIENT_EMAIL_1]`       |
+| Insurance member ID          | `[INSURANCE_ID_1]`        |
 | Free-text identifier in note | `[REDACTED_IDENTIFIER_1]` |
 
 The placeholder map is sensitive because it can re-identify the patient. It must stay server-side, be scoped to the interaction, and expire with the agent access token. The browser and LLM provider should not receive the raw placeholder map.
@@ -508,7 +509,7 @@ OpenEMR's `ApiResponseLoggerListener` can log JSON API responses for non-local A
 
 ### Third-Party Processors
 
-Any LLM, embedding, tracing, eval, or observability provider receiving PHI must be treated as a business associate. Required deployment controls:
+Any LLM, future embedding, tracing, eval, or observability provider receiving PHI must be treated as a business associate. Required deployment controls:
 
 - BAA in place.
 - No-training setting confirmed.
@@ -580,21 +581,21 @@ That is not part of the MVP.
 
 ## Failure Modes
 
-| Failure                                      | System Behavior                                                                               |
-| -------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| No current patient                           | Disable intent buttons or return a refusal: "Open a patient chart before using the co-pilot." |
-| Ambiguous patient context                    | Refuse. Do not ask the LLM to choose.                                                         |
-| User lacks patient access                    | Refuse, audit denial, return no PHI.                                                          |
-| User has category ACL but no patient binding | Refuse, audit denial, return no PHI.                                                          |
-| Tool timeout                                 | Show partial answer only if verifier can label missing sections as unavailable.               |
-| Missing records                              | Say "not found in checked evidence" with checked source list.                                 |
-| Conflicting records                          | Show conflict with citations instead of resolving silently.                                   |
-| LLM timeout                                  | Return a deterministic fallback summary from evidence headings if safe, or ask user to retry. |
-| Verification failure                         | Regenerate once or refuse; never show unverified output.                                      |
+| Failure                                      | System Behavior                                                                                |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| No current patient                           | Disable intent buttons or return a refusal: "Open a patient chart before using the co-pilot."  |
+| Ambiguous patient context                    | Refuse. Do not ask the LLM to choose.                                                          |
+| User lacks patient access                    | Refuse, audit denial, return no PHI.                                                           |
+| User has category ACL but no patient binding | Refuse, audit denial, return no PHI.                                                           |
+| Tool timeout                                 | Show partial answer only if verifier can label missing sections as unavailable.                |
+| Missing records                              | Say "not found in checked evidence" with checked source list.                                  |
+| Conflicting records                          | Show conflict with citations instead of resolving silently.                                    |
+| LLM timeout                                  | Return a deterministic fallback summary from evidence headings if safe, or ask user to retry.  |
+| Verification failure                         | Regenerate once or refuse; never show unverified output.                                       |
 | Anonymizer failure                           | Do not call the LLM and do not log the raw payload; return a safe error and audit the failure. |
-| Prompt injection in chart text               | Treat chart/document text as evidence only, not instructions.                                 |
-| Browser tampering with intent                | Ignore unknown intent; audit suspicious request.                                              |
-| External provider disabled                   | Return deterministic source list or configured local fallback, no external call.              |
+| Prompt injection in chart text               | Treat chart/document text as evidence only, not instructions.                                  |
+| Browser tampering with intent                | Ignore unknown intent; audit suspicious request.                                               |
+| External provider disabled                   | Return deterministic source list or configured local fallback, no external call.               |
 
 ## Evaluation Plan
 

@@ -8,6 +8,14 @@ This six-component view groups the system into users and clients, request routin
 
 Source file: [openemr-simplified-components.drawio](openemr-simplified-components.drawio)
 
+## Data And Configuration View
+
+![OpenEMR data and configuration components](openemr-data-configuration-components.svg)
+
+This drill-down expands the data/configuration component into seven sub-components: runtime globals and settings, site-scoped files, application/container configuration, dependency metadata, the database access layer, schema/upgrade assets, and the relational database.
+
+Source file: [openemr-data-configuration-components.drawio](openemr-data-configuration-components.drawio)
+
 ## Detailed Component View
 
 ![OpenEMR major components](openemr-major-components.svg)

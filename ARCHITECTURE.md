@@ -138,10 +138,15 @@ flowchart TD
     A["OpenEMR authenticated UI"] --> B["Button-only Agent Panel"]
     B --> C["Agent REST Endpoint"]
     C --> D["Intent Catalog"]
-    C --> E["Agent Access Broker"]
-    E --> F{"Access token issued?"}
+    C --> P{"Existing valid interaction token?"}
+    P -->|No| E["Agent Access Broker"]
+    E --> V["Validate session, CSRF, ACLs, patient binding, intent policy"]
+    V --> F{"Authorized for this patient?"}
     F -->|No| G["Refusal + audit event"]
-    F -->|Yes| H["Evidence Retrieval Tools"]
+    F -->|Yes| T["Issue interaction-scoped agent access token"]
+    P -->|Yes| U["Reuse agent access token"]
+    T --> U
+    U --> H["Evidence Retrieval Tools"]
     H --> I["Bounded Evidence Packet"]
     I --> O["Anonymizer"]
     O --> J["LLM Orchestrator"]
@@ -150,13 +155,16 @@ flowchart TD
     K -->|Fail| M["Refusal, correction, or degraded answer"]
     C --> N["Agent Observability"]
     E --> N
+    V --> N
+    T --> N
+    U --> N
     H --> N
     O --> N
     J --> N
     K --> N
 ```
 
-The browser is intentionally thin. It renders buttons, sends selected intent IDs, displays verified answers, and lets the user inspect citations. The agent server owns prompt text, tool routing, patient context, access checks, evidence selection, LLM calls, verification, and audit events.
+The browser is intentionally thin. It renders buttons, sends selected intent IDs, displays verified answers, and lets the user inspect citations. The agent server owns prompt text, tool routing, patient context, access checks, evidence selection, LLM calls, verification, and audit events. The first action in an interaction issues the patient-scoped agent access token; follow-up buttons and source drilldowns reuse that token until the interaction ends or the token expires.
 
 ## OpenEMR Integration Points
 

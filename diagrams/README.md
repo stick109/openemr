@@ -1,0 +1,13 @@
+# OpenEMR Major Components
+
+![OpenEMR major components](openemr-major-components.svg)
+
+This diagram summarizes the major runtime surfaces and shared components visible in this repository. OpenEMR is a PHP application with a large legacy browser UI, newer REST/FHIR/OAuth2 routing, a patient portal, CLI/setup tooling, and a gradual move toward namespaced service and container infrastructure.
+
+The main compatibility boundary is `interface\globals.php`. Classic browser pages, portal flows, many CLI commands, and the API site setup path use it to establish the active site, session state, path globals, database access, global settings, and module/event hooks.
+
+The API path enters through `apis\dispatch.php` and `oauth2\authorize.php`, then runs through `ApiApplication`, `OEHttpKernel`, route finders, security checks, REST/FHIR controllers, services, validators, and response rendering. The newer `public\index.php` path uses `FallbackRouter` as a bridge back into historical dispatchers and literal PHP entry points.
+
+Data and configuration are split between MySQL/MariaDB, site-scoped files under `sites`, Composer/config-driven service wiring under `config`, and external systems for payments, messaging, pharmacies, labs, and interoperability.
+
+Source file: [openemr-major-components.drawio](openemr-major-components.drawio)

@@ -8,13 +8,21 @@ This six-component view groups the system into users and clients, request routin
 
 Source file: [openemr-simplified-components.drawio](openemr-simplified-components.drawio)
 
-## Data And Configuration View
+## Data Access View
 
-![OpenEMR data and configuration components](openemr-data-configuration-components.svg)
+![OpenEMR data access components](openemr-data-access-components.svg)
 
-This drill-down expands the data/configuration component into seven sub-components: runtime globals and settings, site-scoped files, application/container configuration, dependency metadata, the database access layer, schema/upgrade assets, and the relational database.
+This flow identifies application data callers as the entry point and shows the downstream components used to read and write data: services and validators, legacy SQL helpers, newer Doctrine-backed access, active site connection context, schema lifecycle assets, and MySQL/MariaDB.
 
-Source file: [openemr-data-configuration-components.drawio](openemr-data-configuration-components.drawio)
+Source file: [openemr-data-access-components.drawio](openemr-data-access-components.drawio)
+
+## Configuration View
+
+![OpenEMR configuration components](openemr-configuration-components.svg)
+
+This flow identifies bootstrap and configuration loaders as the entry point and shows the downstream configuration sources they use: site files, environment/default mappings, container service config, dependency metadata, persisted settings, and module extension config.
+
+Source file: [openemr-configuration-components.drawio](openemr-configuration-components.drawio)
 
 ## Detailed Component View
 

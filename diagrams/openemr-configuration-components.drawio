@@ -1,0 +1,86 @@
+<mxfile host="app.diagrams.net" modified="2026-04-28T16:30:00.000Z" agent="Codex" version="26.0.0" type="device">
+  <diagram id="openemr-configuration-components" name="Configuration">
+    <mxGraphModel dx="1200" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="OpenEMR Configuration Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="40" y="25" width="1120" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Entry point and downstream components used to assemble runtime configuration." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="250" y="70" width="700" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="entry" value="ENTRY POINT&#xa;Bootstrap and config loaders&#xa;interface\globals.php, bootstrap.php, public\index.php, CLI/setup bootstrap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=14;fontStyle=1;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="460" y="125" width="280" height="155" as="geometry" />
+        </mxCell>
+        <mxCell id="site-config" value="Site configuration files&#xa;sites\default\sqlconf.php, config.php, documents path and site-local options" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="75" y="345" width="285" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="env-config" value="Environment and defaults&#xa;.env example values, config\env.php, installation/runtime environment mappings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="460" y="345" width="280" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="container-config" value="Container and service config&#xa;config\services.php, database.php, psr.php, app.php, PSR-11 wiring" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="840" y="345" width="285" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="dependency-metadata" value="Dependency metadata&#xa;composer.json, composer.lock, Composer autoload, package metadata" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="75" y="585" width="285" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="database-settings" value="Stored runtime settings&#xa;globals table, facility/user/site records, OAuth keys and application settings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="460" y="585" width="280" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="module-config" value="Module and extension config&#xa;interface\modules, custom modules, module configs, event hooks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ecfeff;strokeColor=#0891b2;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="840" y="585" width="285" height="125" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-entry-site" value="selects active site" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="entry" target="site-config">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="315" />
+              <mxPoint x="218" y="315" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-entry-env" value="loads environment" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="entry" target="env-config">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-entry-container" value="builds services" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="entry" target="container-config">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="315" />
+              <mxPoint x="983" y="315" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-entry-deps" value="requires autoload" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="entry" target="dependency-metadata">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="550" />
+              <mxPoint x="218" y="550" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-site-dbsettings" value="loads persisted settings" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="site-config" target="database-settings">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="218" y="540" />
+              <mxPoint x="600" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-container-module" value="registers extensions" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="container-config" target="module-config">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-env-container" value="parameter values" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="env-config" target="container-config">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-deps-container" value="classes and packages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#94a3b8;dashed=1;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="dependency-metadata" target="container-config">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="218" y="735" />
+              <mxPoint x="983" y="735" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

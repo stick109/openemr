@@ -1,0 +1,79 @@
+<mxfile host="app.diagrams.net" modified="2026-04-28T16:30:00.000Z" agent="Codex" version="26.0.0" type="device">
+  <diagram id="openemr-data-access-components" name="Data Access">
+    <mxGraphModel dx="1200" dy="760" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1200" pageHeight="760" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="OpenEMR Data Access Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=26;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="40" y="25" width="1120" height="44" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Entry point and downstream components used when OpenEMR reads or writes application data." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="220" y="70" width="760" height="34" as="geometry" />
+        </mxCell>
+        <mxCell id="entry" value="ENTRY POINT&#xa;Application data callers&#xa;Browser workflows, REST/FHIR controllers, portal flows, CLI/setup commands" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=14;fontStyle=1;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="460" y="130" width="280" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="services" value="Service and validation layer&#xa;src\Services, src\Validators, FHIR services and domain helpers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="460" y="355" width="280" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="legacy-sql" value="Legacy SQL access&#xa;library\sql.inc.php, sqlStatement(), sqlQuery(), ADODB connection helpers" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="355" width="295" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="modern-db" value="Modern database access&#xa;Doctrine DBAL/ORM plumbing and newer database services" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="825" y="355" width="295" height="145" as="geometry" />
+        </mxCell>
+        <mxCell id="site-context" value="Connection and site context&#xa;interface\globals.php, active site, sites\default\sqlconf.php, runtime globals" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0f9ff;strokeColor=#0284c7;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="80" y="580" width="295" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="database" value="Relational database&#xa;MySQL/MariaDB tables for clinical data, practice data, auth, audit, and settings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="460" y="580" width="280" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="schema" value="Schema lifecycle assets&#xa;sql baseline, patch scripts, db migrations, setup and upgrade flows" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fef3c7;strokeColor=#ca8a04;fontColor=#0f172a;fontSize=14;spacing=14;" vertex="1" parent="1">
+          <mxGeometry x="825" y="580" width="295" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-entry-services" value="most modern calls" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="entry" target="services">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-entry-legacy" value="direct legacy pages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="entry" target="legacy-sql">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="600" y="320" />
+              <mxPoint x="228" y="320" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-services-legacy" value="legacy persistence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="services" target="legacy-sql">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-services-modern" value="newer persistence" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="services" target="modern-db">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-legacy-context" value="uses active connection" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="legacy-sql" target="site-context">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-context-db" value="connects to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="site-context" target="database">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-modern-db" value="queries" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="modern-db" target="database">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="973" y="540" />
+              <mxPoint x="600" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-legacy-db" value="queries" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#94a3b8;dashed=1;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="legacy-sql" target="database">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="228" y="540" />
+              <mxPoint x="600" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="edge-schema-db" value="defines and upgrades" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#64748b;endArrow=block;endFill=1;fontSize=12;fontColor=#334155;" edge="1" parent="1" source="schema" target="database">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

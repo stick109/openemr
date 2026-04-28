@@ -8,7 +8,7 @@ The most important product decision is that there will be no free-text communica
 
 The most important security decision is that the agent server gets a separate data access component: the Agent Access Broker. Current OpenEMR auth and ACL infrastructure is useful, but the audit found that it is not sufficient for this purpose because many checks answer "can this user access this category of data?" instead of "can this exact user access this exact patient right now?" The broker will sit in front of every agent retrieval tool. It will validate the authenticated OpenEMR session, API CSRF token, user role, OpenEMR ACLs, current patient context, appointment or chart binding, and per-intent data policy. If access is granted, it creates a short-lived evidence grant containing the patient identity, allowed tools, allowed data classes, limits, and request ID. Tools must present that grant and cannot accept patient IDs directly from the LLM or browser.
 
-The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
+The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. The pre-search decision is to start with a custom single-agent orchestrator rather than a heavy multi-agent framework, because the workflow is closed-intent, tool-bounded, and verification-heavy. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
 
 Every answer must pass verification before reaching the user. The LLM will receive only a bounded evidence packet for the current patient. It must return structured output with claim-to-source links. A verifier will reject unsupported claims, unsafe clinical advice, hidden tool failures, or claims that violate the current evidence. Rendered output will be escaped text or a strict safe-markdown subset with citation chips. Observability will log request ID, user, patient, intent, tool sequence, source record IDs, latency, model, token counts, cost, verification result, refusal outcome, and error class. It will not log raw chart excerpts, raw prompts, or model completions by default. The MVP remains read-only and stores only audit metadata unless a later design explicitly handles generated summaries as medical-record artifacts.
 
@@ -20,7 +20,7 @@ This plan is based on these primary inputs:
 - `USERS.md`: narrows the MVP to an intake nurse and a doctor in an outpatient scheduled-patient workflow.
 - `AUDIT.md`: identifies patient-specific authorization, PHI-safe logging, source verification, and bounded retrieval as non-negotiable gates.
 - `CURRENT-ARCHITECTURE.md`: describes OpenEMR as a hybrid monolith with legacy PHP entry points, REST/FHIR APIs, phpGACL ACLs, service classes, sessions, events, modules, and transitional DB layers.
-- `pre-search.md`: currently empty, so it adds no extra constraints.
+- `pre-search.md`: provides the planning checklist for domain selection, scale and performance, reliability, framework selection, LLM choice, tool design, observability, evals, verification, failure modes, security, testing, open source, deployment, and iteration.
 
 Core constraints:
 
@@ -32,6 +32,76 @@ Core constraints:
 - No raw prompts, chart excerpts, or generated clinical summaries in durable logs by default.
 - No LLM keys or PHI-bearing retrieval logic in browser code.
 - No standalone public PHP entry point that bypasses OpenEMR auth, CSRF, ACL, audit, or session bootstrapping.
+
+## Pre-Search Decisions
+
+`pre-search.md` is a checklist rather than a source of product facts, so this section records the concrete decisions this architecture makes against that checklist.
+
+| Checklist Area | MVP Decision |
+| --- | --- |
+| Domain | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows. |
+| Use cases | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown. |
+| Verification | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient. |
+| Data sources | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available. |
+| Latency | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings stay asynchronous. |
+| Query volume | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips. |
+| Cost | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools. |
+| Human in the loop | The clinician remains responsible for decisions; the MVP is read-only, source-cited decision support and does not write orders, diagnoses, notes, medications, or billing codes. |
+| Team constraints | Favor OpenEMR-native PHP services, PHPUnit tests, and a simple custom orchestrator over a larger agent framework that would add operational and debugging complexity. |
+| Open source | Keep the OpenEMR integration code separable and avoid committing provider secrets, patient data, raw traces, or deployment-specific credentials. |
+
+## Stack Decisions
+
+### Agent Framework
+
+The MVP should use a custom orchestrator implemented in OpenEMR service/controller code, not LangChain, LangGraph, CrewAI, or a multi-agent runtime. The primary reason is control: the workflow is a finite intent catalog with fixed tool permissions and a hard verification gate. A generic framework can be reconsidered later if the product grows into more complex planning, but the first iteration should keep the trust boundary visible in application code.
+
+### LLM Provider
+
+The LLM should be behind a provider interface. The first provider should support structured JSON output, strong instruction following, sufficient context for bounded evidence packets, token accounting, request timeouts, and a BAA/no-training deployment posture. The architecture should avoid hard-coding a vendor or model name into business logic; use a configured model alias so deployment can switch between a preferred hosted model and a local or disabled mode.
+
+### Tool Design
+
+Tools are server-owned read models, not arbitrary API callers. Each tool has:
+
+- one clinical purpose
+- one required evidence grant
+- one patient
+- bounded input
+- explicit limits
+- structured output
+- timeout and error behavior
+- source IDs for verification
+
+The LLM never selects tools directly. The intent catalog selects the allowed tools before the model sees the evidence packet.
+
+### Observability Provider
+
+The MVP can begin with OpenEMR audit events plus structured application logs. A dedicated tracing tool can be added later, but only if it can be configured for HIPAA-appropriate retention and no raw PHI capture. The architecture must track latency, tool sequence, token counts, and cost from the first implementation even if the storage backend is initially simple.
+
+### Deployment And Operations
+
+The agent should deploy with the same OpenEMR fork and environment as the application. Operational controls required before real PHI use:
+
+- server-side LLM credentials only
+- environment or site-level config for provider selection
+- external LLM kill switch
+- request timeout and retry policy
+- rate limiting per user/session
+- rollback path for prompt templates and model aliases
+- PHI-safe monitoring and alerting for access denials, verification failures, provider failures, latency, and cost spikes
+
+### Iteration Model
+
+Iteration should be eval-driven. New intents require:
+
+- a `USERS.md` use-case trace
+- an intent catalog entry
+- a data access policy
+- one or more bounded tools
+- verification rules
+- observability fields
+- positive, negative, and adversarial eval fixtures
 
 ## MVP Scope
 

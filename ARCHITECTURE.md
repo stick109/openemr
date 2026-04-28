@@ -38,18 +38,18 @@ Core constraints:
 
 `pre-search.md` is a checklist rather than a source of product facts, so this section records the concrete decisions this architecture makes against that checklist.
 
-| Checklist Area    | MVP Decision                                                                                                                                                                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Domain            | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows.                                                                                                                                                                            |
-| Use cases         | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown.               |
-| Verification      | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient.                                                                      |
-| Data sources      | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available.                                   |
-| Latency           | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings are out of scope for the MVP. |
-| Query volume      | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips.                                                                                                      |
-| Cost              | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools.                                                  |
-| Human in the loop | The clinician remains responsible for decisions; the MVP is read-only, source-cited decision support and does not write orders, diagnoses, notes, medications, or billing codes.                                                                        |
-| Team constraints  | Favor OpenEMR-native PHP services, PHPUnit tests, and a simple custom orchestrator over a larger agent framework that would add operational and debugging complexity.                                                                                   |
-| Open source       | Keep the OpenEMR integration code separable and avoid committing provider secrets, patient data, raw traces, or deployment-specific credentials.                                                                                                        |
+| Checklist Area    | MVP Decision                                                                                                                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Domain            | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows.                                                                                                                                                              |
+| Use cases         | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown. |
+| Verification      | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient.                                                        |
+| Data sources      | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available.                     |
+| Latency           | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings are out of scope for the MVP.    |
+| Query volume      | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips.                                                                                        |
+| Cost              | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools.                                    |
+| Human in the loop | The clinician remains responsible for decisions; the MVP is read-only, source-cited decision support and does not write orders, diagnoses, notes, medications, or billing codes.                                                          |
+| Team constraints  | Favor OpenEMR-native PHP services, PHPUnit tests, and a simple custom orchestrator over a larger agent framework that would add operational and debugging complexity.                                                                     |
+| Open source       | Keep the OpenEMR integration code separable and avoid committing provider secrets, patient data, raw traces, or deployment-specific credentials.                                                                                          |
 
 ## Stack Decisions
 
@@ -370,9 +370,7 @@ Example mapping for one interaction:
 | Insurance member ID          | `[INSURANCE_ID_1]`        |
 | Free-text identifier in note | `[REDACTED_IDENTIFIER_1]` |
 
-The placeholder map is sensitive because it can re-identify the patient. It must stay server-side, be scoped to the interaction, and expire with the agent access token. The browser and LLM provider should not receive the raw placeholder map.
-
-The anonymizer should remove or replace direct identifiers unless they are needed for the selected intent. Clinical facts that are needed for reasoning, such as medication names, allergy names, lab values, problem titles, encounter dates, and source IDs, should remain available when they are not themselves direct identifiers. When a field is useful clinically but highly identifying, the evidence tool should prefer a less identifying form, such as age instead of full date of birth, or facility label instead of full address.
+Clinical facts that are needed for reasoning, such as medication names, allergy names, lab values, problem titles, encounter dates, and source IDs, should remain available when they are not themselves direct identifiers. When a field is useful clinically but highly identifying, the evidence tool should prefer a less identifying form, such as age instead of full date of birth, or facility label instead of full address.
 
 The verifier operates over both views:
 

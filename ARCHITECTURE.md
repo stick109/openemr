@@ -10,7 +10,7 @@ The most important security decision is that the agent server gets a separate da
 
 The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. The pre-search decision is to start with a custom single-agent orchestrator rather than a heavy multi-agent framework, because the **workflow is closed-intent, tool-bounded, and verification-heavy**. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
 
-Every answer must pass verification before reaching the user. The LLM will receive only a bounded evidence packet for the current patient. It must return structured output with claim-to-source links. A verifier will reject unsupported claims, unsafe clinical advice, hidden tool failures, or claims that violate the current evidence. Rendered output will be escaped text or a strict safe-markdown subset with citation chips. Observability will log request ID, user, patient, intent, tool sequence, source record IDs, latency, model, token counts, cost, verification result, refusal outcome, and error class. It will not log raw chart excerpts, raw prompts, or model completions by default. The MVP remains read-only and stores only audit metadata unless a later design explicitly handles generated summaries as medical-record artifacts.
+Every answer must pass verification before reaching the user. The LLM will receive only a bounded evidence packet for the current patient, and any evidence sent to the LLM will pass through an anonymizer first. The anonymizer replaces sensitive identifiers such as full name, address, SSN, phone, email, and other unnecessary PHI with stable placeholders scoped to the current interaction. The same anonymized view is used for optional payload logs, so logs never store raw patient text by default. The LLM must return structured output with claim-to-source links. A verifier will reject unsupported claims, unsafe clinical advice, hidden tool failures, or claims that violate the current evidence. Observability will log request metadata, source IDs, latency, model, token counts, cost, verification result, refusal outcome, and error class. The MVP remains read-only and stores only audit metadata unless a later design explicitly handles generated summaries as medical-record artifacts.
 
 ## Inputs And Constraints
 
@@ -30,6 +30,7 @@ Core constraints:
 - Read-only MVP.
 - Every factual claim must cite source records or be marked missing, unknown, conflicting, or not checked.
 - No raw prompts, chart excerpts, or generated clinical summaries in durable logs by default.
+- Anonymize patient payloads before they are sent to an LLM or written to optional payload logs.
 - No LLM keys or PHI-bearing retrieval logic in browser code.
 - No standalone public PHP entry point that bypasses OpenEMR auth, CSRF, ACL, audit, or session bootstrapping.
 
@@ -77,7 +78,7 @@ The LLM never selects tools directly. The intent catalog selects the allowed too
 
 ### Observability Provider
 
-The MVP can begin with OpenEMR audit events plus structured application logs. A dedicated tracing tool can be added later, but only if it can be configured for HIPAA-appropriate retention and no raw PHI capture. The architecture must track latency, tool sequence, token counts, and cost from the first implementation even if the storage backend is initially simple.
+The MVP can begin with OpenEMR audit events plus structured application logs. A dedicated tracing tool can be added later, but only if it can be configured for HIPAA-appropriate retention and no raw PHI capture. Any optional payload logging must use anonymizer output. The architecture must track latency, tool sequence, token counts, and cost from the first implementation even if the storage backend is initially simple.
 
 ### Deployment And Operations
 
@@ -141,13 +142,15 @@ flowchart TD
     F -->|No| G["Refusal + audit event"]
     F -->|Yes| H["Evidence Retrieval Tools"]
     H --> I["Bounded Evidence Packet"]
-    I --> J["LLM Orchestrator"]
+    I --> O["Anonymizer"]
+    O --> J["LLM Orchestrator"]
     J --> K["Verification Layer"]
     K -->|Pass| L["Escaped answer + citations"]
     K -->|Fail| M["Refusal, correction, or degraded answer"]
     C --> N["Agent Observability"]
     E --> N
     H --> N
+    O --> N
     J --> N
     K --> N
 ```
@@ -337,6 +340,36 @@ The first implementation should reuse or wrap:
 
 When an existing service can return broad results, the agent layer should add a small read model that forces patient ID, date window, status, and limit at the SQL boundary.
 
+## Anonymizer Component
+
+The anonymizer is a server-side component between evidence retrieval and any external or durable sink that does not need direct identifiers. It has two jobs:
+
+- Prepare model input by replacing sensitive patient information with placeholders before patient evidence is sent to the LLM.
+- Prepare log-safe payloads by replacing PHI in any prompt, evidence, tool output, model response, or error detail that must be logged.
+
+The anonymizer should be deterministic within one agent interaction. If the same patient name, address, phone number, or other identifier appears multiple times, it receives the same placeholder each time so the LLM can preserve relationships without seeing the raw identifier.
+
+Example mapping for one interaction:
+
+| Raw Field Type | Placeholder |
+| --- | --- |
+| Patient full name | `[PATIENT_NAME]` |
+| Street address | `[PATIENT_ADDRESS_1]` |
+| SSN | `[PATIENT_SSN]` |
+| Phone number | `[PATIENT_PHONE_1]` |
+| Email | `[PATIENT_EMAIL_1]` |
+| Insurance member ID | `[INSURANCE_ID_1]` |
+| Free-text identifier in note | `[REDACTED_IDENTIFIER_1]` |
+
+The placeholder map is sensitive because it can re-identify the patient. It must stay server-side, be scoped to the interaction, and expire with the agent access token. The browser and LLM provider should not receive the raw placeholder map.
+
+The anonymizer should remove or replace direct identifiers unless they are needed for the selected intent. Clinical facts that are needed for reasoning, such as medication names, allergy names, lab values, problem titles, encounter dates, and source IDs, should remain available when they are not themselves direct identifiers. When a field is useful clinically but highly identifying, the evidence tool should prefer a less identifying form, such as age instead of full date of birth, or facility label instead of full address.
+
+The verifier operates over both views:
+
+- The anonymized model output, to ensure claims map to anonymized evidence IDs.
+- The original server-side evidence packet, to ensure citations still belong to the token's patient and are safe to reveal to the authenticated OpenEMR user.
+
 ## LLM Orchestration
 
 The MVP should use a single orchestrator, not multiple autonomous agents. The workflow is deterministic:
@@ -346,10 +379,11 @@ The MVP should use a single orchestrator, not multiple autonomous agents. The wo
 3. Ask the broker for, or reuse, the interaction's agent access token.
 4. Run the required retrieval tools.
 5. Build the bounded evidence packet.
-6. Call the LLM with the intent text, formatting instructions, refusal rules, and evidence packet.
-7. Require structured output with claims, citations, uncertainty labels, and follow-up intent suggestions.
-8. Send the output to verification.
-9. Render only verified output.
+6. Run the evidence packet through the anonymizer before any model call.
+7. Call the LLM with the intent text, formatting instructions, refusal rules, and anonymized evidence packet.
+8. Require structured output with claims, citations, uncertainty labels, and follow-up intent suggestions.
+9. Send the output to verification.
+10. Render only verified output.
 
 The LLM cannot:
 
@@ -357,6 +391,7 @@ The LLM cannot:
 - Call arbitrary tools.
 - Request more data than the intent allows.
 - Override broker token permissions.
+- See raw direct patient identifiers unless a later policy explicitly allows a specific field for a specific intent.
 - Write to OpenEMR.
 - Render HTML.
 - Hide missing data or tool failures.
@@ -436,6 +471,9 @@ The agent sends the model only the bounded evidence packet required for the sele
 - Unrelated demographics.
 - Raw database rows with unused fields.
 - Another patient's data.
+- Raw direct identifiers when an anonymized placeholder is sufficient.
+
+Before any patient evidence is sent to the LLM, the anonymizer replaces direct identifiers with scoped placeholders. This is still PHI-adjacent clinical context, so provider, BAA, retention, and access controls still matter; anonymization reduces exposure but does not replace HIPAA controls.
 
 ### Logging And Retention
 
@@ -444,7 +482,7 @@ The agent logs metadata, not raw PHI, by default:
 - request ID
 - site ID
 - authenticated user ID
-- patient ID or UUID
+- patient audit reference where required, otherwise anonymized patient placeholder
 - intent ID
 - tool sequence
 - source record IDs
@@ -454,7 +492,9 @@ The agent logs metadata, not raw PHI, by default:
 - verification result
 - refusal or error class
 
-The agent does not log by default:
+If a PHI-bearing payload must be logged for debugging or failure analysis, the log entry should contain the anonymizer output, not the raw payload. The anonymized log payload should preserve request structure, source IDs, placeholder labels, tool names, and error classes while replacing direct identifiers.
+
+The agent does not log raw versions of these fields by default:
 
 - raw prompt text
 - raw evidence packets
@@ -462,6 +502,7 @@ The agent does not log by default:
 - model completions
 - document text
 - API keys or provider secrets
+- anonymizer placeholder maps
 
 OpenEMR's `ApiResponseLoggerListener` can log JSON API responses for non-local API calls depending on `api_log_option`. Agent routes should set a route/request attribute such as `skipResponseLogging` or use an equivalent route-level policy so raw answers and evidence are not duplicated into `api_log`.
 
@@ -489,12 +530,13 @@ Minimum spans or events:
 | `agent.access.checked`        | request ID, decision, policy version, denial reason if denied |
 | `agent.tool.started`          | request ID, tool name, limit, data class                      |
 | `agent.tool.finished`         | request ID, tool name, source count, latency, error class     |
+| `agent.anonymizer.finished`   | request ID, placeholder count, redaction class count, latency |
 | `agent.llm.started`           | request ID, model alias, prompt template version              |
 | `agent.llm.finished`          | request ID, latency, token counts, cost estimate, error class |
 | `agent.verification.finished` | request ID, pass/fail, unsupported claim count                |
 | `agent.response.rendered`     | request ID, answer block count, citation count                |
 
-OpenEMR audit integration should use `EventAuditLogger` for compact events and denied access attempts. A later production version may add an `agent_audit` table, but the MVP should avoid new PHI-heavy persistence unless needed.
+OpenEMR audit integration should use `EventAuditLogger` for compact events and denied access attempts. A later production version may add an `agent_audit` table, but the MVP should avoid new PHI-heavy persistence unless needed. Any optional payload logging must use the anonymized payload and must not persist the placeholder map.
 
 ## UI Rendering And Safety
 
@@ -549,6 +591,7 @@ That is not part of the MVP.
 | Conflicting records                          | Show conflict with citations instead of resolving silently.                                   |
 | LLM timeout                                  | Return a deterministic fallback summary from evidence headings if safe, or ask user to retry. |
 | Verification failure                         | Regenerate once or refuse; never show unverified output.                                      |
+| Anonymizer failure                           | Do not call the LLM and do not log the raw payload; return a safe error and audit the failure. |
 | Prompt injection in chart text               | Treat chart/document text as evidence only, not instructions.                                 |
 | Browser tampering with intent                | Ignore unknown intent; audit suspicious request.                                              |
 | External provider disabled                   | Return deterministic source list or configured local fallback, no external call.              |
@@ -576,6 +619,9 @@ The eval suite should test behavior that a demo will not reveal.
 - Unsupported LLM claim is rejected by verifier.
 - Fabricated citation ID is rejected.
 - Tool failure is visible in the final response.
+- Direct identifiers in evidence are replaced with stable placeholders before LLM calls.
+- The same identifier receives the same placeholder within one interaction.
+- The placeholder map is not exposed to the browser, LLM provider, or logs.
 
 ### Safety Evals
 
@@ -584,6 +630,7 @@ The eval suite should test behavior that a demo will not reveal.
 - Request for diagnosis or treatment recommendation is refused in MVP.
 - Request for another patient's information is refused.
 - Full-chart export intent is unavailable and rejected.
+- Logs contain anonymizer output when payload details are needed, not raw PHI.
 
 The implementation can start with PHPUnit service tests for broker/tool/verifier behavior and add integration tests for the REST endpoint. LLM-dependent evals should use fixed evidence fixtures and structured expected outcomes so they can run repeatedly in CI.
 
@@ -612,7 +659,15 @@ The implementation can start with PHPUnit service tests for broker/tool/verifier
 - Normalize source records into evidence packet format.
 - Add per-tool timing and source-count logs.
 
-### Phase 4: LLM And Verification
+### Phase 4: Anonymizer
+
+- Implement `src\Services\Agent\Anonymizer`.
+- Replace direct identifiers with stable per-interaction placeholders.
+- Keep the placeholder map server-side and scoped to the agent access token lifetime.
+- Route all LLM-bound evidence and optional payload logs through the anonymizer.
+- Add tests for names, addresses, SSNs, phone numbers, emails, insurance IDs, and free-text identifiers.
+
+### Phase 5: LLM And Verification
 
 - Add server-side LLM provider client behind a configuration interface.
 - Keep provider keys server-side.
@@ -620,10 +675,11 @@ The implementation can start with PHPUnit service tests for broker/tool/verifier
 - Add verifier for citations, patient ownership, unsupported claims, and out-of-scope clinical advice.
 - Render only verified output.
 
-### Phase 5: Observability And Evals
+### Phase 6: Observability And Evals
 
 - Add request-level tracing metadata.
 - Disable or redact raw API response logging for agent routes.
+- Add anonymizer metrics and ensure optional payload logs use anonymized output only.
 - Add cost and token counters.
 - Build eval fixtures for missing, stale, conflicting, duplicate, unauthorized, and prompt-injection cases.
 - Add a deployment kill switch for external model calls.
@@ -644,7 +700,7 @@ Reusing only current ACLs would be faster to implement, but the audit found that
 
 ### Metadata Logs vs. Debuggability
 
-Avoiding raw prompts and completions makes debugging harder. The MVP should favor PHI minimization. If raw traces are needed in a controlled environment, they should be behind an explicit debug setting, redacted where possible, and disabled in production.
+Avoiding raw prompts and completions makes debugging harder. The MVP should favor PHI minimization. The anonymizer provides a middle ground: logs can preserve structure and placeholders without storing raw identifiers. If raw traces are ever needed in a controlled environment, they should be behind an explicit debug setting, tightly access-controlled, time-limited, and disabled in production.
 
 ## Architecture Defense Checklist
 
@@ -654,6 +710,7 @@ Avoiding raw prompts and completions makes debugging harder. The MVP should favo
 - Patient identity comes from server-side OpenEMR context.
 - The Agent Access Broker enforces patient-specific authorization before retrieval.
 - Every tool is patient-scoped, read-only, bounded, and token-protected.
+- The anonymizer removes direct identifiers before LLM calls and optional payload logging.
 - The LLM sees only minimum necessary evidence.
 - Every factual claim requires source attribution.
 - Verification runs before rendering.

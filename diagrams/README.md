@@ -1,5 +1,15 @@
 # OpenEMR Major Components
 
+## Simplified Component View
+
+![Simplified OpenEMR components](openemr-simplified-components.svg)
+
+This six-component view groups the system into users and clients, request routing, core runtime behavior, application logic, data/configuration, and external integrations. It is intended as the quickest orientation for the system.
+
+Source file: [openemr-simplified-components.drawio](openemr-simplified-components.drawio)
+
+## Detailed Component View
+
 ![OpenEMR major components](openemr-major-components.svg)
 
 This diagram summarizes the major runtime surfaces and shared components visible in this repository. OpenEMR is a PHP application with a large legacy browser UI, newer REST/FHIR/OAuth2 routing, a patient portal, CLI/setup tooling, and a gradual move toward namespaced service and container infrastructure.

@@ -2,13 +2,13 @@
 
 ## One-Page Summary
 
-The first MVP iteration of the Clinical Co-Pilot will be a constrained, source-grounded agent embedded in OpenEMR for two narrow outpatient users: an intake nurse rooming a scheduled patient and a doctor preparing to enter the room. These constraints define the initial build scope, not the full long-term shape of the Clinical Co-Pilot. For this MVP, the agent is not a general chatbot, chart search engine, diagnosis assistant, or documentation writer. Its first job is to answer a small set of patient-specific questions quickly: show basic patient data, show current medications, show recent events, build an intake checklist, explain what changed since the last visit, summarize nurse intake flags, and show source evidence behind a claim.
+The first MVP iteration of the Clinical Co-Pilot will be a constrained, source-grounded agent embedded in OpenEMR for **two narrow outpatient users: an intake nurse rooming a scheduled patient and a doctor preparing to enter the room**. These constraints define the initial build scope, not the full long-term shape of the Clinical Co-Pilot. For this MVP, the agent is not a general chatbot, chart search engine, diagnosis assistant, or documentation writer. Its first job is to answer a small set of patient-specific questions quickly: show basic patient data, show current medications, show recent events, build an intake checklist, explain what changed since the last visit, summarize nurse intake flags, and show source evidence behind a claim.
 
-The most important product decision is that there will be no free-text communication between the user and the agent. The UI will present buttons and follow-up action chips only. Those controls map to a server-owned intent catalog with stable prompt templates, for example "show me current medications" or "show me recent events." The browser will not send arbitrary prompt text to the LLM, and the LLM will not choose patients, run generic searches, or request arbitrary OpenEMR routes. This keeps the interaction fast and conversational enough for follow-up use while removing the highest-risk prompt-injection and cross-patient search surface.
+The most important product decision is that there will be **no free-text communication between the user and the agent**. The UI will present buttons and follow-up action chips only. Those controls map to a server-owned intent catalog with stable prompt templates, for example "show me current medications" or "show me recent events." The browser will not send arbitrary prompt text to the LLM, and the LLM will not choose patients, run generic searches, or request arbitrary OpenEMR routes. This keeps the interaction fast and conversational enough for follow-up use while **removing the highest-risk prompt-injection** and cross-patient search surface.
 
-The most important security decision is that the agent server gets a separate data access component: the Agent Access Broker. Current OpenEMR auth and ACL infrastructure is useful, but the audit found that it is not sufficient for this purpose because many checks answer "can this user access this category of data?" instead of "can this exact user access this exact patient right now?" The broker will sit in front of every agent retrieval tool. It will validate the authenticated OpenEMR session, API CSRF token, user role, OpenEMR ACLs, current patient context, appointment or chart binding, and per-intent data policy. If access is granted, it creates a short-lived evidence grant containing the patient identity, allowed tools, allowed data classes, limits, and request ID. Tools must present that grant and cannot accept patient IDs directly from the LLM or browser.
+The most important security decision is that the agent server gets a separate data access component: the Agent Access Broker. Current OpenEMR auth and ACL infrastructure is useful, but the audit found that it is not sufficient for this purpose because many checks answer "can this user access this category of data?" instead of "**can this exact user access this exact patient right now**?" The broker will sit in front of every agent retrieval tool. At the beginning of an agent interaction, it will validate the authenticated OpenEMR session, API CSRF token, user role, OpenEMR ACLs, current patient context, appointment or chart binding, and per-intent data policy. If access is granted, it creates a short-lived agent access token that contains the permissions this user has for this specific patient: patient identity, allowed tools, allowed data classes, limits, and request ID. The token is reused for the full life of that user's interaction with the agent, then expires at interaction end or timeout. Tools must present that token and cannot accept patient IDs directly from the LLM or browser.
 
-The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. The pre-search decision is to start with a custom single-agent orchestrator rather than a heavy multi-agent framework, because the workflow is closed-intent, tool-bounded, and verification-heavy. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
+The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. The pre-search decision is to start with a custom single-agent orchestrator rather than a heavy multi-agent framework, because the **workflow is closed-intent, tool-bounded, and verification-heavy**. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
 
 Every answer must pass verification before reaching the user. The LLM will receive only a bounded evidence packet for the current patient. It must return structured output with claim-to-source links. A verifier will reject unsupported claims, unsafe clinical advice, hidden tool failures, or claims that violate the current evidence. Rendered output will be escaped text or a strict safe-markdown subset with citation chips. Observability will log request ID, user, patient, intent, tool sequence, source record IDs, latency, model, token counts, cost, verification result, refusal outcome, and error class. It will not log raw chart excerpts, raw prompts, or model completions by default. The MVP remains read-only and stores only audit metadata unless a later design explicitly handles generated summaries as medical-record artifacts.
 
@@ -37,18 +37,18 @@ Core constraints:
 
 `pre-search.md` is a checklist rather than a source of product facts, so this section records the concrete decisions this architecture makes against that checklist.
 
-| Checklist Area | MVP Decision |
-| --- | --- |
-| Domain | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows. |
-| Use cases | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown. |
-| Verification | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient. |
-| Data sources | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available. |
-| Latency | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings stay asynchronous. |
-| Query volume | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips. |
-| Cost | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools. |
-| Human in the loop | The clinician remains responsible for decisions; the MVP is read-only, source-cited decision support and does not write orders, diagnoses, notes, medications, or billing codes. |
-| Team constraints | Favor OpenEMR-native PHP services, PHPUnit tests, and a simple custom orchestrator over a larger agent framework that would add operational and debugging complexity. |
-| Open source | Keep the OpenEMR integration code separable and avoid committing provider secrets, patient data, raw traces, or deployment-specific credentials. |
+| Checklist Area    | MVP Decision                                                                                                                                                                                                                              |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Domain            | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows.                                                                                                                                                              |
+| Use cases         | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown. |
+| Verification      | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient.                                                        |
+| Data sources      | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available.                     |
+| Latency           | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings stay asynchronous.               |
+| Query volume      | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips.                                                                                        |
+| Cost              | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools.                                    |
+| Human in the loop | The clinician remains responsible for decisions; the MVP is read-only, source-cited decision support and does not write orders, diagnoses, notes, medications, or billing codes.                                                          |
+| Team constraints  | Favor OpenEMR-native PHP services, PHPUnit tests, and a simple custom orchestrator over a larger agent framework that would add operational and debugging complexity.                                                                     |
+| Open source       | Keep the OpenEMR integration code separable and avoid committing provider secrets, patient data, raw traces, or deployment-specific credentials.                                                                                          |
 
 ## Stack Decisions
 
@@ -65,7 +65,7 @@ The LLM should be behind a provider interface. The first provider should support
 Tools are server-owned read models, not arbitrary API callers. Each tool has:
 
 - one clinical purpose
-- one required evidence grant
+- one required agent access token permission
 - one patient
 - bounded input
 - explicit limits
@@ -107,16 +107,16 @@ Iteration should be eval-driven. New intents require:
 
 The first version supports these closed intents:
 
-| Intent ID | Button Label | Primary User | Use Case Trace |
-| --- | --- | --- | --- |
-| `basic_patient_data` | Basic patient data | Nurse, Doctor | N1, D1 |
-| `current_medications` | Current medications | Nurse, Doctor | N2, D1 |
-| `allergies_to_confirm` | Allergies to confirm | Nurse, Doctor | N2 |
-| `recent_events` | Recent events | Doctor | D1, D2 |
-| `intake_checklist` | Intake checklist | Nurse | N1, N3 |
-| `changed_since_last_visit` | Changed since last visit | Doctor | D2 |
-| `intake_handoff` | Intake handoff | Doctor | D3 |
-| `show_source` | Show source | Nurse, Doctor | D4 |
+| Intent ID                  | Button Label             | Primary User  | Use Case Trace |
+| -------------------------- | ------------------------ | ------------- | -------------- |
+| `basic_patient_data`       | Basic patient data       | Nurse, Doctor | N1, D1         |
+| `current_medications`      | Current medications      | Nurse, Doctor | N2, D1         |
+| `allergies_to_confirm`     | Allergies to confirm     | Nurse, Doctor | N2             |
+| `recent_events`            | Recent events            | Doctor        | D1, D2         |
+| `intake_checklist`         | Intake checklist         | Nurse         | N1, N3         |
+| `changed_since_last_visit` | Changed since last visit | Doctor        | D2             |
+| `intake_handoff`           | Intake handoff           | Doctor        | D3             |
+| `show_source`              | Show source              | Nurse, Doctor | D4             |
 
 Out of scope for the MVP:
 
@@ -137,7 +137,7 @@ flowchart TD
     B --> C["Agent REST Endpoint"]
     C --> D["Intent Catalog"]
     C --> E["Agent Access Broker"]
-    E --> F{"Access grant?"}
+    E --> F{"Access token issued?"}
     F -->|No| G["Refusal + audit event"]
     F -->|Yes| H["Evidence Retrieval Tools"]
     H --> I["Bounded Evidence Packet"]
@@ -225,7 +225,7 @@ If the browser is modified to send a different text value, the server ignores it
 
 ## Agent Access Broker
 
-The Agent Access Broker is a separate server-side data access component for the agent server. It exists because current OpenEMR access control is not specific enough for safe AI retrieval. The broker is the only component allowed to authorize and issue patient data access grants for agent tools.
+The Agent Access Broker is a separate server-side data access component for the agent server. It exists because current OpenEMR access control is not specific enough for safe AI retrieval. The broker is the only component allowed to authorize and issue patient-scoped agent access tokens for agent tools.
 
 ### Responsibilities
 
@@ -238,34 +238,39 @@ The broker will:
 - Enforce OpenEMR ACL checks through `AclMain` or `RestConfig::request_authorization_check`.
 - Enforce patient-specific access beyond category ACLs.
 - Apply per-intent policy for data class, time window, and record count.
-- Produce a short-lived evidence grant for retrieval tools.
-- Audit both grants and denials.
+- Produce a short-lived agent access token at the beginning of the agent interaction.
+- Reuse that token across the user's follow-up buttons and source drilldowns for the same interaction.
+- Audit both token grants and denials.
 
-### Evidence Grant
+### Agent Access Token
 
-An evidence grant is an internal object, not a browser token:
+The agent access token is an internal server-side object, not a browser token. It is short-lived, but its lifetime is long enough for one user-agent interaction around one patient. It is issued once at the beginning of the interaction, reused by retrieval tools during follow-up actions, and expires when the interaction ends, the patient context changes, or the timeout is reached.
 
 ```json
 {
   "request_id": "agent-request-uuid",
+  "interaction_id": "agent-interaction-uuid",
   "site_id": "default",
   "user_id": 1,
   "user_uuid": "users.uuid",
   "patient_pid": 123,
   "patient_uuid": "patient_data.uuid",
   "intent_id": "current_medications",
-  "allowed_data_classes": ["medications", "allergies"],
-  "allowed_tools": ["get_current_medications"],
-  "expires_at": "short-lived server timestamp",
-  "limits": {
-    "max_records": 25,
-    "max_documents": 0,
-    "lookback_days": 365
-  }
+  "permissions": {
+    "allowed_data_classes": ["medications", "allergies"],
+    "allowed_tools": ["get_current_medications", "get_source_detail"],
+    "acl_categories": ["patients\\med"],
+    "limits": {
+      "max_records": 25,
+      "max_documents": 0,
+      "lookback_days": 365
+    }
+  },
+  "expires_at": "interaction end or timeout timestamp"
 }
 ```
 
-Retrieval tools must reject calls without a valid grant. They must also reject any patient ID that does not match the grant.
+Retrieval tools must reject calls without a valid token. They must also reject any patient ID, data class, tool name, or source request that does not match the token's permissions.
 
 ### Patient-Specific Access Policy
 
@@ -302,20 +307,20 @@ Every tool returns structured evidence:
 }
 ```
 
-The LLM sees only the fields needed for the selected intent. The UI can request source detail through a citation endpoint after the same grant and patient access are checked again.
+The LLM sees only the fields needed for the selected intent. The UI can request source detail through a citation endpoint after the same token and patient access are checked again.
 
 ### Initial Tools
 
-| Tool | Purpose | Required Grant Data Class | Default Limit |
-| --- | --- | --- | --- |
-| `get_patient_snapshot` | Basic demographics and visit context | `demographics`, `appointments` | 1 patient, today's appointment |
-| `get_current_medications` | Active/verified medication evidence | `medications` | 25 records |
-| `get_allergies_to_confirm` | Active, stale, duplicate, or conflicting allergy evidence | `allergies` | 25 records |
-| `get_recent_events` | Encounters, recent results, documents, procedures, intake flags | `timeline` | 30 events |
-| `get_changed_since_last_visit` | Source-specific change comparison | `timeline`, `medications`, `problems`, `allergies`, `results` | 30 changed items |
-| `get_intake_checklist` | Nurse-facing confirmations and missing/stale fields | `intake`, `demographics`, `medications`, `allergies`, `vitals` | 20 checklist items |
-| `get_intake_handoff` | Doctor-facing nurse intake summary | `intake`, `vitals`, `medications`, `allergies` | 20 handoff items |
-| `get_source_detail` | Citation drilldown | Citation's source data class | 1 source |
+| Tool                           | Purpose                                                         | Required Token Data Class                                      | Default Limit                  |
+| ------------------------------ | --------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------ |
+| `get_patient_snapshot`         | Basic demographics and visit context                            | `demographics`, `appointments`                                 | 1 patient, today's appointment |
+| `get_current_medications`      | Active/verified medication evidence                             | `medications`                                                  | 25 records                     |
+| `get_allergies_to_confirm`     | Active, stale, duplicate, or conflicting allergy evidence       | `allergies`                                                    | 25 records                     |
+| `get_recent_events`            | Encounters, recent results, documents, procedures, intake flags | `timeline`                                                     | 30 events                      |
+| `get_changed_since_last_visit` | Source-specific change comparison                               | `timeline`, `medications`, `problems`, `allergies`, `results`  | 30 changed items               |
+| `get_intake_checklist`         | Nurse-facing confirmations and missing/stale fields             | `intake`, `demographics`, `medications`, `allergies`, `vitals` | 20 checklist items             |
+| `get_intake_handoff`           | Doctor-facing nurse intake summary                              | `intake`, `vitals`, `medications`, `allergies`                 | 20 handoff items               |
+| `get_source_detail`            | Citation drilldown                                              | Citation's source data class                                   | 1 source                       |
 
 ### Source Systems
 
@@ -338,7 +343,7 @@ The MVP should use a single orchestrator, not multiple autonomous agents. The wo
 
 1. Receive closed `intent_id`.
 2. Resolve the server-owned prompt template.
-3. Ask the broker for an evidence grant.
+3. Ask the broker for, or reuse, the interaction's agent access token.
 4. Run the required retrieval tools.
 5. Build the bounded evidence packet.
 6. Call the LLM with the intent text, formatting instructions, refusal rules, and evidence packet.
@@ -351,7 +356,7 @@ The LLM cannot:
 - Select patient IDs.
 - Call arbitrary tools.
 - Request more data than the intent allows.
-- Override broker grants.
+- Override broker token permissions.
 - Write to OpenEMR.
 - Render HTML.
 - Hide missing data or tool failures.
@@ -400,7 +405,7 @@ The LLM should return structured JSON:
 The verifier will:
 
 - Confirm each factual claim has at least one citation from the evidence packet.
-- Confirm cited records belong to the granted patient.
+- Confirm cited records belong to the token's patient.
 - Confirm cited fields support the claim text.
 - Reject unsupported active medication, allergy, problem, result, or event claims.
 - Confirm that missingness is phrased as "not found in checked evidence."
@@ -478,16 +483,16 @@ Observability is part of the core request flow. The system should emit a single 
 
 Minimum spans or events:
 
-| Event | Fields |
-| --- | --- |
-| `agent.intent.received` | request ID, user ID, patient ID, intent ID |
-| `agent.access.checked` | request ID, decision, policy version, denial reason if denied |
-| `agent.tool.started` | request ID, tool name, limit, data class |
-| `agent.tool.finished` | request ID, tool name, source count, latency, error class |
-| `agent.llm.started` | request ID, model alias, prompt template version |
-| `agent.llm.finished` | request ID, latency, token counts, cost estimate, error class |
-| `agent.verification.finished` | request ID, pass/fail, unsupported claim count |
-| `agent.response.rendered` | request ID, answer block count, citation count |
+| Event                         | Fields                                                        |
+| ----------------------------- | ------------------------------------------------------------- |
+| `agent.intent.received`       | request ID, user ID, patient ID, intent ID                    |
+| `agent.access.checked`        | request ID, decision, policy version, denial reason if denied |
+| `agent.tool.started`          | request ID, tool name, limit, data class                      |
+| `agent.tool.finished`         | request ID, tool name, source count, latency, error class     |
+| `agent.llm.started`           | request ID, model alias, prompt template version              |
+| `agent.llm.finished`          | request ID, latency, token counts, cost estimate, error class |
+| `agent.verification.finished` | request ID, pass/fail, unsupported claim count                |
+| `agent.response.rendered`     | request ID, answer block count, citation count                |
 
 OpenEMR audit integration should use `EventAuditLogger` for compact events and denied access attempts. A later production version may add an `agent_audit` table, but the MVP should avoid new PHI-heavy persistence unless needed.
 
@@ -533,20 +538,20 @@ That is not part of the MVP.
 
 ## Failure Modes
 
-| Failure | System Behavior |
-| --- | --- |
-| No current patient | Disable intent buttons or return a refusal: "Open a patient chart before using the co-pilot." |
-| Ambiguous patient context | Refuse. Do not ask the LLM to choose. |
-| User lacks patient access | Refuse, audit denial, return no PHI. |
-| User has category ACL but no patient binding | Refuse, audit denial, return no PHI. |
-| Tool timeout | Show partial answer only if verifier can label missing sections as unavailable. |
-| Missing records | Say "not found in checked evidence" with checked source list. |
-| Conflicting records | Show conflict with citations instead of resolving silently. |
-| LLM timeout | Return a deterministic fallback summary from evidence headings if safe, or ask user to retry. |
-| Verification failure | Regenerate once or refuse; never show unverified output. |
-| Prompt injection in chart text | Treat chart/document text as evidence only, not instructions. |
-| Browser tampering with intent | Ignore unknown intent; audit suspicious request. |
-| External provider disabled | Return deterministic source list or configured local fallback, no external call. |
+| Failure                                      | System Behavior                                                                               |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| No current patient                           | Disable intent buttons or return a refusal: "Open a patient chart before using the co-pilot." |
+| Ambiguous patient context                    | Refuse. Do not ask the LLM to choose.                                                         |
+| User lacks patient access                    | Refuse, audit denial, return no PHI.                                                          |
+| User has category ACL but no patient binding | Refuse, audit denial, return no PHI.                                                          |
+| Tool timeout                                 | Show partial answer only if verifier can label missing sections as unavailable.               |
+| Missing records                              | Say "not found in checked evidence" with checked source list.                                 |
+| Conflicting records                          | Show conflict with citations instead of resolving silently.                                   |
+| LLM timeout                                  | Return a deterministic fallback summary from evidence headings if safe, or ask user to retry. |
+| Verification failure                         | Regenerate once or refuse; never show unverified output.                                      |
+| Prompt injection in chart text               | Treat chart/document text as evidence only, not instructions.                                 |
+| Browser tampering with intent                | Ignore unknown intent; audit suspicious request.                                              |
+| External provider disabled                   | Return deterministic source list or configured local fallback, no external call.              |
 
 ## Evaluation Plan
 
@@ -648,7 +653,7 @@ Avoiding raw prompts and completions makes debugging harder. The MVP should favo
 - The server owns every prompt template and allowed follow-up.
 - Patient identity comes from server-side OpenEMR context.
 - The Agent Access Broker enforces patient-specific authorization before retrieval.
-- Every tool is patient-scoped, read-only, bounded, and grant-protected.
+- Every tool is patient-scoped, read-only, bounded, and token-protected.
 - The LLM sees only minimum necessary evidence.
 - Every factual claim requires source attribution.
 - Verification runs before rendering.

@@ -16,13 +16,15 @@ param(
 
     [string]$MysqlHost,
 
-    [string]$MysqlPort = "3306",
+    [string]$MysqlPort,
 
     [string]$MysqlRootUser = "root",
 
     [string]$MysqlDatabase = "openemr",
 
     [string]$MysqlUser = "openemr",
+
+    [string]$MysqlPassword,
 
     [string]$OpenEmrAdminUser = "admin",
 
@@ -61,17 +63,51 @@ function Invoke-RailwayWithInput {
         [securestring]$Secret
     )
 
+    $railwayCommand = Get-Command railway -ErrorAction Stop
+    $railwayExecutable = $railwayCommand.Source
+    if ($railwayExecutable.EndsWith(".ps1", [System.StringComparison]::OrdinalIgnoreCase)) {
+        $cmdShim = [System.IO.Path]::ChangeExtension($railwayExecutable, ".cmd")
+        if (Test-Path $cmdShim) {
+            $railwayExecutable = $cmdShim
+        }
+    }
+
     $credential = New-Object System.Net.NetworkCredential("", $Secret)
     $plainText = $credential.Password
+    $process = $null
     try {
-        $plainText | & railway @Arguments
-        if ($LASTEXITCODE -ne 0) {
-            throw "railway $($Arguments -join ' ') failed with exit code $LASTEXITCODE."
+        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+        $startInfo.FileName = $railwayExecutable
+        $startInfo.Arguments = $Arguments -join " "
+        $startInfo.RedirectStandardInput = $true
+        $startInfo.RedirectStandardOutput = $true
+        $startInfo.RedirectStandardError = $true
+        $startInfo.UseShellExecute = $false
+
+        $process = [System.Diagnostics.Process]::Start($startInfo)
+        $process.StandardInput.Write($plainText)
+        $process.StandardInput.Close()
+
+        $standardOutput = $process.StandardOutput.ReadToEnd()
+        $standardError = $process.StandardError.ReadToEnd()
+        $process.WaitForExit()
+
+        if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
+            Write-Host $standardOutput.TrimEnd()
+        }
+        if (-not [string]::IsNullOrWhiteSpace($standardError)) {
+            Write-Error $standardError.TrimEnd()
+        }
+        if ($process.ExitCode -ne 0) {
+            throw "railway $($Arguments -join ' ') failed with exit code $($process.ExitCode)."
         }
     }
     finally {
         $plainText = $null
         $credential = $null
+        if ($null -ne $process) {
+            $process.Dispose()
+        }
     }
 }
 
@@ -166,8 +202,6 @@ function Set-RailwaySecretVariable {
 }
 
 function Set-OpenEmrVariables {
-    $mysqlRootPass = Read-RequiredSecureString -Prompt "MySQL root password for OpenEMR initialization"
-    $mysqlPass = Read-RequiredSecureString -Prompt "OpenEMR database user password"
     $openEmrAdminPass = Read-RequiredSecureString -Prompt "Initial OpenEMR admin password"
 
     if ([string]::IsNullOrWhiteSpace($MysqlHost)) {
@@ -180,15 +214,22 @@ function Set-OpenEmrVariables {
         $script:MysqlPort = $MysqlPort
     }
 
+    if ([string]::IsNullOrWhiteSpace($MysqlPassword)) {
+        $MysqlPassword = '${{' + "$MysqlServiceName.MYSQLPASSWORD" + '}}'
+        $script:MysqlPassword = $MysqlPassword
+    }
+
+    $mysqlRootPass = '${{' + "$MysqlServiceName.MYSQL_ROOT_PASSWORD" + '}}'
+
     Set-RailwayVariable -Name "PORT" -Value "80"
     Set-RailwayVariable -Name "RAILWAY_RUN_UID" -Value "0"
     Set-RailwayVariable -Name "MYSQL_HOST" -Value $MysqlHost
     Set-RailwayVariable -Name "MYSQL_PORT" -Value $MysqlPort
     Set-RailwayVariable -Name "MYSQL_ROOT_USER" -Value $MysqlRootUser
-    Set-RailwaySecretVariable -Name "MYSQL_ROOT_PASS" -Secret $mysqlRootPass
+    Set-RailwayVariable -Name "MYSQL_ROOT_PASS" -Value $mysqlRootPass
     Set-RailwayVariable -Name "MYSQL_DATABASE" -Value $MysqlDatabase
     Set-RailwayVariable -Name "MYSQL_USER" -Value $MysqlUser
-    Set-RailwaySecretVariable -Name "MYSQL_PASS" -Secret $mysqlPass
+    Set-RailwayVariable -Name "MYSQL_PASS" -Value $MysqlPassword
     Set-RailwayVariable -Name "OE_USER" -Value $OpenEmrAdminUser
     Set-RailwaySecretVariable -Name "OE_PASS" -Secret $openEmrAdminPass
 
@@ -198,6 +239,7 @@ function Set-OpenEmrVariables {
 function New-OpenEmrSitesVolume {
     Write-Host "Creating Railway volume at $SitesVolumeMountPath."
     Invoke-Railway -Arguments @("volume", "add", "--mount-path", $SitesVolumeMountPath)
+    Set-RailwayVariable -Name "SWARM_MODE" -Value "yes"
 }
 
 function Invoke-RailwayDeploy {

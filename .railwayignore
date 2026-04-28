@@ -1,0 +1,6 @@
+# This Railway service deploys the production OpenEMR image in Dockerfile.railway.
+# Keep the upload context small and deterministic.
+*
+!Dockerfile.railway
+!railway.toml
+!.railwayignore

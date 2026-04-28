@@ -9,7 +9,7 @@ This document defines the first two users for the Clinical Co-Pilot:
 
 The scope is intentionally narrow. The first version of the agent should support an outpatient primary-care style visit where a patient is already scheduled or already open in the chart. The agent is not a generic medical chatbot, chart search engine, diagnosis tool, order entry assistant, or documentation writer.
 
-The user definitions below are based on `Week-1-Assignment.pdf`, `CURRENT-ARCHITECTURE.md`, and `AUDIT.md`. The audit constraints are treated as product requirements: the agent must be read-only for MVP, must operate only on a server-validated current patient context, must cite source records, and must refuse or ask for clarification when patient identity or evidence is ambiguous.
+The user definitions below are based on `Week-1-Assignment.pdf`, `CURRENT-ARCHITECTURE.md`, and `AUDIT.md`. The audit constraints are treated as product requirements: the agent must be read-only for MVP, must operate only on a server-validated current patient context, and must cite source records. If patient identity is ambiguous, the agent refuses to act. If evidence is ambiguous, the agent clearly marks it as ambiguous in the UI. The agent does not ask for clarification because there is no time; both the nurse and doctor have only 90 seconds to get familiar with the patient.
 
 ## Shared MVP Assumptions
 

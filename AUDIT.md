@@ -2,23 +2,43 @@
 
 ## One-Page Summary
 
-- OpenEMR has the right foundations for a Clinical Co-Pilot: authenticated browser sessions, OAuth2/SMART/FHIR APIs, phpGACL-backed ACL checks, patient-scoped document storage, event hooks, audit tables, and a large clinical data model. These foundations still need stricter agent-specific controls before an AI layer can safely answer patient-specific clinical questions.
+### Access Control
 
-- Access control is the first gate. Current API requests pass through authorization strategies, route security, and ACL checks, but many checks answer "can this user access this class of data?" rather than "can this user access this exact patient right now?" The FHIR patient-bound flow has a `checkUserHasAccessToPatient()` hook in `src\RestControllers\Authorization\BearerTokenAuthorizationStrategy.php`, but it currently returns `true`. Every agent tool call must require a server-validated patient UUID, bind it to the requesting user, and deny ambiguous or unauthorized requests before retrieval starts.
+- OpenEMR has useful foundations: authenticated sessions, OAuth2/SMART/FHIR APIs, route checks, CSRF handling, and phpGACL-backed ACLs.
 
-- The access-control model should be patient-first and context-aware. For the MVP, the safest rule is a read-only agent inside an authenticated OpenEMR workflow where the current patient context is already known. Provider access should be verified through appointment, provider, facility, care-team, or active chart context. The LLM should never choose patient identifiers, expand the patient set, or call generic chart-search tools without server-side validation.
+- The key gap is patient-specific authorization. Many checks answer "can this user access this data type?" rather than "can this user access this exact patient right now?"
 
-- Performance is the second gate. The physician workflow assumes roughly 90 seconds between rooms, so the agent must return useful context in seconds. OpenEMR can retrieve patients, encounters, medications, documents, appointments, allergies, procedures, and FHIR resources, but requests often pass through legacy bootstrapping, global state, SQL audit logging, and service methods that can become broad or unbounded without tight filters.
+- The FHIR patient-bound flow includes `checkUserHasAccessToPatient()` in `src\RestControllers\Authorization\BearerTokenAuthorizationStrategy.php`, but it currently returns `true`. Agent tools must add a real server-side patient binding check.
 
-- The practical performance approach is a bounded evidence packet: today's appointment context, recent encounters, active problems, active medications, allergies, recent labs/procedures, and selected parsed documents. Each source query should have patient binding, explicit limits, and timing instrumentation. Long documents, OCR, embeddings, and broad summarization should run asynchronously or be precomputed.
+- MVP agent access should be read-only, tied to an authenticated OpenEMR workflow, and limited to a validated current patient context. The LLM must never choose patient IDs or run generic chart searches without server validation.
 
-- Observability is the third gate, but it must be PHI-safe. OpenEMR already has strong audit primitives, including `log`, `extended_log`, `audit_master`, `audit_details`, `api_log`, SQL audit hooks, and optional ATNA support. The risk is overlogging. `library\globals.inc.php` defaults `api_log_option` to full logging, and `ApiResponseLoggerListener` can store JSON API responses in both `request_body` and `response`.
+### Performance
 
-- Agent observability should record the decision trail without dumping clinical text. Log request ID, user ID, patient ID, route, tool sequence, source record IDs, latency per step, model name, token counts, cost, verification result, refusal outcome, and error class. Raw chart excerpts, prompts, and model completions should be redacted, hashed, disabled, or retained only under an explicit policy.
+- The physician workflow assumes about 90 seconds between rooms, so the agent needs useful answers in seconds, not a full-chart crawl.
 
-- The agent should integrate through existing OpenEMR boundaries rather than bypassing them. The right path is an authenticated UI/API or module integration that uses existing session, CSRF, ACL, audit, and event mechanisms.
+- OpenEMR can retrieve patients, encounters, medications, documents, appointments, allergies, procedures, and FHIR resources, but paths often include legacy bootstrapping, global state, SQL audit logging, and potentially broad service queries.
 
-- The audit's main build recommendation is to implement a verified, read-only evidence layer before building conversational behavior. Every answer should cite source records, refuse unsupported claims, enforce patient access before retrieval, keep retrieval bounded for speed, and emit PHI-safe observability from day one.
+- The first agent retrieval layer should produce a bounded evidence packet: today's appointment, recent encounters, active problems, active medications, allergies, recent labs/procedures, and selected parsed documents.
+
+- Each retrieval should require patient binding, explicit limits, and timing instrumentation. Long documents, OCR, embeddings, and broad summarization should be precomputed or asynchronous.
+
+### Observability
+
+- OpenEMR already has audit primitives: `log`, `extended_log`, `audit_master`, `audit_details`, `api_log`, SQL audit hooks, and optional ATNA support.
+
+- The risk is PHI overlogging. `api_log_option` defaults to full logging, and `ApiResponseLoggerListener` can store JSON API responses in both `request_body` and `response`.
+
+- Agent observability should log request ID, user ID, patient ID, tool sequence, source record IDs, latency, model, token counts, cost, verification result, refusal outcome, and error class.
+
+- Raw prompts, chart excerpts, source snippets, and model completions should be redacted, hashed, disabled, or retained only under an explicit policy.
+
+### Other
+
+- The agent should integrate through existing OpenEMR UI/API/module boundaries, using existing session, CSRF, ACL, audit, and event mechanisms.
+
+- Data quality is uneven across `patient_data`, `lists`, `lists_medication`, `prescriptions`, encounters, forms, documents, procedures, and FHIR projections.
+
+- The main build recommendation is a verified evidence layer before conversational behavior: cite source records, refuse unsupported claims, enforce patient access, bound retrieval for speed, and emit PHI-safe observability.
 
 ## Scope And Method
 

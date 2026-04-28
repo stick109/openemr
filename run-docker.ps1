@@ -76,6 +76,14 @@ function Get-PortValue {
     return $value.Value
 }
 
+function Get-OpenEmrHttpsEndpoint {
+    if ($Profile -eq "production") {
+        return "https://localhost/"
+    }
+
+    return "https://localhost:$(Get-PortValue -Name "WT_HTTPS_PORT" -DefaultValue "9300")/"
+}
+
 Confirm-DockerCompose
 
 Set-PortOverride -Name "WT_HTTP_PORT" -Value $HttpPort
@@ -109,16 +117,18 @@ try {
     Invoke-DockerCompose -ComposeArguments $upArguments
 
     if (-not $Foreground) {
+        $httpsEndpoint = Get-OpenEmrHttpsEndpoint
+
         Write-Host ""
         Write-Host "OpenEMR is starting in the background."
 
         if ($Profile -eq "production") {
             Write-Host "OpenEMR HTTP:  http://localhost/"
-            Write-Host "OpenEMR HTTPS: https://localhost/"
+            Write-Host "OpenEMR HTTPS: $httpsEndpoint"
         }
         else {
             Write-Host "OpenEMR HTTP:  http://localhost:$(Get-PortValue -Name "WT_HTTP_PORT" -DefaultValue "8300")/"
-            Write-Host "OpenEMR HTTPS: https://localhost:$(Get-PortValue -Name "WT_HTTPS_PORT" -DefaultValue "9300")/"
+            Write-Host "OpenEMR HTTPS: $httpsEndpoint"
         }
 
         Write-Host "Login: admin / pass"
@@ -127,6 +137,9 @@ try {
             Write-Host "phpMyAdmin:    http://localhost:$(Get-PortValue -Name "WT_PMA_PORT" -DefaultValue "8310")/"
             Write-Host "MySQL:         localhost:$(Get-PortValue -Name "WT_MYSQL_PORT" -DefaultValue "8320")"
         }
+
+        Write-Host "Opening HTTPS endpoint in the default browser..."
+        Start-Process -FilePath $httpsEndpoint
     }
 }
 finally {

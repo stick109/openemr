@@ -75,11 +75,12 @@ class AgentIntentRestControllerTest extends TestCase
 
     public function testAcceptsKnownClosedIntentAndReturnsEvidencePacket(): void
     {
-        $response = $this->controller->postIntent($this->requestWithJson([
+        $request = $this->requestWithJson([
             'intent_id' => 'current_medications',
             'conversation_id' => 'session-local-id',
             'active_patient_context' => 'server-session',
-        ]));
+        ]);
+        $response = $this->controller->postIntent($request);
 
         $body = $this->decodeJsonBody($response);
 
@@ -95,6 +96,32 @@ class AgentIntentRestControllerTest extends TestCase
         $this->assertSame('medication:lists_medication:77', $body['data']['citations'][0]['source_id']);
         $this->assertSame(['medications'], $body['data']['checked_evidence']);
         $this->assertSame('agent-test-request', $body['data']['evidence_packet']['request_id']);
+        $this->assertIsArray($request->attributes->get('agentAnonymizedPayloadLog'));
+        $this->assertArrayNotHasKey('placeholder_map', $request->attributes->get('agentAnonymizedPayloadLog'));
+    }
+
+    public function testStoresAnonymizedPayloadForLlmAndOptionalPayloadLogs(): void
+    {
+        $request = $this->requestWithJson([
+            'intent_id' => 'basic_patient_data',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]);
+
+        $response = $this->controller->postIntent($request);
+        $body = $this->decodeJsonBody($response);
+        $anonymizedPayload = $request->attributes->get('agentAnonymizedPayloadLog');
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertStringContainsString('Public ID P123', $body['data']['evidence_packet']['sources'][0]['display']);
+        $this->assertIsArray($anonymizedPayload);
+        $this->assertSame('agent.anonymized.v1', $anonymizedPayload['payload_version']);
+        $this->assertSame('basic_patient_data', $anonymizedPayload['intent_id']);
+        $this->assertSame('agent-test-request', $anonymizedPayload['evidence_packet']['request_id']);
+        $this->assertSame('demographics:patient_data:123', $anonymizedPayload['evidence_packet']['sources'][0]['source_id']);
+        $this->assertStringNotContainsString('P123', $anonymizedPayload['evidence_packet']['sources'][0]['display']);
+        $this->assertStringContainsString('[REDACTED_IDENTIFIER_1]', $anonymizedPayload['evidence_packet']['sources'][0]['display']);
+        $this->assertArrayNotHasKey('placeholder_map', $anonymizedPayload);
     }
 
     public function testReturnsEvidenceForPhaseThreeIntents(): void

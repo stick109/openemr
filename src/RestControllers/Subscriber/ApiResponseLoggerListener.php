@@ -46,19 +46,26 @@ class ApiResponseLoggerListener implements EventSubscriberInterface
         $session = $request->getSession();
         $kernel = $event->getKernel();
         $globalsBag = $kernel instanceof OEHttpKernel ? $kernel->getGlobalsBag() : new OEGlobalsBag([]);
+        $anonymizedPayloadLog = $request->attributes->get('agentAnonymizedPayloadLog');
+        $hasAnonymizedPayloadLog = is_array($anonymizedPayloadLog) || is_string($anonymizedPayloadLog);
 
         // only log when using standard api calls (skip when using local api calls from within OpenEMR)
         //  and when api log option is set
         if (
             !$request->isLocalApi() &&
-            // we don't log unit test pieces.
-            !$request->attributes->has("skipResponseLogging") &&
+            // skip raw logging, but allow routes to provide an already-redacted payload.
+            (!$request->attributes->has("skipResponseLogging") || $hasAnonymizedPayloadLog) &&
             $globalsBag->getInt('api_log_option') > 0
         ) {
             if ($globalsBag->getInt('api_log_option') === 1) {
                 $this->getSystemLogger()->debug("ApiResponseLoggerListener::onRequestTerminated api_log_option set to 1, skipping log and request");
                 // Do not log the response and requestBody
                 $logResponse = '';
+            } else if ($hasAnonymizedPayloadLog) {
+                $logResponse = is_string($anonymizedPayloadLog)
+                    ? $anonymizedPayloadLog
+                    : json_encode($anonymizedPayloadLog, JSON_UNESCAPED_SLASHES);
+                $logResponse = is_string($logResponse) ? $logResponse : '';
             } else if ($this->shouldLogResponse($response)) {
                 // If the response is a Symfony Response, we can get the content directly
                 $logResponse = $response->getContent();

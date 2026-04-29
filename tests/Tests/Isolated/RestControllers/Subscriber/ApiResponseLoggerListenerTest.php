@@ -137,4 +137,70 @@ class ApiResponseLoggerListenerTest extends TestCase
         $apiResponseLoggerListener->setEventAuditLogger($auditLogger);
         $apiResponseLoggerListener->onRequestTerminated($terminatedEvent);
     }
+
+    /**
+     * @return void
+     * @throws Exception
+     */
+    public function testUsesAnonymizedPayloadWhenRawResponseLoggingIsSkipped(): void
+    {
+        $globalsBag = new OEGlobalsBag([
+            'api_log_option' => 2,
+        ]);
+        $kernel = $this->createMock(OEHttpKernel::class);
+        $kernel->method('getGlobalsBag')
+            ->willReturn($globalsBag);
+        $request = HttpRestRequest::create('/api/agent/intent');
+        $mockSessionFactory = new MockFileSessionStorageFactory();
+        $session = new Session($mockSessionFactory->createStorage(null));
+        $session->set('authUser', 'test_user');
+        $session->set('authUserID', 1);
+        $session->set('authProvider', 'Default');
+        $session->set('pid', 123);
+        $request->setSession($session);
+        $request->setResource('agent/intent');
+        $request->attributes->set('skipResponseLogging', true);
+        $safePayload = [
+            'payload_version' => 'agent.anonymized.v1',
+            'evidence_packet' => [
+                'sources' => [
+                    [
+                        'display' => 'Patient [PATIENT_NAME]',
+                    ],
+                ],
+            ],
+        ];
+        $request->attributes->set('agentAnonymizedPayloadLog', $safePayload);
+
+        $response = new JsonResponse([
+            'data' => [
+                'evidence_packet' => [
+                    'sources' => [
+                        [
+                            'display' => 'Patient Jane Doe',
+                        ],
+                    ],
+                ],
+            ],
+        ], Response::HTTP_OK);
+        $terminatedEvent = new TerminateEvent($kernel, $request, $response);
+        $encodedSafePayload = json_encode($safePayload, JSON_UNESCAPED_SLASHES);
+        $auditLogger = $this->createMock(EventAuditLogger::class);
+        $auditLogger
+            ->method('recordLogItem')
+            ->withAnyParameters()
+            ->willReturnCallback(function ($success, $event, $user, $group, $comments, $patientId, $category, $logFrom, $menuItemId, $ccdaDocId, $user_notes, $api)
+ use ($encodedSafePayload): void {
+                $this->assertEquals(1, $success, 'Success should be 1');
+                $this->assertEquals('api', $event, 'Event should be "api"');
+                $this->assertEquals($encodedSafePayload, $api['request_body']);
+                $this->assertEquals($encodedSafePayload, $api['response']);
+                $this->assertStringNotContainsString('Jane Doe', $api['request_body']);
+                // void return
+            });
+        $apiResponseLoggerListener = new ApiResponseLoggerListener();
+        $apiResponseLoggerListener->setSystemLogger($this->createMock(LoggerInterface::class));
+        $apiResponseLoggerListener->setEventAuditLogger($auditLogger);
+        $apiResponseLoggerListener->onRequestTerminated($terminatedEvent);
+    }
 }

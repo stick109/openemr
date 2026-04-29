@@ -17,10 +17,16 @@ use OpenEMR\Services\Agent\Evidence\AgentEvidenceToolset;
 
 final class AgentEvidenceResponseBuilder
 {
+    /**
+     * @var array<string, mixed>
+     */
+    private array $lastAnonymizedPayload = [];
+
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
         private readonly AgentIntentPlaceholderResponseBuilder $placeholderResponseBuilder = new AgentIntentPlaceholderResponseBuilder(),
-        private readonly AgentEvidenceToolset $toolset = new AgentEvidenceToolset()
+        private readonly AgentEvidenceToolset $toolset = new AgentEvidenceToolset(),
+        private readonly Anonymizer $anonymizer = new Anonymizer()
     ) {
     }
 
@@ -29,6 +35,7 @@ final class AgentEvidenceResponseBuilder
      */
     public function build(string $intentId, AgentAccessToken $accessToken, ?string $sourceId = null): array
     {
+        $this->lastAnonymizedPayload = [];
         $intent = $this->intentCatalog->get($intentId);
         if ($intent === null) {
             throw new InvalidArgumentException('Unknown agent intent_id.');
@@ -39,10 +46,11 @@ final class AgentEvidenceResponseBuilder
         }
 
         if ($intentId === AgentIntentCatalog::SHOW_SOURCE && ($sourceId === null || $sourceId === '')) {
-            return $this->sourceRequiredResponse($intent);
+            return $this->sourceRequiredResponse($intent, $accessToken);
         }
 
         $packet = $this->toolset->buildPacket($intentId, $accessToken, $intent, $sourceId);
+        $this->lastAnonymizedPayload = $this->anonymizedPayload($intent, $accessToken, $packet);
 
         return [
             'status' => 'evidence_ready',
@@ -55,11 +63,33 @@ final class AgentEvidenceResponseBuilder
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    public function getLastAnonymizedPayload(): array
+    {
+        return $this->lastAnonymizedPayload;
+    }
+
+    /**
      * @param array<string, mixed> $intent
      * @return array<string, mixed>
      */
-    private function sourceRequiredResponse(array $intent): array
+    private function sourceRequiredResponse(array $intent, AgentAccessToken $accessToken): array
     {
+        $packet = [
+            'request_id' => '',
+            'intent_id' => $intent['intent_id'],
+            'caps' => [
+                'max_records' => $intent['max_records'],
+                'max_documents' => $intent['max_documents'],
+                'lookback_days' => $intent['lookback_days'],
+            ],
+            'sources' => [],
+            'checked_evidence' => [],
+            'tool_runs' => [],
+        ];
+        $this->lastAnonymizedPayload = $this->anonymizedPayload($intent, $accessToken, $packet);
+
         return [
             'status' => 'source_required',
             'response_generation' => 'deterministic_evidence_packet',
@@ -81,18 +111,23 @@ final class AgentEvidenceResponseBuilder
             ],
             'citations' => [],
             'checked_evidence' => [],
-            'evidence_packet' => [
-                'request_id' => '',
-                'intent_id' => $intent['intent_id'],
-                'caps' => [
-                    'max_records' => $intent['max_records'],
-                    'max_documents' => $intent['max_documents'],
-                    'lookback_days' => $intent['lookback_days'],
-                ],
-                'sources' => [],
-                'checked_evidence' => [],
-                'tool_runs' => [],
-            ],
+            'evidence_packet' => $packet,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $intent
+     * @param array<string, mixed> $packet
+     * @return array<string, mixed>
+     */
+    private function anonymizedPayload(array $intent, AgentAccessToken $accessToken, array $packet): array
+    {
+        return [
+            'payload_version' => 'agent.anonymized.v1',
+            'intent_id' => (string) $intent['intent_id'],
+            'prompt_text' => $this->anonymizer->anonymizePayload($accessToken, (string) $intent['prompt_text']),
+            'evidence_packet' => $this->anonymizer->anonymizeEvidencePacket($accessToken, $packet),
+            'placeholder_count' => $this->anonymizer->placeholderCount($accessToken),
         ];
     }
 

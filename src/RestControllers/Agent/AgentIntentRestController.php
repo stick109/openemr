@@ -95,6 +95,7 @@ final class AgentIntentRestController
                 $accessToken,
                 $this->sourceIdFromPayload($payload)
             );
+            $request->attributes->set('agentAnonymizedPayloadLog', $this->responseBuilder->getLastAnonymizedPayload());
         } catch (AgentEvidenceAccessException $exception) {
             return $this->evidenceDenied($exception->getPublicMessage());
         }

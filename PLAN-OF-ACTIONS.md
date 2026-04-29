@@ -2,11 +2,11 @@
 
 ## Phase 1: Closed UI And Endpoint
 
-- Add an authenticated patient-chart agent panel.
-- Define the intent catalog and button labels.
-- Add `POST /api/agent/intent`.
-- Reject unknown intent IDs and any free-text payload.
-- Return deterministic placeholder responses for each allowed intent.
+1. Define the intent catalog and button labels. Depends on the MVP intent IDs and user traces already defined in `ARCHITECTURE.md` and `USERS.md`.
+2. Add `POST /api/agent/intent` with a minimal authenticated route and controller skeleton. Depends on item 1 because the endpoint should accept intent IDs from the server-owned catalog only.
+3. Reject unknown intent IDs and any free-text payload. Depends on items 1 and 2 because validation requires both the catalog and the endpoint request contract.
+4. Return deterministic placeholder responses for each allowed intent. Depends on item 3 because placeholders should only be returned after the request passes closed-intent validation.
+5. Add an authenticated patient-chart agent panel. Depends on items 1 through 4 because the panel needs final button labels, a stable endpoint, validation behavior, and placeholder response shape.
 
 ## Phase 2: Agent Access Broker
 

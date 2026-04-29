@@ -34,6 +34,7 @@ final class AgentIntentRestController
         'llm_user_text',
         'message',
         'prompt',
+        'prompt_text',
         'query',
         'question',
         'text',

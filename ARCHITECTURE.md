@@ -4,9 +4,9 @@
 
 The first MVP iteration of the Clinical Co-Pilot will be a constrained, source-grounded agent embedded in OpenEMR for **two narrow outpatient users: an intake nurse rooming a scheduled patient and a doctor preparing to enter the room**. These constraints define the initial build scope, not the full long-term shape of the Clinical Co-Pilot. For this MVP, the agent is not a general chatbot, chart search engine, diagnosis assistant, or documentation writer. Its first job is to answer a small set of patient-specific questions quickly: show basic patient data, show current medications, show recent events, build an intake checklist, explain what changed since the last visit, summarize nurse intake flags, and show source evidence behind a claim.
 
-The most important product decision is that there will be **no free-text communication between the user and the agent**. The UI will present buttons and follow-up action chips only. Those controls map to a server-owned intent catalog with stable prompt templates, for example "show me current medications" or "show me recent events." The browser will not send arbitrary prompt text to the LLM, and the LLM will not choose patients, run generic searches, or request arbitrary OpenEMR routes. This keeps the interaction fast and conversational enough for follow-up use while **removing the highest-risk prompt-injection** and cross-patient search surface.
+The most important product decision is that there will be **no free-text communication between the user and the agent**. The UI presents buttons and follow-up action chips, alongside a read-only prompt-preview field and disabled send button that surface the exact text dispatched to the LLM. Those controls map to a server-owned intent catalog with stable prompt templates, for example "show me current medications" or "show me recent events." The browser will not send arbitrary prompt text to the LLM, and the LLM will not choose patients, run generic searches, or request arbitrary OpenEMR routes. This keeps the interaction fast and conversational enough for follow-up use while **removing the highest-risk prompt-injection** and cross-patient search surface.
 
-The most important security decision is that the agent server gets a separate data access component: the Agent Access Broker. Current OpenEMR auth and ACL infrastructure is useful, but the audit found that it is not sufficient for this purpose because many checks answer "can this user access this category of data?" instead of "**can this exact user access this exact patient right now**?" The broker will sit in front of every agent retrieval tool. At the beginning of an agent interaction, it will validate the authenticated OpenEMR session, API CSRF token, user role, OpenEMR ACLs, current patient context, appointment or chart binding, and per-intent data policy. If access is granted, it creates a short-lived agent access token that contains the permissions this user has for this specific patient: patient identity, allowed tools, allowed data classes, limits, and request ID. The token is reused for the full life of that user's interaction with the agent, then expires at interaction end or timeout. Tools must present that token and cannot accept patient IDs directly from the LLM or browser.
+The most important security decision is that the agent server gets a separate data access component: the Agent Access Broker. Current OpenEMR auth and ACL infrastructure is useful, but the audit found that it is not sufficient for this purpose because many checks answer "can this user access this category of data?" instead of "**can this exact user access this exact patient right now**?" The broker will sit in front of every agent retrieval tool. At the beginning of an agent interaction, it will validate the authenticated OpenEMR session, API CSRF token, user role, OpenEMR ACLs, current patient context, and appointment or chart binding, and resolve the user's full set of allowed tools, data classes, and ACL categories for that patient in a single call. If access is granted, it bakes that complete permission set into a short-lived agent access token alongside patient and user identity, so follow-up actions reuse the token without a second broker call. Per-intent caps such as record counts and lookback windows live in the intent catalog and are applied at retrieval time. The token expires at interaction end or timeout. Tools must present that token and cannot accept patient IDs directly from the LLM or browser.
 
 The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. The pre-search decision is to start with a custom single-agent orchestrator rather than a heavy multi-agent framework, because the **workflow is closed-intent, tool-bounded, and verification-heavy**. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
 
@@ -140,7 +140,7 @@ flowchart TD
     C --> D["Intent Catalog"]
     C --> P{"Existing valid interaction token?"}
     P -->|No| E["Agent Access Broker"]
-    E --> V["Validate session, CSRF, ACLs, patient binding, intent policy"]
+    E --> V["Validate session, CSRF, ACLs, patient binding; resolve full access set for user-patient pair"]
     V --> F{"Authorized for this patient?"}
     F -->|No| G["Refusal + audit event"]
     F -->|Yes| T["Issue interaction-scoped agent access token"]
@@ -198,7 +198,9 @@ The browser should send an `APICSRFTOKEN` header for authenticated in-app calls,
 
 ## Button-Only Conversation Contract
 
-The UI never renders a free-text input box. User actions are limited to:
+The UI never accepts free-text input. To make the LLM exchange transparent, the panel renders a read-only prompt-preview field with a disabled send button to its right. When the user clicks an intent button, the field is populated with the server-owned prompt text bound to that intent and the request is dispatched automatically; the user does not type and does not press send. The field is not editable, the send button is never clickable, and the server never reads the field's value — its only purpose is to show the user the exact text that will be sent to the LLM.
+
+User actions are limited to:
 
 - Initial intent buttons.
 - Contextual follow-up buttons generated from server-approved intent options.
@@ -249,40 +251,35 @@ The broker will:
 - Refuse requests when there is no current patient, multiple possible patients, or a stale patient context.
 - Enforce OpenEMR ACL checks through `AclMain` or `RestConfig::request_authorization_check`.
 - Enforce patient-specific access beyond category ACLs.
-- Apply per-intent policy for data class, time window, and record count.
+- Resolve the user's full access set for the current patient in a single pass — every data class, tool, and ACL category the user may touch — and bake that union into the token at issuance, so subsequent intent clicks reuse the token without a new broker call.
+- Treat per-intent caps (record counts, document counts, lookback windows) as catalog policy applied by retrieval tools, not as broker output baked into the token.
 - Produce a short-lived agent access token at the beginning of the agent interaction.
 - Reuse that token across the user's follow-up buttons and source drilldowns for the same interaction.
 - Audit both token grants and denials.
 
 ### Agent Access Token
 
-The agent access token is an internal server-side object, not a browser token. It is short-lived, but its lifetime is long enough for one user-agent interaction around one patient. It is issued once at the beginning of the interaction, reused by retrieval tools during follow-up actions, and expires when the interaction ends, the patient context changes, or the timeout is reached.
+The agent access token is an internal server-side object, not a browser token. It is short-lived, but its lifetime is long enough for one user-agent interaction around one patient. It is issued once at the beginning of the interaction with the user's full permission set for the current patient pre-resolved, reused by retrieval tools during follow-up actions without re-calling the broker, and expires when the interaction ends, the patient context changes, or the timeout is reached.
 
 ```json
 {
-  "request_id": "agent-request-uuid",
   "interaction_id": "agent-interaction-uuid",
   "site_id": "default",
   "user_id": 1,
   "user_uuid": "users.uuid",
   "patient_pid": 123,
   "patient_uuid": "patient_data.uuid",
-  "intent_id": "current_medications",
   "permissions": {
-    "allowed_data_classes": ["medications", "allergies"],
-    "allowed_tools": ["get_current_medications", "get_source_detail"],
-    "acl_categories": ["patients\\med"],
-    "limits": {
-      "max_records": 25,
-      "max_documents": 0,
-      "lookback_days": 365
-    }
+    "allowed_data_classes": ["demographics", "appointments", "medications", "allergies", "problems", "vitals", "results", "documents", "intake", "timeline"],
+    "allowed_tools": ["get_patient_snapshot", "get_current_medications", "get_allergies_to_confirm", "get_recent_events", "get_changed_since_last_visit", "get_intake_checklist", "get_intake_handoff", "get_source_detail"],
+    "acl_categories": ["patients\\demo", "patients\\med", "patients\\docs", "encounters\\auth_a", "encounters\\notes"]
   },
+  "issued_at": "interaction start timestamp",
   "expires_at": "interaction end or timeout timestamp"
 }
 ```
 
-Retrieval tools must reject calls without a valid token. They must also reject any patient ID, data class, tool name, or source request that does not match the token's permissions.
+The example shows the broker-resolved union for a fully-authorized provider; another user might receive a strictly smaller set. Retrieval tools must reject calls without a valid token. They must also reject any patient ID, data class, tool name, or source request that does not match the token's permissions. Per-intent caps — `max_records`, `max_documents`, `lookback_days` — live in the intent catalog rather than the token, so the token authorizes who can read what and the intent catalog governs how much. Each retrieval call carries its own observability `request_id`; that ID is not part of the token.
 
 ### Patient-Specific Access Policy
 
@@ -558,6 +555,7 @@ Rendering rules:
 - Make tool failures visible in the answer.
 - Show "not checked" and "not found in checked evidence" distinctly.
 - Disable buttons when no current patient is server-confirmed.
+- Render the prompt-preview field with `readonly` and `disabled` attributes and keep its sibling send button permanently disabled, so the displayed prompt text cannot be edited or submitted from the browser.
 
 The UI should be dense and clinical, not a marketing-style chat page. A compact side panel or chart card is a better fit than a full-screen chat interface.
 

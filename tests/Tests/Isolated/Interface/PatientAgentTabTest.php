@@ -89,11 +89,21 @@ class PatientAgentTabTest extends TestCase
     public function testAgentPanelIsButtonOnlyAndCallsClosedIntentEndpoint(): void
     {
         $this->assertStringContainsString('data-intent-id="{{ intent.intent_id|attr }}"', $this->templateContent);
+        $this->assertStringContainsString('data-prompt-text="{{ intent.prompt_text|attr }}"', $this->templateContent);
         $this->assertStringContainsString("'APICSRFTOKEN': apiCsrfToken", $this->templateContent);
         $this->assertStringContainsString("active_patient_context: 'server-session'", $this->templateContent);
         $this->assertStringContainsString('fetch(apiUrl', $this->templateContent);
+        $this->assertStringContainsString('js-agent-prompt-preview', $this->templateContent);
+        $this->assertStringContainsString('readonly', $this->templateContent);
+        $this->assertStringContainsString('aria-readonly="true"', $this->templateContent);
+        $this->assertStringContainsString('disabled>{{ "Send"|xlt }}</button>', $this->templateContent);
+        $this->assertStringContainsString('const intentPrompts = new Map', $this->templateContent);
+        $this->assertStringContainsString('promptPreviewNode.value = intentPrompts.get(intentId)', $this->templateContent);
         $this->assertStringNotContainsString('<textarea', $this->templateContent);
-        $this->assertStringNotContainsString('type="text"', $this->templateContent);
         $this->assertStringNotContainsString('contenteditable', $this->templateContent);
+        $this->assertStringNotContainsString('llm_user_text', $this->templateContent);
+        $this->assertStringNotContainsString('prompt_text: promptPreviewNode.value', $this->templateContent);
+        $this->assertStringNotContainsString('prompt_text:', $this->templateContent);
+        $this->assertStringNotContainsString('name="prompt', $this->templateContent);
     }
 }

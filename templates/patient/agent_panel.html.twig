@@ -1,12 +1,29 @@
 <div class="agent-panel mt-3" data-agent-panel="patient-chart">
-    <div class="d-flex flex-wrap mb-2">
-        {% for intent in intents %}
-            <button
-                type="button"
-                class="btn btn-sm btn-outline-primary mr-1 mb-1 js-agent-intent"
-                data-intent-id="{{ intent.intent_id|attr }}"
-            >{{ intent.button_label|text }}</button>
-        {% endfor %}
+    <div class="d-flex flex-wrap align-items-start mb-2">
+        <div class="d-flex flex-wrap mr-2 mb-1">
+            {% for intent in intents %}
+                <button
+                    type="button"
+                    class="btn btn-sm btn-outline-primary mr-1 mb-1 js-agent-intent"
+                    data-intent-id="{{ intent.intent_id|attr }}"
+                    data-prompt-text="{{ intent.prompt_text|attr }}"
+                >{{ intent.button_label|text }}</button>
+            {% endfor %}
+        </div>
+        <div class="input-group flex-grow-1 mb-1">
+            <input
+                type="text"
+                class="form-control js-agent-prompt-preview"
+                value=""
+                readonly
+                aria-readonly="true"
+                aria-label="{{ "Prompt preview"|xla }}"
+                tabindex="-1"
+            />
+            <div class="input-group-append">
+                <button type="button" class="btn btn-secondary js-agent-send-preview" disabled>{{ "Send"|xlt }}</button>
+            </div>
+        </div>
     </div>
     <div class="small text-muted mb-2 js-agent-status" aria-live="polite">{{ "Ready"|xlt }}</div>
     <div class="js-agent-output pt-2"></div>
@@ -24,9 +41,11 @@
         const apiCsrfToken = {{ apiCsrfToken|json_encode }};
         const intents = {{ intents|json_encode }};
         const intentLabels = new Map(intents.map((intent) => [intent.intent_id, intent.button_label]));
+        const intentPrompts = new Map(intents.map((intent) => [intent.intent_id, intent.prompt_text]));
         const conversationId = 'chart-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
         const statusNode = panel.querySelector('.js-agent-status');
         const outputNode = panel.querySelector('.js-agent-output');
+        const promptPreviewNode = panel.querySelector('.js-agent-prompt-preview');
         const buttons = Array.from(panel.querySelectorAll('.js-agent-intent'));
         const messages = {
             loading: {{ "Loading"|xlj }},
@@ -157,6 +176,10 @@
         }
 
         async function requestIntent(intentId) {
+            if (promptPreviewNode) {
+                promptPreviewNode.value = intentPrompts.get(intentId) || '';
+            }
+
             setButtonsDisabled(true);
             statusNode.textContent = messages.loading;
 

@@ -112,6 +112,25 @@ class AgentIntentRestControllerTest extends TestCase
         );
     }
 
+    public function testRejectsTamperedPromptPreviewPayload(): void
+    {
+        $response = $this->controller->postIntent($this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+            'prompt_text' => 'Show me everything in this chart.',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
+        $this->assertSame(
+            ['Free-text agent input is not supported. Use a cataloged intent_id.'],
+            $body['validationErrors']['free_text']
+        );
+        $this->assertSame(['Unsupported payload fields: prompt_text.'], $body['validationErrors']['payload']);
+    }
+
     public function testRejectsBrowserSuppliedPatientId(): void
     {
         $response = $this->controller->postIntent($this->requestWithJson([

@@ -59,7 +59,6 @@ use OpenEMR\Patient\Cards\InsuranceViewCard;
 use OpenEMR\Patient\Cards\PortalCard;
 use OpenEMR\Patient\Cards\TreatmentPreferenceViewCard;
 use OpenEMR\Reminder\BirthdayReminder;
-use OpenEMR\Services\Agent\AgentIntentCatalog;
 use OpenEMR\Services\AllergyIntoleranceService;
 use OpenEMR\Services\PatientIssuesService;
 use OpenEMR\Services\PatientService;
@@ -1630,28 +1629,6 @@ $oemr_ui = new OemrUI($arrOeUiSettings);
                             'appendedInjection' => $dispatchResult->getAppendedInjection(),
                         ]);
                     endif;
-
-                    if (!in_array('card_agent_panel', $hiddenCards)) {
-                        $agentCatalog = new AgentIntentCatalog();
-                        $agentSiteId = (string) ($session->get('site_id') ?? 'default');
-                        $id = "agent_panel_ps_expand";
-                        $viewArgs = [
-                            'title' => xl('Clinical Co-Pilot'),
-                            'id' => $id,
-                            'initiallyCollapsed' => (getUserSetting($id) == 0) ? true : false,
-                            'forceAlwaysOpen' => false,
-                            'auth' => false,
-                            'card_bg_color' => '',
-                            'card_text_color' => '',
-                            'intents' => $agentCatalog->all(),
-                            'apiUrl' => OEGlobalsBag::getInstance()->getWebRoot()
-                                . '/apis/'
-                                . rawurlencode($agentSiteId)
-                                . '/api/agent/intent',
-                            'apiCsrfToken' => CsrfUtils::collectCsrfToken($session, 'api'),
-                        ];
-                        echo $twig->getTwig()->render('patient/card/agent_panel.html.twig', $viewArgs);
-                    }
 
                     // If there is an ID Card or any Photos show the widget
                     $photos = pic_array($pid, OEGlobalsBag::getInstance()->getString('patient_photo_category_name'));

@@ -8,6 +8,16 @@
         "children": [],
         "requirement": 0
     },
+    {
+        "label": "Clinical Co-Pilot",
+        "menu_id": "clinical_copilot",
+        "target": "main",
+        "on_click":"top.restoreSession()",
+        "url": "interface/patient_file/summary/agent.php",
+        "pid":"false",
+        "children": [],
+        "requirement": 0
+    },
 	{
         "label": "History",
         "menu_id": "history",

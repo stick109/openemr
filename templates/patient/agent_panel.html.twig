@@ -1,7 +1,4 @@
-{% extends "patient/card/card_base.html.twig" %}
-
-{% block content %}
-<div class="agent-panel" data-agent-panel="patient-chart">
+<div class="agent-panel mt-3" data-agent-panel="patient-chart">
     <div class="d-flex flex-wrap mb-2">
         {% for intent in intents %}
             <button
@@ -12,7 +9,7 @@
         {% endfor %}
     </div>
     <div class="small text-muted mb-2 js-agent-status" aria-live="polite">{{ "Ready"|xlt }}</div>
-    <div class="js-agent-output border-top pt-2"></div>
+    <div class="js-agent-output pt-2"></div>
 </div>
 
 <script>
@@ -211,4 +208,3 @@
         });
     }());
 </script>
-{% endblock %}

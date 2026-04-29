@@ -39,11 +39,45 @@ class AgentIntentRestControllerTest extends TestCase
 
         $body = $this->decodeJsonBody($response);
 
-        $this->assertSame(Response::HTTP_ACCEPTED, $response->getStatusCode());
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
         $this->assertSame([], $body['validationErrors']);
         $this->assertSame('current_medications', $body['data']['intent_id']);
         $this->assertSame('Current medications', $body['data']['button_label']);
-        $this->assertSame('validated', $body['data']['status']);
+        $this->assertSame('placeholder', $body['data']['status']);
+        $this->assertSame('deterministic_placeholder', $body['data']['response_generation']);
+        $this->assertSame('Current medications', $body['data']['answer']['answer_blocks'][0]['heading']);
+        $this->assertSame('not_checked', $body['data']['answer']['answer_blocks'][0]['claims'][0]['certainty']);
+        $this->assertSame([], $body['data']['citations']);
+        $this->assertSame([], $body['data']['checked_evidence']);
+    }
+
+    public function testReturnsPlaceholderForEachKnownClosedIntent(): void
+    {
+        $intentIds = [
+            'basic_patient_data',
+            'current_medications',
+            'allergies_to_confirm',
+            'recent_events',
+            'intake_checklist',
+            'changed_since_last_visit',
+            'intake_handoff',
+            'show_source',
+        ];
+
+        foreach ($intentIds as $intentId) {
+            $response = $this->controller->handlePayload([
+                'intent_id' => $intentId,
+                'conversation_id' => 'session-local-id',
+                'active_patient_context' => 'server-session',
+            ]);
+            $body = $this->decodeJsonBody($response);
+
+            $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+            $this->assertSame($intentId, $body['data']['intent_id']);
+            $this->assertSame('placeholder', $body['data']['status']);
+            $this->assertNotEmpty($body['data']['answer']['answer_blocks'][0]['claims'][0]['text']);
+            $this->assertSame([], $body['data']['answer']['answer_blocks'][0]['claims'][0]['citation_ids']);
+        }
     }
 
     public function testRejectsUnknownIntentId(): void

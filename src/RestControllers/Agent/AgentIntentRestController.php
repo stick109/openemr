@@ -14,6 +14,7 @@ namespace OpenEMR\RestControllers\Agent;
 
 use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\Services\Agent\AgentIntentCatalog;
+use OpenEMR\Services\Agent\AgentIntentPlaceholderResponseBuilder;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -39,8 +40,10 @@ final class AgentIntentRestController
         'user_text',
     ];
 
-    public function __construct(private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog())
-    {
+    public function __construct(
+        private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
+        private readonly AgentIntentPlaceholderResponseBuilder $placeholderResponseBuilder = new AgentIntentPlaceholderResponseBuilder()
+    ) {
     }
 
     public function postIntent(HttpRestRequest $request): JsonResponse
@@ -64,17 +67,20 @@ final class AgentIntentRestController
         }
 
         $intent = $this->intentCatalog->get($payload['intent_id']);
+        if ($intent === null) {
+            return $this->badRequest(['intent_id' => ['Unknown agent intent_id.']]);
+        }
+
+        $placeholderResponse = $this->placeholderResponseBuilder->build($intent['intent_id']);
 
         return new JsonResponse([
             'validationErrors' => [],
             'internalErrors' => [],
-            'data' => [
+            'data' => array_merge([
                 'intent_id' => $intent['intent_id'],
                 'button_label' => $intent['button_label'],
-                'status' => 'validated',
-                'response_generation' => 'not_implemented',
-            ],
-        ], Response::HTTP_ACCEPTED);
+            ], $placeholderResponse),
+        ], Response::HTTP_OK);
     }
 
     /**

@@ -1,0 +1,214 @@
+{% extends "patient/card/card_base.html.twig" %}
+
+{% block content %}
+<div class="agent-panel" data-agent-panel="patient-chart">
+    <div class="d-flex flex-wrap mb-2">
+        {% for intent in intents %}
+            <button
+                type="button"
+                class="btn btn-sm btn-outline-primary mr-1 mb-1 js-agent-intent"
+                data-intent-id="{{ intent.intent_id|attr }}"
+            >{{ intent.button_label|text }}</button>
+        {% endfor %}
+    </div>
+    <div class="small text-muted mb-2 js-agent-status" aria-live="polite">{{ "Ready"|xlt }}</div>
+    <div class="js-agent-output border-top pt-2"></div>
+</div>
+
+<script>
+    (function () {
+        const panel = document.currentScript.previousElementSibling;
+        if (!panel || panel.dataset.agentPanelInitialized === 'true') {
+            return;
+        }
+        panel.dataset.agentPanelInitialized = 'true';
+
+        const apiUrl = {{ apiUrl|json_encode }};
+        const apiCsrfToken = {{ apiCsrfToken|json_encode }};
+        const intents = {{ intents|json_encode }};
+        const intentLabels = new Map(intents.map((intent) => [intent.intent_id, intent.button_label]));
+        const conversationId = 'chart-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+        const statusNode = panel.querySelector('.js-agent-status');
+        const outputNode = panel.querySelector('.js-agent-output');
+        const buttons = Array.from(panel.querySelectorAll('.js-agent-intent'));
+        const messages = {
+            loading: {{ "Loading"|xlj }},
+            requestFailed: {{ "Request failed."|xlj }},
+            noResponse: {{ "No agent response was returned."|xlj }},
+            unavailable: {{ "Agent endpoint is unavailable."|xlj }},
+            followUps: {{ "Follow-up"|xlj }},
+            missing: {{ "Missing or uncertain"|xlj }},
+            evidence: {{ "Checked evidence"|xlj }},
+            none: {{ "None"|xlj }}
+        };
+
+        function clearNode(node) {
+            while (node.firstChild) {
+                node.removeChild(node.firstChild);
+            }
+        }
+
+        function appendTextElement(parent, tagName, className, text) {
+            const element = document.createElement(tagName);
+            if (className) {
+                element.className = className;
+            }
+            element.textContent = text;
+            parent.appendChild(element);
+            return element;
+        }
+
+        function appendCitationChips(parent, citationIds) {
+            if (!Array.isArray(citationIds) || citationIds.length === 0) {
+                return;
+            }
+
+            const chipContainer = document.createElement('div');
+            chipContainer.className = 'mt-1';
+            citationIds.forEach((citationId) => {
+                appendTextElement(chipContainer, 'span', 'badge badge-light border mr-1', citationId);
+            });
+            parent.appendChild(chipContainer);
+        }
+
+        function setButtonsDisabled(disabled) {
+            Array.from(panel.querySelectorAll('.js-agent-intent')).forEach((button) => {
+                button.disabled = disabled;
+            });
+        }
+
+        function renderValidationErrors(errors) {
+            clearNode(outputNode);
+            const alert = appendTextElement(outputNode, 'div', 'alert alert-warning py-2 mb-0', messages.requestFailed);
+            Object.keys(errors).forEach((field) => {
+                (errors[field] || []).forEach((message) => {
+                    appendTextElement(alert, 'div', '', field + ': ' + message);
+                });
+            });
+        }
+
+        function renderError(message) {
+            clearNode(outputNode);
+            appendTextElement(outputNode, 'div', 'alert alert-danger py-2 mb-0', message);
+        }
+
+        function renderFollowUps(followupIntents) {
+            if (!Array.isArray(followupIntents) || followupIntents.length === 0) {
+                return;
+            }
+
+            appendTextElement(outputNode, 'div', 'small font-weight-bold mt-2 mb-1', messages.followUps);
+            const container = document.createElement('div');
+            container.className = 'd-flex flex-wrap';
+            followupIntents.forEach((intentId) => {
+                if (!intentLabels.has(intentId)) {
+                    return;
+                }
+                const followupButton = document.createElement('button');
+                followupButton.type = 'button';
+                followupButton.className = 'btn btn-sm btn-outline-secondary mr-1 mb-1 js-agent-intent';
+                followupButton.dataset.intentId = intentId;
+                followupButton.textContent = intentLabels.get(intentId);
+                followupButton.addEventListener('click', () => requestIntent(intentId));
+                container.appendChild(followupButton);
+            });
+            outputNode.appendChild(container);
+        }
+
+        function renderAnswer(data) {
+            clearNode(outputNode);
+            if (!data || !data.answer) {
+                appendTextElement(outputNode, 'div', 'text-muted', messages.noResponse);
+                return;
+            }
+
+            (data.answer.answer_blocks || []).forEach((block) => {
+                appendTextElement(outputNode, 'div', 'font-weight-bold mb-1', block.heading || data.button_label);
+                const claims = Array.isArray(block.claims) ? block.claims : [];
+                const list = document.createElement('ul');
+                list.className = 'pl-3 mb-2';
+                claims.forEach((claim) => {
+                    const item = document.createElement('li');
+                    appendTextElement(item, 'span', '', claim.text || '');
+                    if (claim.certainty) {
+                        appendTextElement(item, 'span', 'text-muted ml-1', '(' + claim.certainty + ')');
+                    }
+                    appendCitationChips(item, claim.citation_ids);
+                    list.appendChild(item);
+                });
+                outputNode.appendChild(list);
+            });
+
+            if (Array.isArray(data.answer.missing_or_uncertain) && data.answer.missing_or_uncertain.length > 0) {
+                appendTextElement(outputNode, 'div', 'small font-weight-bold mb-1', messages.missing);
+                const missingList = document.createElement('ul');
+                missingList.className = 'pl-3 mb-2';
+                data.answer.missing_or_uncertain.forEach((item) => {
+                    const missingItem = document.createElement('li');
+                    appendTextElement(missingItem, 'span', '', item.text || '');
+                    appendCitationChips(missingItem, item.citation_ids);
+                    missingList.appendChild(missingItem);
+                });
+                outputNode.appendChild(missingList);
+            }
+
+            const evidence = Array.isArray(data.checked_evidence) && data.checked_evidence.length > 0
+                ? data.checked_evidence.join(', ')
+                : messages.none;
+            appendTextElement(outputNode, 'div', 'small text-muted', messages.evidence + ': ' + evidence);
+            renderFollowUps(data.answer.followup_intents);
+        }
+
+        async function requestIntent(intentId) {
+            setButtonsDisabled(true);
+            statusNode.textContent = messages.loading;
+
+            try {
+                if (window.top && typeof window.top.restoreSession === 'function') {
+                    window.top.restoreSession();
+                }
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: {
+                        'APICSRFTOKEN': apiCsrfToken,
+                        'Accept': 'application/json',
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        intent_id: intentId,
+                        conversation_id: conversationId,
+                        active_patient_context: 'server-session'
+                    })
+                });
+                const body = await response.json();
+
+                if (body.validationErrors && Object.keys(body.validationErrors).length > 0) {
+                    renderValidationErrors(body.validationErrors);
+                    statusNode.textContent = messages.requestFailed;
+                    return;
+                }
+
+                if (!response.ok) {
+                    renderError(messages.requestFailed);
+                    statusNode.textContent = messages.requestFailed;
+                    return;
+                }
+
+                renderAnswer(body.data);
+                statusNode.textContent = body.data && body.data.button_label ? body.data.button_label : '';
+            } catch (error) {
+                renderError(messages.unavailable);
+                statusNode.textContent = messages.requestFailed;
+            } finally {
+                setButtonsDisabled(false);
+            }
+        }
+
+        buttons.forEach((button) => {
+            button.addEventListener('click', () => requestIntent(button.dataset.intentId));
+        });
+    }());
+</script>
+{% endblock %}

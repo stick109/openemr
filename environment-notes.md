@@ -45,6 +45,8 @@ The Redis extension is a manually installed PECL DLL. If PHP is upgraded, replac
 
 - This host's Windows PowerShell does not support `Invoke-WebRequest -SkipCertificateCheck`.
 - For local OpenEMR readiness checks, use HTTP endpoints, Docker health status, or a PowerShell/.NET certificate callback only when HTTPS response content must be inspected.
+- 2026-04-29: Symptom: piping SQL with `Get-Content -Raw .\path\file.sql | docker exec -i ... mariadb` can fail with `ERROR 1064` because MariaDB receives a leading UTF-8 BOM before the first SQL token, even when the source file itself has no BOM. Likely cause: Windows PowerShell's configured UTF-8 text pipeline writes a BOM to native process stdin. Workaround: copy the SQL file into the container with `docker cp` and run it with a container-side redirect, or use an explicit byte-stream approach instead of the PowerShell text pipeline. Follow-up: prefer container-side SQL execution for local Docker database seed scripts.
+- 2026-04-29: Symptom: `Format-Hex -Count` fails with `A parameter cannot be found that matches parameter name 'Count'`. Likely cause: this host's Windows PowerShell version exposes an older `Format-Hex` parameter set. Workaround: use `Get-Content -Encoding Byte -TotalCount <n>` for short byte inspections. Follow-up: none.
 
 ## Remaining Environment Work
 

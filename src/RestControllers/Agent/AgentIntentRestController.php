@@ -13,6 +13,8 @@ declare(strict_types=1);
 namespace OpenEMR\RestControllers\Agent;
 
 use OpenEMR\Common\Http\HttpRestRequest;
+use OpenEMR\Services\Agent\AgentAccessBroker;
+use OpenEMR\Services\Agent\AgentAccessDecision;
 use OpenEMR\Services\Agent\AgentIntentCatalog;
 use OpenEMR\Services\Agent\AgentIntentPlaceholderResponseBuilder;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -43,7 +45,8 @@ final class AgentIntentRestController
 
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
-        private readonly AgentIntentPlaceholderResponseBuilder $placeholderResponseBuilder = new AgentIntentPlaceholderResponseBuilder()
+        private readonly AgentIntentPlaceholderResponseBuilder $placeholderResponseBuilder = new AgentIntentPlaceholderResponseBuilder(),
+        private readonly AgentAccessBroker $accessBroker = new AgentAccessBroker()
     ) {
     }
 
@@ -54,13 +57,13 @@ final class AgentIntentRestController
             return $this->badRequest($decodeResult['errors']);
         }
 
-        return $this->handlePayload($decodeResult['payload']);
+        return $this->handlePayload($decodeResult['payload'], $request);
     }
 
     /**
      * @param array<mixed> $payload
      */
-    public function handlePayload(array $payload): JsonResponse
+    public function handlePayload(array $payload, HttpRestRequest $request): JsonResponse
     {
         $validationErrors = $this->validatePayload($payload);
         if ($validationErrors !== []) {
@@ -70,6 +73,11 @@ final class AgentIntentRestController
         $intent = $this->intentCatalog->get($payload['intent_id']);
         if ($intent === null) {
             return $this->badRequest(['intent_id' => ['Unknown agent intent_id.']]);
+        }
+
+        $accessDecision = $this->accessBroker->authorize($request, $intent['intent_id'], $payload);
+        if (!$accessDecision->isAllowed()) {
+            return $this->accessDenied($accessDecision);
         }
 
         $placeholderResponse = $this->placeholderResponseBuilder->build($intent['intent_id']);
@@ -170,5 +178,16 @@ final class AgentIntentRestController
             'internalErrors' => [],
             'data' => [],
         ], Response::HTTP_BAD_REQUEST);
+    }
+
+    private function accessDenied(AgentAccessDecision $accessDecision): JsonResponse
+    {
+        return new JsonResponse([
+            'validationErrors' => [],
+            'internalErrors' => [
+                'access' => [$accessDecision->getPublicMessage()],
+            ],
+            'data' => [],
+        ], Response::HTTP_FORBIDDEN);
     }
 }

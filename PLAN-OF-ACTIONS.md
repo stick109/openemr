@@ -18,11 +18,11 @@ Status values: `Done`, `Pending`.
 
 | ID   | Status  | Work Item                                                                         | Dependencies / Notes                                                                 |
 | ---- | ------- | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| P2.1 | Pending | Implement `src\Services\Agent\AgentAccessBroker`.                                 | Depends on P1.2 and P1.3 so broker authorization can be called from the agent route. |
-| P2.2 | Pending | Implement current patient resolver.                                               | Depends on P2.1 because patient resolution belongs behind the broker boundary.       |
-| P2.3 | Pending | Enforce session, CSRF, ACL, patient binding, and per-intent policies.              | Depends on P2.1 and P2.2.                                                           |
-| P2.4 | Pending | Add compact audit events for allow/deny.                                           | Depends on P2.3 so audit events record final broker decisions.                       |
-| P2.5 | Pending | Add PHPUnit tests for allowed, denied, ambiguous, and tampered requests.           | Depends on P2.1 through P2.4.                                                       |
+| P2.1 | Done    | Implement `src\Services\Agent\AgentAccessBroker`.                                 | Depends on P1.2 and P1.3 so broker authorization can be called from the agent route. |
+| P2.2 | Done    | Implement current patient resolver.                                               | Depends on P2.1 because patient resolution belongs behind the broker boundary.       |
+| P2.3 | Done    | Enforce session, CSRF, ACL, and patient binding; resolve the user's full access set (data classes, tools, ACL categories) for the current patient in a single broker call and bake it into the token. | Depends on P2.1 and P2.2. Per-intent caps are catalog policy applied by retrieval tools, not broker output. |
+| P2.4 | Done    | Add compact audit events for allow/deny.                                           | Depends on P2.3 so audit events record final broker decisions.                       |
+| P2.5 | Done    | Add PHPUnit tests for allowed, denied, ambiguous, and tampered requests.           | Depends on P2.1 through P2.4.                                                       |
 
 ## Phase 3: Evidence Tools
 

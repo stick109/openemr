@@ -20,6 +20,7 @@
 
 use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\Common\Uuid\UuidRegistry;
+use OpenEMR\RestControllers\Agent\AgentIntentRestController;
 use OpenEMR\RestControllers\AllergyIntoleranceRestController;
 use OpenEMR\RestControllers\AppointmentRestController;
 use OpenEMR\RestControllers\BackgroundServiceRestController;
@@ -48,6 +49,10 @@ use OpenEMR\RestControllers\VersionRestController;
 use OpenEMR\Services\Search\SearchQueryConfig;
 
 return [
+    "POST /api/agent/intent" => function (HttpRestRequest $request) {
+        RestConfig::request_authorization_check($request, "patients", "demo");
+        return (new AgentIntentRestController())->postIntent($request);
+    },
     "GET /api/facility" => function (HttpRestRequest $request) {
         RestConfig::request_authorization_check($request, "admin", "users");
         $return = (new FacilityRestController())->getAll($request, $request->query->all());

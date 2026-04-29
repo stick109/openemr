@@ -28,10 +28,11 @@ Status values: `Done`, `Pending`.
 
 | ID   | Status  | Work Item                                                                                               | Dependencies / Notes                                                |
 | ---- | ------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| P3.1 | Pending | Implement bounded read tools under `src\Services\Agent\Evidence`.                                       | Depends on P2.3 so every tool can require broker-approved access.   |
-| P3.2 | Pending | Start with basic patient data, current medications, allergies, recent events, and source drilldown.     | Depends on P3.1.                                                    |
-| P3.3 | Pending | Normalize source records into evidence packet format.                                                   | Depends on P3.1 and P3.2 because normalization wraps tool outputs.  |
-| P3.4 | Pending | Add per-tool timing and source-count logs.                                                              | Depends on P3.1 and should align with Phase 6 observability fields. |
+| P3.1 | Done    | Implement bounded read tools under `src\Services\Agent\Evidence`.                                       | Depends on P2.3 so every tool can require broker-approved access.   |
+| P3.2 | Done    | Start with basic patient data, current medications, allergies, recent events, changed since last visit, and source drilldown. | Depends on P3.1. Covers all six MVP intents in `ARCHITECTURE.md`. |
+| P3.3 | Done    | Normalize source records into evidence packet format.                                                   | Depends on P3.1 and P3.2 because normalization wraps tool outputs.  |
+| P3.4 | Done    | Add per-tool timing and source-count logs.                                                              | Depends on P3.1 and should align with Phase 6 observability fields. |
+| P3.5 | Done    | Define per-intent caps (`max_records`, `max_documents`, `lookback_days`) in the intent catalog and have each retrieval tool clamp to them at call time. | Depends on P1.1 and P3.1. The token authorizes who can read what; the catalog governs how much, so caps live with the intent definition rather than the broker token. |
 
 ## Phase 4: Anonymizer
 

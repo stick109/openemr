@@ -29,9 +29,7 @@ class AgentIntentCatalogTest extends TestCase
             'current_medications',
             'allergies_to_confirm',
             'recent_events',
-            'intake_checklist',
             'changed_since_last_visit',
-            'intake_handoff',
             'show_source',
         ], $catalog->intentIds());
     }
@@ -49,9 +47,25 @@ class AgentIntentCatalogTest extends TestCase
         $this->assertSame('Current medications', $labels['current_medications']);
         $this->assertSame('Allergies to confirm', $labels['allergies_to_confirm']);
         $this->assertSame('Recent events', $labels['recent_events']);
-        $this->assertSame('Intake checklist', $labels['intake_checklist']);
         $this->assertSame('Changed since last visit', $labels['changed_since_last_visit']);
-        $this->assertSame('Intake handoff', $labels['intake_handoff']);
         $this->assertSame('Show source', $labels['show_source']);
+    }
+
+    public function testCatalogDefinesPerIntentEvidenceCaps(): void
+    {
+        $catalog = new AgentIntentCatalog();
+
+        foreach ($catalog->all() as $intent) {
+            $this->assertArrayHasKey('max_records', $intent);
+            $this->assertArrayHasKey('max_documents', $intent);
+            $this->assertArrayHasKey('lookback_days', $intent);
+            $this->assertGreaterThan(0, $intent['max_records']);
+            $this->assertGreaterThanOrEqual(0, $intent['max_documents']);
+            $this->assertGreaterThanOrEqual(0, $intent['lookback_days']);
+        }
+
+        $this->assertSame(25, $catalog->get(AgentIntentCatalog::CURRENT_MEDICATIONS)['max_records'] ?? null);
+        $this->assertSame(30, $catalog->get(AgentIntentCatalog::RECENT_EVENTS)['max_records'] ?? null);
+        $this->assertSame(1, $catalog->get(AgentIntentCatalog::SHOW_SOURCE)['max_records'] ?? null);
     }
 }

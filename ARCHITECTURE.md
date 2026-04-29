@@ -2,7 +2,7 @@
 
 ## One-Page Summary
 
-The first MVP iteration of the Clinical Co-Pilot will be a constrained, source-grounded agent embedded in OpenEMR for **two narrow outpatient users: an intake nurse rooming a scheduled patient and a doctor preparing to enter the room**. These constraints define the initial build scope, not the full long-term shape of the Clinical Co-Pilot. For this MVP, the agent is not a general chatbot, chart search engine, diagnosis assistant, or documentation writer. Its first job is to answer a small set of patient-specific questions quickly: show basic patient data, show current medications, show recent events, build an intake checklist, explain what changed since the last visit, summarize nurse intake flags, and show source evidence behind a claim.
+The first MVP iteration of the Clinical Co-Pilot will be a constrained, source-grounded agent embedded in OpenEMR for **a single narrow outpatient user: a doctor preparing to enter the room of a scheduled patient**. These constraints define the initial build scope, not the full long-term shape of the Clinical Co-Pilot. For this MVP, the agent is not a general chatbot, chart search engine, diagnosis assistant, or documentation writer. Its first job is to answer a small set of patient-specific questions quickly: show basic patient data, show current medications, show active allergies, show recent events, explain what changed since the last visit, and show source evidence behind a claim.
 
 The most important product decision is that there will be **no free-text communication between the user and the agent**. The UI presents buttons and follow-up action chips, alongside a read-only prompt-preview field and disabled send button that surface the exact text dispatched to the LLM. Those controls map to a server-owned intent catalog with stable prompt templates, for example "show me current medications" or "show me recent events." The browser will not send arbitrary prompt text to the LLM, and the LLM will not choose patients, run generic searches, or request arbitrary OpenEMR routes. This keeps the interaction fast and conversational enough for follow-up use while **removing the highest-risk prompt-injection** and cross-patient search surface.
 
@@ -17,7 +17,7 @@ Every answer must pass verification before reaching the user. The LLM will recei
 This plan is based on these primary inputs:
 
 - `Week-1-Assignment.pdf`: requires a Clinical Co-Pilot embedded in OpenEMR, fast enough for a 90-second physician workflow, with source attribution, verification, observability, evals, and HIPAA-aware data handling.
-- `USERS.md`: narrows the MVP to an intake nurse and a doctor in an outpatient scheduled-patient workflow.
+- `USERS.md`: narrows the MVP to a single user — a doctor in an outpatient scheduled-patient workflow.
 - `AUDIT.md`: identifies patient-specific authorization, PHI-safe logging, source verification, and bounded retrieval as non-negotiable gates.
 - `CURRENT-ARCHITECTURE.md`: describes OpenEMR as a hybrid monolith with legacy PHP entry points, REST/FHIR APIs, phpGACL ACLs, service classes, sessions, events, modules, and transitional DB layers.
 - `pre-search.md`: provides the planning checklist for domain selection, scale and performance, reliability, framework selection, LLM choice, tool design, observability, evals, verification, failure modes, security, testing, open source, deployment, and iteration.
@@ -41,9 +41,9 @@ Core constraints:
 | Checklist Area    | MVP Decision                                                                                                                                                                                                                              |
 | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Domain            | Healthcare, specifically outpatient OpenEMR pre-visit and rooming workflows.                                                                                                                                                              |
-| Use cases         | Support the nurse and doctor use cases from `USERS.md`: intake checklist, medication/allergy confirmation, missing or stale intake data, 90-second visit briefing, changed-since-last-visit review, intake handoff, and source drilldown. |
+| Use cases         | Support the doctor use cases from `USERS.md`: 90-second visit briefing, changed-since-last-visit review, and source drilldown. |
 | Verification      | Non-negotiable claim-to-source attribution, patient ownership checks, out-of-scope clinical advice rejection, safe missingness wording, and refusal when evidence is insufficient.                                                        |
-| Data sources      | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, selected document metadata or parsed text, and nurse intake notes when available.                     |
+| Data sources      | Bounded reads from patient demographics, schedule, encounters, problems, medications, allergies, vitals, recent results/procedures, and selected document metadata or parsed text.                                                       |
 | Latency           | Target useful responses in seconds: deterministic evidence retrieval should be fast enough to leave most of the request budget for LLM generation and verification; long document parsing and embeddings are out of scope for the MVP.    |
 | Query volume      | Design the MVP for clinic-scale concurrent use first, with one composed evidence request per button press instead of many chat-driven round trips.                                                                                        |
 | Cost              | Use closed intents, small evidence packets, prompt-template versions, token accounting, and a model/provider abstraction so cost can be measured and the model can be changed without rewriting tools.                                    |
@@ -108,16 +108,14 @@ Iteration should be eval-driven. New intents require:
 
 The first version supports these closed intents:
 
-| Intent ID                  | Button Label             | Primary User  | Use Case Trace |
-| -------------------------- | ------------------------ | ------------- | -------------- |
-| `basic_patient_data`       | Basic patient data       | Nurse, Doctor | N1, D1         |
-| `current_medications`      | Current medications      | Nurse, Doctor | N2, D1         |
-| `allergies_to_confirm`     | Allergies to confirm     | Nurse, Doctor | N2             |
-| `recent_events`            | Recent events            | Doctor        | D1, D2         |
-| `intake_checklist`         | Intake checklist         | Nurse         | N1, N3         |
-| `changed_since_last_visit` | Changed since last visit | Doctor        | D2             |
-| `intake_handoff`           | Intake handoff           | Doctor        | D3             |
-| `show_source`              | Show source              | Nurse, Doctor | D4             |
+| Intent ID                  | Button Label             | Primary User | Use Case Trace |
+| -------------------------- | ------------------------ | ------------ | -------------- |
+| `basic_patient_data`       | Basic patient data       | Doctor       | D1             |
+| `current_medications`      | Current medications      | Doctor       | D1             |
+| `allergies_to_confirm`     | Allergies to confirm     | Doctor       | D1             |
+| `recent_events`            | Recent events            | Doctor       | D1, D2         |
+| `changed_since_last_visit` | Changed since last visit | Doctor       | D2             |
+| `show_source`              | Show source              | Doctor       | D4             |
 
 Out of scope for the MVP:
 
@@ -270,8 +268,8 @@ The agent access token is an internal server-side object, not a browser token. I
   "patient_pid": 123,
   "patient_uuid": "patient_data.uuid",
   "permissions": {
-    "allowed_data_classes": ["demographics", "appointments", "medications", "allergies", "problems", "vitals", "results", "documents", "intake", "timeline"],
-    "allowed_tools": ["get_patient_snapshot", "get_current_medications", "get_allergies_to_confirm", "get_recent_events", "get_changed_since_last_visit", "get_intake_checklist", "get_intake_handoff", "get_source_detail"],
+    "allowed_data_classes": ["demographics", "appointments", "medications", "allergies", "problems", "vitals", "results", "documents", "timeline"],
+    "allowed_tools": ["get_patient_snapshot", "get_current_medications", "get_allergies_to_confirm", "get_recent_events", "get_changed_since_last_visit", "get_source_detail"],
     "acl_categories": ["patients\\demo", "patients\\med", "patients\\docs", "encounters\\auth_a", "encounters\\notes"]
   },
   "issued_at": "interaction start timestamp",
@@ -325,10 +323,8 @@ The LLM sees only the fields needed for the selected intent. The UI can request 
 | `get_patient_snapshot`         | Basic demographics and visit context                            | `demographics`, `appointments`                                 | 1 patient, today's appointment |
 | `get_current_medications`      | Active/verified medication evidence                             | `medications`                                                  | 25 records                     |
 | `get_allergies_to_confirm`     | Active, stale, duplicate, or conflicting allergy evidence       | `allergies`                                                    | 25 records                     |
-| `get_recent_events`            | Encounters, recent results, documents, procedures, intake flags | `timeline`                                                     | 30 events                      |
+| `get_recent_events`            | Encounters, recent results, documents, and procedures           | `timeline`                                                     | 30 events                      |
 | `get_changed_since_last_visit` | Source-specific change comparison                               | `timeline`, `medications`, `problems`, `allergies`, `results`  | 30 changed items               |
-| `get_intake_checklist`         | Nurse-facing confirmations and missing/stale fields             | `intake`, `demographics`, `medications`, `allergies`, `vitals` | 20 checklist items             |
-| `get_intake_handoff`           | Doctor-facing nurse intake summary                              | `intake`, `vitals`, `medications`, `allergies`                 | 20 handoff items               |
 | `get_source_detail`            | Citation drilldown                                              | Citation's source data class                                   | 1 source                       |
 
 ### Source Systems
@@ -341,7 +337,7 @@ The first implementation should reuse or wrap:
 - `src\Services\ListService.php`, `src\Services\PatientIssuesService.php`, and medication-specific services for problems, allergies, and medication list records.
 - `src\Services\PrescriptionService.php` for prescription data where needed.
 - `src\Services\DocumentService.php` and `library\classes\Document.class.php` for document metadata and selected parsed content.
-- `src\Services\ClinicalNotesService.php` for nurse intake or clinical notes once the workflow defines the source.
+- `src\Services\ClinicalNotesService.php` for clinical notes once the workflow defines the source.
 - Appointment data from the scheduling services or bounded read models over `openemr_postcalendar_events`.
 
 When an existing service can return broad results, the agent layer should add a small read model that forces patient ID, date window, status, and limit at the SQL boundary.

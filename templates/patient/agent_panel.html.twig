@@ -82,7 +82,13 @@
             const chipContainer = document.createElement('div');
             chipContainer.className = 'mt-1';
             citationIds.forEach((citationId) => {
-                appendTextElement(chipContainer, 'span', 'badge badge-light border mr-1', citationId);
+                const chip = document.createElement('button');
+                chip.type = 'button';
+                chip.className = 'badge badge-light border mr-1';
+                chip.dataset.sourceId = citationId;
+                chip.textContent = citationId;
+                chip.addEventListener('click', () => requestIntent('show_source', citationId));
+                chipContainer.appendChild(chip);
             });
             parent.appendChild(chipContainer);
         }
@@ -175,7 +181,7 @@
             renderFollowUps(data.answer.followup_intents);
         }
 
-        async function requestIntent(intentId) {
+        async function requestIntent(intentId, sourceId) {
             if (promptPreviewNode) {
                 promptPreviewNode.value = intentPrompts.get(intentId) || '';
             }
@@ -188,6 +194,15 @@
                     window.top.restoreSession();
                 }
 
+                const payload = {
+                    intent_id: intentId,
+                    conversation_id: conversationId,
+                    active_patient_context: 'server-session'
+                };
+                if (sourceId) {
+                    payload.source_id = sourceId;
+                }
+
                 const response = await fetch(apiUrl, {
                     method: 'POST',
                     credentials: 'same-origin',
@@ -196,11 +211,7 @@
                         'Accept': 'application/json',
                         'Content-Type': 'application/json'
                     },
-                    body: JSON.stringify({
-                        intent_id: intentId,
-                        conversation_id: conversationId,
-                        active_patient_context: 'server-session'
-                    })
+                    body: JSON.stringify(payload)
                 });
                 const body = await response.json();
 

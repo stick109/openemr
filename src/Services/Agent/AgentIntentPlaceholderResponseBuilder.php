@@ -61,30 +61,12 @@ final class AgentIntentPlaceholderResponseBuilder
                 AgentIntentCatalog::SHOW_SOURCE,
             ],
         ],
-        AgentIntentCatalog::INTAKE_CHECKLIST => [
-            'heading' => 'Intake checklist',
-            'text' => 'The intake checklist tool is not connected yet; no rooming tasks are generated from chart evidence.',
-            'missing' => 'Appointment, medication, allergy, vital, and intake evidence were not checked.',
-            'followup_intents' => [
-                AgentIntentCatalog::CURRENT_MEDICATIONS,
-                AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
-            ],
-        ],
         AgentIntentCatalog::CHANGED_SINCE_LAST_VISIT => [
             'heading' => 'Changed since last visit',
             'text' => 'The change-comparison tool is not connected yet; no chart changes are reported.',
             'missing' => 'Last-visit and newer evidence were not checked by this placeholder response.',
             'followup_intents' => [
                 AgentIntentCatalog::RECENT_EVENTS,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
-        ],
-        AgentIntentCatalog::INTAKE_HANDOFF => [
-            'heading' => 'Intake handoff',
-            'text' => 'The intake handoff tool is not connected yet; no nurse intake flags are summarized.',
-            'missing' => 'Nurse intake, vital, medication, and allergy evidence were not checked.',
-            'followup_intents' => [
-                AgentIntentCatalog::INTAKE_CHECKLIST,
                 AgentIntentCatalog::SHOW_SOURCE,
             ],
         ],

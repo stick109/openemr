@@ -69,7 +69,6 @@ class AgentAccessBrokerTest extends TestCase
             AgentIntentCatalog::SHOW_SOURCE,
             AgentIntentCatalog::CURRENT_MEDICATIONS,
             AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
-            AgentIntentCatalog::INTAKE_CHECKLIST,
         ], $decision->getAccessToken()?->getGrantedTools());
         $this->assertSame([
             ['section' => 'patients', 'value' => 'demo', 'permission' => ''],

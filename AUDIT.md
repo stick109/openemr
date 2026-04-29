@@ -471,8 +471,11 @@ Before implementing the Clinical Co-Pilot, complete these gate items:
 
 ## Open Questions
 
-- Which physician workflow will `USERS.md` choose: primary care pre-visit, ED intake, hospitalist rounding, or another focused use case?
 - What exact deployment environment will host OpenEMR and any LLM/observability components?
 - Which LLM and tracing providers will receive PHI, and what BAA/no-training settings will be documented?
-- Does the MVP require source snippets in the UI, or are record-level citations sufficient?
-- Will agent outputs be persisted, and if so, where in the OpenEMR record should they live?
+
+## Resolved Questions
+
+- **Workflow choice (`USERS.md`):** picked a single doctor user preparing to see a scheduled outpatient.
+- **Citation form (`ARCHITECTURE.md`):** record-level citation chips, with a `show_source` intent for drilldown — no unbounded note dumps in the briefing.
+- **Output persistence (MVP):** read-only MVP; outputs are not persisted. `ARCHITECTURE.md` State Management defers persistence to a later design with provenance, retention, and review.

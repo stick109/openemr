@@ -65,18 +65,7 @@ final class AgentAccessBroker
             'value' => 'appt',
             'permission' => '',
             'data_classes' => ['appointments'],
-            'tools' => [
-                AgentIntentCatalog::INTAKE_CHECKLIST,
-            ],
-        ],
-        [
-            'section' => 'patients',
-            'value' => 'notes',
-            'permission' => '',
-            'data_classes' => ['clinical_notes'],
-            'tools' => [
-                AgentIntentCatalog::INTAKE_HANDOFF,
-            ],
+            'tools' => [],
         ],
     ];
 

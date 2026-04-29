@@ -15,8 +15,9 @@ namespace OpenEMR\RestControllers\Agent;
 use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\Services\Agent\AgentAccessBroker;
 use OpenEMR\Services\Agent\AgentAccessDecision;
+use OpenEMR\Services\Agent\AgentEvidenceResponseBuilder;
 use OpenEMR\Services\Agent\AgentIntentCatalog;
-use OpenEMR\Services\Agent\AgentIntentPlaceholderResponseBuilder;
+use OpenEMR\Services\Agent\Evidence\AgentEvidenceAccessException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -28,6 +29,7 @@ final class AgentIntentRestController
         'intent_id',
         'conversation_id',
         'active_patient_context',
+        'source_id',
     ];
 
     private const FREE_TEXT_FIELDS = [
@@ -45,13 +47,15 @@ final class AgentIntentRestController
 
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
-        private readonly AgentIntentPlaceholderResponseBuilder $placeholderResponseBuilder = new AgentIntentPlaceholderResponseBuilder(),
-        private readonly AgentAccessBroker $accessBroker = new AgentAccessBroker()
+        private readonly AgentAccessBroker $accessBroker = new AgentAccessBroker(),
+        private readonly AgentEvidenceResponseBuilder $responseBuilder = new AgentEvidenceResponseBuilder()
     ) {
     }
 
     public function postIntent(HttpRestRequest $request): JsonResponse
     {
+        $request->attributes->set('skipResponseLogging', true);
+
         $decodeResult = $this->decodePayload($request);
         if (isset($decodeResult['errors'])) {
             return $this->badRequest($decodeResult['errors']);
@@ -80,7 +84,20 @@ final class AgentIntentRestController
             return $this->accessDenied($accessDecision);
         }
 
-        $placeholderResponse = $this->placeholderResponseBuilder->build($intent['intent_id']);
+        $accessToken = $accessDecision->getAccessToken();
+        if ($accessToken === null) {
+            return $this->evidenceDenied('Agent access token was not available.');
+        }
+
+        try {
+            $agentResponse = $this->responseBuilder->build(
+                $intent['intent_id'],
+                $accessToken,
+                $this->sourceIdFromPayload($payload)
+            );
+        } catch (AgentEvidenceAccessException $exception) {
+            return $this->evidenceDenied($exception->getPublicMessage());
+        }
 
         return new JsonResponse([
             'validationErrors' => [],
@@ -88,7 +105,7 @@ final class AgentIntentRestController
             'data' => array_merge([
                 'intent_id' => $intent['intent_id'],
                 'button_label' => $intent['button_label'],
-            ], $placeholderResponse),
+            ], $agentResponse),
         ], Response::HTTP_OK);
     }
 
@@ -165,7 +182,25 @@ final class AgentIntentRestController
             $validationErrors['active_patient_context'] = ['active_patient_context must be server-session.'];
         }
 
+        if (array_key_exists('source_id', $payload)) {
+            if (($payload['intent_id'] ?? null) !== AgentIntentCatalog::SHOW_SOURCE) {
+                $validationErrors['source_id'] = ['source_id is only supported with the show_source intent.'];
+            } elseif (!is_string($payload['source_id']) || !preg_match('/\A[A-Za-z0-9_]+:[A-Za-z0-9_]+:[0-9]{1,20}\z/', $payload['source_id'])) {
+                $validationErrors['source_id'] = ['source_id must identify a server-issued citation source.'];
+            }
+        }
+
         return $validationErrors;
+    }
+
+    /**
+     * @param array<mixed> $payload
+     */
+    private function sourceIdFromPayload(array $payload): ?string
+    {
+        return isset($payload['source_id']) && is_string($payload['source_id'])
+            ? $payload['source_id']
+            : null;
     }
 
     /**
@@ -186,6 +221,17 @@ final class AgentIntentRestController
             'validationErrors' => [],
             'internalErrors' => [
                 'access' => [$accessDecision->getPublicMessage()],
+            ],
+            'data' => [],
+        ], Response::HTTP_FORBIDDEN);
+    }
+
+    private function evidenceDenied(string $publicMessage): JsonResponse
+    {
+        return new JsonResponse([
+            'validationErrors' => [],
+            'internalErrors' => [
+                'access' => [$publicMessage],
             ],
             'data' => [],
         ], Response::HTTP_FORBIDDEN);

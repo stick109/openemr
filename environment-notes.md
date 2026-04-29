@@ -22,6 +22,7 @@ The Windows PHP CLI currently loads the extensions needed for Composer and the k
 - `mbstring`
 - `mysqli`
 - `openssl`
+- `pdo_mysql`
 - `redis`
 - `zip`
 
@@ -47,4 +48,6 @@ The Redis extension is a manually installed PECL DLL. If PHP is upgraded, replac
 ## Remaining Environment Work
 
 - No Composer/PHP dependency setup is currently pending.
-- The full isolated PHPUnit suite has not been re-run after enabling `fileinfo`, `intl`, and `mysqli`; use the Linux Docker environment for broad validation if Windows-specific test failures appear.
+- The full isolated PHPUnit suite is not a clean Windows-host baseline. Latest run of `.\vendor\bin\phpunit.bat -c phpunit-isolated.xml` on 2026-04-29 completed with `Tests: 2766, Assertions: 7086, Errors: 4, Failures: 340, Warnings: 4, Notices: 1, Skipped: 14, Incomplete: 14`.
+- Remaining Windows-host failure categories include path/routing expectations, Twig template path handling, CRLF fixture output differences, subprocess spawning behavior, POSIX-style permission checks, and symlink creation permissions.
+- Use targeted Windows suites for local iteration, and use the Linux Docker environment for broad validation.

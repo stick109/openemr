@@ -21,6 +21,7 @@ use OpenEMR\Services\Agent\Llm\AgentLlmRequest;
 use OpenEMR\Services\Agent\Llm\AgentLlmResponse;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\AbstractLogger;
 use Psr\Log\NullLogger;
 
 #[Group('isolated')]
@@ -67,6 +68,35 @@ class AgentLlmOrchestratorTest extends TestCase
         $this->assertSame('deterministic_verified_fallback', $response['response_generation']);
         $this->assertSame('verification_failed', $response['llm']['fallback_reason']);
         $this->assertSame($this->deterministicAnswer(), $response['answer']);
+    }
+
+    public function testLogsProviderAnswerWhenProviderOutputFailsVerification(): void
+    {
+        $badAnswer = $this->supportedAnswer();
+        $badAnswer['answer_blocks'][0]['claims'][0]['citation_ids'] = ['fabricated:source:1'];
+        $logger = new AgentLlmOrchestratorCapturingLogger();
+        $orchestrator = new AgentLlmOrchestrator(
+            provider: new AgentLlmOrchestratorProviderFixture($badAnswer),
+            logger: $logger
+        );
+
+        $orchestrator->buildVerifiedAnswer(
+            $this->intent(),
+            $this->accessToken(),
+            $this->packet(),
+            $this->deterministicAnswer()
+        );
+
+        $record = $logger->firstRecord('warning', 'agent.verification.failed');
+        $this->assertNotNull($record);
+
+        $context = $record['context'];
+        $this->assertSame(1, $context['error_count']);
+        $this->assertSame(
+            ['answer_blocks[0].claims[0] cites unknown source_id fabricated:source:1.'],
+            $context['verification_errors']
+        );
+        $this->assertSame($badAnswer, $context['llm_response']);
     }
 
     /**
@@ -202,5 +232,36 @@ final class AgentLlmOrchestratorProviderFixture implements AgentLlmProviderInter
             usage: ['total_tokens' => 1],
             providerResponseId: 'fixture-response'
         );
+    }
+}
+
+final class AgentLlmOrchestratorCapturingLogger extends AbstractLogger
+{
+    /**
+     * @var list<array{level: mixed, message: string, context: array<string, mixed>}>
+     */
+    private array $records = [];
+
+    public function log($level, \Stringable|string $message, array $context = []): void
+    {
+        $this->records[] = [
+            'level' => $level,
+            'message' => (string) $message,
+            'context' => $context,
+        ];
+    }
+
+    /**
+     * @return array{level: mixed, message: string, context: array<string, mixed>}|null
+     */
+    public function firstRecord(string $level, string $message): ?array
+    {
+        foreach ($this->records as $record) {
+            if ($record['level'] === $level && $record['message'] === $message) {
+                return $record;
+            }
+        }
+
+        return null;
     }
 }

@@ -25,15 +25,18 @@ use Throwable;
 final class AgentLlmOrchestrator
 {
     private readonly AgentLlmProviderInterface $provider;
+    private readonly Anonymizer $anonymizer;
 
     public function __construct(
         ?AgentLlmProviderInterface $provider = null,
         private readonly AgentAnswerVerifier $verifier = new AgentAnswerVerifier(),
         private readonly AgentAnswerSchema $answerSchema = new AgentAnswerSchema(),
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
-        private readonly LoggerInterface $logger = new SystemLogger()
+        private readonly LoggerInterface $logger = new SystemLogger(),
+        ?Anonymizer $anonymizer = null
     ) {
         $this->provider = $provider ?? (new AgentLlmProviderFactory())->create();
+        $this->anonymizer = $anonymizer ?? new Anonymizer(logger: $this->logger);
     }
 
     /**
@@ -80,12 +83,7 @@ final class AgentLlmOrchestrator
                     );
                 }
 
-                $this->logger->warning('agent.verification.failed', [
-                    'request_id' => (string) ($packet['request_id'] ?? ''),
-                    'intent_id' => (string) ($intent['intent_id'] ?? ''),
-                    'provider' => $this->provider->getProviderName(),
-                    'error_count' => count($verification->errors()),
-                ]);
+                $this->logVerificationFailure($intent, $accessToken, $packet, $answer, $verification);
                 $llmMetadata['fallback_reason'] = 'verification_failed';
             } catch (Throwable $throwable) {
                 $this->logger->warning('agent.llm.failed', [
@@ -141,6 +139,49 @@ final class AgentLlmOrchestrator
             'configuration_issue' => $this->provider->getConfigurationIssue(),
             'usage' => [],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $intent
+     * @param array<string, mixed> $packet
+     * @param array<string, mixed> $answer
+     */
+    private function logVerificationFailure(
+        array $intent,
+        AgentAccessToken $accessToken,
+        array $packet,
+        array $answer,
+        AgentVerificationResult $verification
+    ): void {
+        $this->logger->warning('agent.verification.failed', [
+            'request_id' => (string) ($packet['request_id'] ?? ''),
+            'intent_id' => (string) ($intent['intent_id'] ?? ''),
+            'provider' => $this->provider->getProviderName(),
+            'error_count' => count($verification->errors()),
+            'verification_errors' => $verification->errors(),
+            'llm_response' => $this->anonymizedLlmResponse($accessToken, $answer),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $answer
+     * @return array<string, mixed>
+     */
+    private function anonymizedLlmResponse(AgentAccessToken $accessToken, array $answer): array
+    {
+        try {
+            $payload = $this->anonymizer->anonymizePayload($accessToken, $answer);
+            return is_array($payload) ? $payload : [
+                'redaction_status' => 'unexpected_payload_type',
+                'llm_response_omitted' => true,
+            ];
+        } catch (Throwable $throwable) {
+            return [
+                'redaction_status' => 'failed',
+                'redaction_error_class' => $throwable::class,
+                'llm_response_omitted' => true,
+            ];
+        }
     }
 
     /**

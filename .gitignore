@@ -21,6 +21,7 @@ ccdaservice/node_modules
 /.vscode-oss/*
 /nbproject/*
 .DS_Store
+.obsidian
 .buildpath
 .project
 .settings

@@ -1,12 +1,48 @@
 param(
     [string]$ProjectName = "openemr",
 
-    [switch]$ConfirmReset,
-
     [switch]$SkipWait
 )
 
 $ErrorActionPreference = "Stop"
+
+function Test-IsAdministrator {
+    $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+    $principal = [Security.Principal.WindowsPrincipal]::new($identity)
+
+    return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function ConvertTo-QuotedArgument {
+    param([Parameter(Mandatory)][string]$Value)
+
+    return '"' + ($Value -replace '"', '\"') + '"'
+}
+
+function Invoke-SelfElevated {
+    $powerShellPath = (Get-Process -Id $PID).Path
+    if (-not $powerShellPath) {
+        $powerShellName = if ($PSVersionTable.PSEdition -eq "Core") { "pwsh.exe" } else { "powershell.exe" }
+        $powerShellPath = Join-Path $PSHOME $powerShellName
+    }
+
+    $scriptArguments = @(
+        "-File",
+        (ConvertTo-QuotedArgument -Value $PSCommandPath),
+        "-ProjectName",
+        (ConvertTo-QuotedArgument -Value $ProjectName)
+    )
+
+    if ($SkipWait) {
+        $scriptArguments += "-SkipWait"
+    }
+
+    Write-Host "This script resets the OpenEMR dev database and loads demo data. Approve the UAC prompt to continue."
+    $process = Start-Process -FilePath $powerShellPath -ArgumentList $scriptArguments -Verb RunAs -WorkingDirectory $PSScriptRoot -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        exit $process.ExitCode
+    }
+}
 
 function Confirm-DockerCompose {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
@@ -39,8 +75,9 @@ function Invoke-DockerComposeCapture {
     return $output
 }
 
-if (-not $ConfirmReset) {
-    throw "This script resets the OpenEMR dev database and loads demo data. Rerun with -ConfirmReset to explicitly allow the destructive reset."
+if (-not (Test-IsAdministrator)) {
+    Invoke-SelfElevated
+    exit
 }
 
 Confirm-DockerCompose

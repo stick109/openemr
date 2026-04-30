@@ -38,6 +38,7 @@ function Invoke-SelfElevated {
     }
 
     Write-Host "WARNING: GENERATE-TEST-DATA.PS1 IS REQUESTING ADMIN APPROVAL TO RESET THE OPENEMR DEV DATABASE AND LOAD DEMO DATA. APPROVE THE UAC PROMPT TO CONTINUE."
+    Start-Sleep -Milliseconds 500
     $process = Start-Process -FilePath $powerShellPath -ArgumentList $scriptArguments -Verb RunAs -WorkingDirectory $PSScriptRoot -Wait -PassThru
     if ($process.ExitCode -ne 0) {
         exit $process.ExitCode

@@ -87,6 +87,7 @@ $repoRoot = $PSScriptRoot
 $composeDirectory = Join-Path $repoRoot "docker\development-easy"
 $composeFile = Join-Path $composeDirectory "docker-compose.yml"
 $medicationSqlPath = Join-Path $repoRoot "sql\demo_current_medications.sql"
+$allergySqlPath = Join-Path $repoRoot "sql\demo_current_allergies.sql"
 
 if (-not (Test-Path $composeFile)) {
     throw "Compose file not found at $composeFile."
@@ -94,6 +95,10 @@ if (-not (Test-Path $composeFile)) {
 
 if (-not (Test-Path $medicationSqlPath)) {
     throw "Medication seed SQL not found at $medicationSqlPath."
+}
+
+if (-not (Test-Path $allergySqlPath)) {
+    throw "Allergy seed SQL not found at $allergySqlPath."
 }
 
 $upArguments = @("up", "--detach")
@@ -104,6 +109,25 @@ if (-not $SkipWait) {
 $missingMedicationSql = "SELECT COUNT(*) FROM patient_data p WHERE NOT EXISTS (SELECT 1 FROM lists l WHERE l.pid = p.pid AND l.type = 'medication' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()));"
 $medicationSummarySql = "SELECT p.pid, CONCAT(p.fname, ' ', p.lname) AS patient, COUNT(l.id) AS active_medications FROM patient_data p LEFT JOIN lists l ON l.pid = p.pid AND l.type = 'medication' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()) GROUP BY p.pid, p.fname, p.lname ORDER BY p.pid;"
 $loadMedicationSql = 'dbclient=mysql; if command -v mariadb >/dev/null 2>&1; then dbclient=mariadb; fi; "$dbclient" -hmysql -uopenemr -popenemr openemr < /openemr/sql/demo_current_medications.sql'
+$missingAllergySql = "SELECT COUNT(*) FROM patient_data p WHERE NOT EXISTS (SELECT 1 FROM lists l WHERE l.pid = p.pid AND l.type = 'allergy' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()));"
+$allergySummarySql = "SELECT p.pid, CONCAT(p.fname, ' ', p.lname) AS patient, COUNT(l.id) AS active_allergies FROM patient_data p LEFT JOIN lists l ON l.pid = p.pid AND l.type = 'allergy' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()) GROUP BY p.pid, p.fname, p.lname ORDER BY p.pid;"
+$loadAllergySql = 'dbclient=mysql; if command -v mariadb >/dev/null 2>&1; then dbclient=mariadb; fi; "$dbclient" -hmysql -uopenemr -popenemr openemr < /openemr/sql/demo_current_allergies.sql'
+
+function ConvertTo-VerifiedCount {
+    param(
+        [AllowEmptyCollection()][AllowNull()][string[]]$Output,
+        [Parameter(Mandatory)][string]$Description
+    )
+
+    $text = $Output | Where-Object { $_ -match "\S" } | Select-Object -Last 1
+    $count = 0
+
+    if ($null -eq $text -or -not [int]::TryParse($text.Trim(), [ref]$count)) {
+        throw "Could not parse $Description verification output: $($Output -join ' ')"
+    }
+
+    return $count
+}
 
 Push-Location $composeDirectory
 try {
@@ -116,14 +140,12 @@ try {
     Write-Host "Adding demo current medications for patients missing active medications..."
     Invoke-DockerCompose -ComposeArguments @("exec", "-T", "openemr", "sh", "-c", $loadMedicationSql)
 
+    Write-Host "Adding demo current allergies for patients missing active allergies..."
+    Invoke-DockerCompose -ComposeArguments @("exec", "-T", "openemr", "sh", "-c", $loadAllergySql)
+
     Write-Host "Verifying every patient has at least one active medication..."
     $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingMedicationSql)
-    $missingText = $missingOutput | Where-Object { $_ -match "\S" } | Select-Object -Last 1
-    $missingCount = 0
-
-    if ($null -eq $missingText -or -not [int]::TryParse($missingText.Trim(), [ref]$missingCount)) {
-        throw "Could not parse missing-medication verification output: $($missingOutput -join ' ')"
-    }
+    $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-medication"
 
     if ($missingCount -ne 0) {
         throw "Medication verification failed: $missingCount patient(s) still lack active medication entries."
@@ -131,7 +153,17 @@ try {
 
     Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $medicationSummarySql)
 
-    Write-Host "Done. Demo data is loaded and every patient has at least one active medication."
+    Write-Host "Verifying every patient has at least one active allergy..."
+    $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingAllergySql)
+    $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-allergy"
+
+    if ($missingCount -ne 0) {
+        throw "Allergy verification failed: $missingCount patient(s) still lack active allergy entries."
+    }
+
+    Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $allergySummarySql)
+
+    Write-Host "Done. Demo data is loaded and every patient has at least one active medication and allergy."
 }
 finally {
     Pop-Location

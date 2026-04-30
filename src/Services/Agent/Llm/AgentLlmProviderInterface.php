@@ -22,5 +22,10 @@ interface AgentLlmProviderInterface
 
     public function getConfigurationIssue(): ?string;
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function getRequestPayload(AgentLlmRequest $request): array;
+
     public function complete(AgentLlmRequest $request): AgentLlmResponse;
 }

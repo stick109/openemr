@@ -71,6 +71,52 @@ class AgentLlmOrchestratorTest extends TestCase
         $this->assertSame($this->supportedAnswer(), $context['llm_response']);
     }
 
+    public function testLogsProviderRequestPayloadBeforeCompletion(): void
+    {
+        $logger = new AgentLlmOrchestratorCapturingLogger();
+        $orchestrator = new AgentLlmOrchestrator(
+            provider: new AgentLlmOrchestratorProviderFixture($this->supportedAnswer()),
+            logger: $logger
+        );
+
+        $orchestrator->buildVerifiedAnswer(
+            $this->intent(),
+            $this->accessToken(),
+            $this->packet(),
+            $this->deterministicAnswer()
+        );
+
+        $record = $logger->firstRecord('info', 'agent.llm.started');
+        $this->assertNotNull($record);
+
+        $context = $record['context'];
+        $this->assertSame('request-123', $context['request_id']);
+        $this->assertSame(AgentIntentCatalog::CURRENT_MEDICATIONS, $context['intent_id']);
+        $this->assertSame('fixture', $context['provider']);
+        $this->assertSame('fixture-model', $context['model']);
+
+        $requestPayload = $context['llm_request'];
+        $this->assertSame('fixture-model', $requestPayload['model']);
+        $this->assertStringContainsString('Clinical Co-Pilot', $requestPayload['instructions']);
+        $this->assertFalse($requestPayload['store']);
+        $this->assertSame(0.1, $requestPayload['temperature']);
+        $this->assertSame(1200, $requestPayload['max_output_tokens']);
+        $this->assertSame('json_schema', $requestPayload['text']['format']['type']);
+        $this->assertSame('openemr_agent_answer', $requestPayload['text']['format']['name']);
+
+        $input = json_decode($requestPayload['input'], true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame(AgentIntentCatalog::CURRENT_MEDICATIONS, $input['intent']['intent_id']);
+        $this->assertSame('request-123', $input['evidence_packet']['request_id']);
+        $this->assertSame(
+            'medication:lists_medication:77',
+            $input['evidence_packet']['sources'][0]['source_id']
+        );
+        $this->assertSame(
+            'Metformin 500 mg twice daily',
+            $input['evidence_packet']['sources'][0]['display']
+        );
+    }
+
     public function testFallsBackToDeterministicAnswerWhenProviderOutputFailsVerification(): void
     {
         $badAnswer = $this->supportedAnswer();
@@ -259,6 +305,33 @@ final class AgentLlmOrchestratorProviderFixture implements AgentLlmProviderInter
             usage: ['total_tokens' => 1],
             providerResponseId: 'fixture-response'
         );
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getRequestPayload(AgentLlmRequest $request): array
+    {
+        return [
+            'model' => 'fixture-model',
+            'instructions' => $request->getSystemInstructions(),
+            'input' => $request->getUserInput(),
+            'store' => false,
+            'temperature' => 0.1,
+            'max_output_tokens' => 1200,
+            'text' => [
+                'format' => [
+                    'type' => 'json_schema',
+                    'name' => 'openemr_agent_answer',
+                    'strict' => true,
+                    'schema' => $request->getJsonSchema(),
+                ],
+            ],
+            'metadata' => [
+                'openemr_component' => 'clinical_copilot',
+                'intent_id' => $request->getIntentId(),
+            ],
+        ];
     }
 }
 

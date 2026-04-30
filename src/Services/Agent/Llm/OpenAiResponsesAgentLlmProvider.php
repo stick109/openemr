@@ -67,26 +67,7 @@ final class OpenAiResponsesAgentLlmProvider implements AgentLlmProviderInterface
                 'headers' => [
                     'Authorization' => $this->authorizationHeader($this->config->getApiKey()),
                 ],
-                'json' => [
-                    'model' => $this->config->getModel(),
-                    'instructions' => $request->getSystemInstructions(),
-                    'input' => $request->getUserInput(),
-                    'store' => false,
-                    'temperature' => 0.1,
-                    'max_output_tokens' => 1200,
-                    'text' => [
-                        'format' => [
-                            'type' => 'json_schema',
-                            'name' => 'openemr_agent_answer',
-                            'strict' => true,
-                            'schema' => $request->getJsonSchema(),
-                        ],
-                    ],
-                    'metadata' => [
-                        'openemr_component' => 'clinical_copilot',
-                        'intent_id' => $request->getIntentId(),
-                    ],
-                ],
+                'json' => $this->getRequestPayload($request),
             ]);
 
             $payload = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
@@ -110,6 +91,33 @@ final class OpenAiResponsesAgentLlmProvider implements AgentLlmProviderInterface
         } catch (GuzzleException | JsonException $exception) {
             throw new AgentLlmProviderException('OpenAI LLM request failed.', $exception);
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getRequestPayload(AgentLlmRequest $request): array
+    {
+        return [
+            'model' => $this->config->getModel(),
+            'instructions' => $request->getSystemInstructions(),
+            'input' => $request->getUserInput(),
+            'store' => false,
+            'temperature' => 0.1,
+            'max_output_tokens' => 1200,
+            'text' => [
+                'format' => [
+                    'type' => 'json_schema',
+                    'name' => 'openemr_agent_answer',
+                    'strict' => true,
+                    'schema' => $request->getJsonSchema(),
+                ],
+            ],
+            'metadata' => [
+                'openemr_component' => 'clinical_copilot',
+                'intent_id' => $request->getIntentId(),
+            ],
+        ];
     }
 
     private function authorizationHeader(#[SensitiveParameter] string $apiKey): string

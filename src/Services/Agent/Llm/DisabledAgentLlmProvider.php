@@ -41,6 +41,14 @@ final class DisabledAgentLlmProvider implements AgentLlmProviderInterface
         return $this->configurationIssue;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function getRequestPayload(AgentLlmRequest $request): array
+    {
+        return [];
+    }
+
     public function complete(AgentLlmRequest $request): AgentLlmResponse
     {
         throw new AgentLlmProviderException('Agent LLM provider is not configured.');

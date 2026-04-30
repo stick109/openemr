@@ -61,6 +61,7 @@ final class AgentLlmOrchestrator
                     jsonSchema: $this->answerSchema->jsonSchema(),
                     allowedFollowupIntents: $this->intentCatalog->intentIds()
                 );
+                $this->logLlmRequest($intent, $accessToken, $packet, $request);
                 $llmResponse = $this->provider->complete($request);
                 $answer = $this->answerSchema->normalize($llmResponse->getAnswer());
                 $verification = $this->verifier->verify($answer, $accessToken, $packet);
@@ -140,6 +141,65 @@ final class AgentLlmOrchestrator
             'configuration_issue' => $this->provider->getConfigurationIssue(),
             'usage' => [],
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $intent
+     * @param array<string, mixed> $packet
+     */
+    private function logLlmRequest(
+        array $intent,
+        AgentAccessToken $accessToken,
+        array $packet,
+        AgentLlmRequest $request
+    ): void {
+        $this->logger->info('agent.llm.started', [
+            'request_id' => (string) ($packet['request_id'] ?? ''),
+            'intent_id' => (string) ($intent['intent_id'] ?? ''),
+            'provider' => $this->provider->getProviderName(),
+            'model' => $this->provider->getModelName(),
+            'llm_request' => $this->anonymizedLlmRequest($accessToken, $request),
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function anonymizedLlmRequest(AgentAccessToken $accessToken, AgentLlmRequest $request): array
+    {
+        try {
+            $requestPayload = $this->provider->getRequestPayload($request);
+            if (is_string($requestPayload['input'] ?? null)) {
+                $requestPayload['input'] = $this->anonymizedJsonString($accessToken, $requestPayload['input']);
+            }
+
+            $payload = $this->anonymizer->anonymizePayload($accessToken, $requestPayload);
+            return is_array($payload) ? $payload : [
+                'redaction_status' => 'unexpected_payload_type',
+                'llm_request_omitted' => true,
+            ];
+        } catch (Throwable $throwable) {
+            return [
+                'redaction_status' => 'failed',
+                'redaction_error_class' => $throwable::class,
+                'llm_request_omitted' => true,
+            ];
+        }
+    }
+
+    private function anonymizedJsonString(AgentAccessToken $accessToken, string $json): string
+    {
+        try {
+            $decoded = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
+            if (!is_array($decoded)) {
+                return $json;
+            }
+
+            $anonymized = $this->anonymizer->anonymizePayload($accessToken, $decoded);
+            return json_encode($anonymized, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+        } catch (Throwable) {
+            return $json;
+        }
     }
 
     /**

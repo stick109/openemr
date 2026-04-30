@@ -39,10 +39,25 @@ function Invoke-SelfElevated {
 
     Write-Host "WARNING: GENERATE-TEST-DATA.PS1 IS REQUESTING ADMIN APPROVAL TO RESET THE OPENEMR DEV DATABASE AND LOAD DEMO DATA. APPROVE THE UAC PROMPT TO CONTINUE."
     Start-Sleep -Milliseconds 500
-    $process = Start-Process -FilePath $powerShellPath -ArgumentList $scriptArguments -Verb RunAs -WorkingDirectory $PSScriptRoot -Wait -PassThru
-    if ($process.ExitCode -ne 0) {
-        exit $process.ExitCode
+    try {
+        $process = Start-Process -FilePath $powerShellPath -ArgumentList $scriptArguments -Verb RunAs -WorkingDirectory $PSScriptRoot -Wait -PassThru
+    } catch {
+        Write-Host "FAILURE: Elevated generate-test-data.ps1 did not start. $($_.Exception.Message)"
+        exit 1
     }
+
+    if ($null -eq $process.ExitCode) {
+        Write-Host "FAILURE: Elevated generate-test-data.ps1 finished without an exit code."
+        exit 1
+    }
+
+    if ($process.ExitCode -eq 0) {
+        Write-Host "SUCCESS: Elevated generate-test-data.ps1 finished with exit code 0."
+    } else {
+        Write-Host "FAILURE: Elevated generate-test-data.ps1 finished with exit code $($process.ExitCode)."
+    }
+
+    exit $process.ExitCode
 }
 
 function Confirm-DockerCompose {

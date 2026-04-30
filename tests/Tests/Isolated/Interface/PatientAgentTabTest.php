@@ -99,6 +99,14 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString('disabled>{{ "Send"|xlt }}</button>', $this->templateContent);
         $this->assertStringContainsString('const intentPrompts = new Map', $this->templateContent);
         $this->assertStringContainsString('promptPreviewNode.value = intentPrompts.get(intentId)', $this->templateContent);
+        $this->assertStringContainsString('loading: {{ "LOADING"|xlj }} +', $this->templateContent);
+        $this->assertStringContainsString("panel.classList.toggle('is-agent-loading', loading)", $this->templateContent);
+        $this->assertStringContainsString("document.body.classList.toggle('agent-loading-cursor', loading)", $this->templateContent);
+        $this->assertStringContainsString('cursor: wait !important;', $this->templateContent);
+        $this->assertStringContainsString('outputNode.hidden = loading', $this->templateContent);
+        $this->assertStringContainsString("panel.querySelectorAll('button')", $this->templateContent);
+        $this->assertStringContainsString('button.dataset.agentWasDisabled', $this->templateContent);
+        $this->assertStringContainsString("panel.setAttribute('aria-busy', loading ? 'true' : 'false')", $this->templateContent);
         $this->assertStringNotContainsString('<textarea', $this->templateContent);
         $this->assertStringNotContainsString('contenteditable', $this->templateContent);
         $this->assertStringNotContainsString('llm_user_text', $this->templateContent);

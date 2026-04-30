@@ -1,3 +1,12 @@
+<style>
+    body.agent-loading-cursor,
+    body.agent-loading-cursor *,
+    .agent-panel.is-agent-loading,
+    .agent-panel.is-agent-loading * {
+        cursor: wait !important;
+    }
+</style>
+
 <div class="agent-panel mt-3" data-agent-panel="patient-chart">
     <div class="d-flex flex-wrap align-items-start mb-2">
         <div class="d-flex flex-wrap mr-2 mb-1">
@@ -48,7 +57,7 @@
         const promptPreviewNode = panel.querySelector('.js-agent-prompt-preview');
         const buttons = Array.from(panel.querySelectorAll('.js-agent-intent'));
         const messages = {
-            loading: {{ "Loading"|xlj }},
+            loading: {{ "LOADING"|xlj }} + '...',
             requestFailed: {{ "Request failed."|xlj }},
             noResponse: {{ "No agent response was returned."|xlj }},
             unavailable: {{ "Agent endpoint is unavailable."|xlj }},
@@ -94,12 +103,37 @@
         }
 
         function setButtonsDisabled(disabled) {
-            Array.from(panel.querySelectorAll('.js-agent-intent')).forEach((button) => {
-                button.disabled = disabled;
+            Array.from(panel.querySelectorAll('button')).forEach((button) => {
+                if (disabled) {
+                    button.dataset.agentWasDisabled = button.disabled ? 'true' : 'false';
+                    button.disabled = true;
+                    return;
+                }
+
+                if (button.dataset.agentWasDisabled !== 'true') {
+                    button.disabled = false;
+                }
+                delete button.dataset.agentWasDisabled;
             });
         }
 
+        function setLoadingState(loading) {
+            panel.classList.toggle('is-agent-loading', loading);
+            document.body.classList.toggle('agent-loading-cursor', loading);
+            panel.setAttribute('aria-busy', loading ? 'true' : 'false');
+            outputNode.hidden = loading;
+            if (loading) {
+                clearNode(outputNode);
+            }
+            setButtonsDisabled(loading);
+        }
+
+        function showOutput() {
+            outputNode.hidden = false;
+        }
+
         function renderValidationErrors(errors) {
+            showOutput();
             clearNode(outputNode);
             const alert = appendTextElement(outputNode, 'div', 'alert alert-warning py-2 mb-0', messages.requestFailed);
             Object.keys(errors).forEach((field) => {
@@ -110,6 +144,7 @@
         }
 
         function renderError(message) {
+            showOutput();
             clearNode(outputNode);
             appendTextElement(outputNode, 'div', 'alert alert-danger py-2 mb-0', message);
         }
@@ -138,6 +173,7 @@
         }
 
         function renderAnswer(data) {
+            showOutput();
             clearNode(outputNode);
             if (!data || !data.answer) {
                 appendTextElement(outputNode, 'div', 'text-muted', messages.noResponse);
@@ -186,7 +222,7 @@
                 promptPreviewNode.value = intentPrompts.get(intentId) || '';
             }
 
-            setButtonsDisabled(true);
+            setLoadingState(true);
             statusNode.textContent = messages.loading;
 
             try {
@@ -233,7 +269,7 @@
                 renderError(messages.unavailable);
                 statusNode.textContent = messages.requestFailed;
             } finally {
-                setButtonsDisabled(false);
+                setLoadingState(false);
             }
         }
 

@@ -22,6 +22,7 @@ ccdaservice/node_modules
 /nbproject/*
 .DS_Store
 .obsidian
+.claude
 .buildpath
 .project
 .settings

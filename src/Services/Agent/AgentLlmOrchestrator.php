@@ -153,13 +153,15 @@ final class AgentLlmOrchestrator
         array $packet,
         AgentLlmRequest $request
     ): void {
+        $llmRequest = $this->anonymizedLlmRequest($accessToken, $request);
         $this->logger->info('agent.llm.started', [
             'request_id' => (string) ($packet['request_id'] ?? ''),
             'intent_id' => (string) ($intent['intent_id'] ?? ''),
             'provider' => $this->provider->getProviderName(),
             'model' => $this->provider->getModelName(),
-            'llm_request' => $this->anonymizedLlmRequest($accessToken, $request),
+            'llm_request_log' => 'agent.llm.request_readable',
         ]);
+        $this->logger->info($this->readableLlmRequestLogMessage($intent, $packet, $llmRequest));
     }
 
     /**
@@ -169,8 +171,12 @@ final class AgentLlmOrchestrator
     {
         try {
             $requestPayload = $this->provider->getRequestPayload($request);
+            if (is_string($requestPayload['instructions'] ?? null)) {
+                $requestPayload['instructions'] = $this->splitLines($requestPayload['instructions']);
+            }
+
             if (is_string($requestPayload['input'] ?? null)) {
-                $requestPayload['input'] = $this->anonymizedJsonString($accessToken, $requestPayload['input']);
+                $requestPayload['input'] = $this->decodedJsonString($requestPayload['input']);
             }
 
             $payload = $this->anonymizer->anonymizePayload($accessToken, $requestPayload);
@@ -187,18 +193,123 @@ final class AgentLlmOrchestrator
         }
     }
 
-    private function anonymizedJsonString(AgentAccessToken $accessToken, string $json): string
+    private function decodedJsonString(string $json): mixed
     {
         try {
             $decoded = json_decode($json, true, flags: JSON_THROW_ON_ERROR);
-            if (!is_array($decoded)) {
-                return $json;
-            }
-
-            $anonymized = $this->anonymizer->anonymizePayload($accessToken, $decoded);
-            return json_encode($anonymized, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+            return is_array($decoded) ? $decoded : $json;
         } catch (Throwable) {
             return $json;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $intent
+     * @param array<string, mixed> $packet
+     * @param array<string, mixed> $requestPayload
+     */
+    private function readableLlmRequestLogMessage(array $intent, array $packet, array $requestPayload): string
+    {
+        $lines = [
+            'agent.llm.request_readable',
+            'request_id: ' . (string) ($packet['request_id'] ?? ''),
+            'intent_id: ' . (string) ($intent['intent_id'] ?? ''),
+            'provider: ' . $this->provider->getProviderName(),
+            'model: ' . $this->provider->getModelName(),
+            'llm_request:',
+        ];
+
+        foreach ($requestPayload as $key => $value) {
+            $this->appendReadableField($lines, (string) $key, $value, '  ');
+        }
+
+        return implode("\r\n", $lines);
+    }
+
+    /**
+     * @param list<string> $lines
+     */
+    private function appendReadableField(array &$lines, string $key, mixed $value, string $indent): void
+    {
+        if ($key === 'instructions' && is_array($value)) {
+            $lines[] = $indent . 'instructions:';
+            foreach ($value as $line) {
+                $lines[] = $indent . '  ' . $this->readableLogText((string) $line);
+            }
+            return;
+        }
+
+        if (is_array($value)) {
+            $lines[] = $indent . $key . ':';
+            foreach ($this->splitLines($this->prettyJson($this->normalizeReadableValue($value))) as $line) {
+                $lines[] = $indent . '  ' . $line;
+            }
+            return;
+        }
+
+        $lines[] = $indent . $key . ': ' . $this->readableScalar($value);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function splitLines(string $value): array
+    {
+        $normalized = str_replace(["\r\n", "\r"], "\n", $value);
+        return explode("\n", $normalized);
+    }
+
+    private function readableScalar(mixed $value): string
+    {
+        if (is_bool($value)) {
+            return $value ? 'true' : 'false';
+        }
+
+        if ($value === null) {
+            return 'null';
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return (string) $value;
+        }
+
+        return $this->readableLogText((string) $value);
+    }
+
+    private function readableLogText(string $value): string
+    {
+        $value = str_replace(
+            ['\u0026quot;', '\u0026#039;', '&quot;', '&#039;', '&#x27;'],
+            ['"', "'", '"', "'", "'"],
+            $value
+        );
+
+        $value = str_replace(['<', '>'], ['&lt;', '&gt;'], $value);
+        return str_replace(["\r\n", "\r", "\n"], ' ', $value);
+    }
+
+    private function normalizeReadableValue(mixed $value): mixed
+    {
+        if (is_array($value)) {
+            $normalized = [];
+            foreach ($value as $key => $item) {
+                $normalized[$key] = $this->normalizeReadableValue($item);
+            }
+            return $normalized;
+        }
+
+        return is_string($value) ? $this->readableLogText($value) : $value;
+    }
+
+    private function prettyJson(mixed $value): string
+    {
+        try {
+            return json_encode(
+                $value,
+                JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            );
+        } catch (Throwable) {
+            return '[unserializable]';
         }
     }
 

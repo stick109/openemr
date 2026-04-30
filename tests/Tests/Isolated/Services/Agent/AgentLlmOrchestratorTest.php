@@ -94,18 +94,38 @@ class AgentLlmOrchestratorTest extends TestCase
         $this->assertSame(AgentIntentCatalog::CURRENT_MEDICATIONS, $context['intent_id']);
         $this->assertSame('fixture', $context['provider']);
         $this->assertSame('fixture-model', $context['model']);
+        $this->assertSame('agent.llm.request_readable', $context['llm_request_log']);
+        $this->assertArrayNotHasKey('llm_request', $context);
 
-        $requestPayload = $context['llm_request'];
-        $this->assertSame('fixture-model', $requestPayload['model']);
-        $this->assertStringContainsString('Clinical Co-Pilot', $requestPayload['instructions']);
-        $this->assertStringContainsString('do not add completeness statements', $requestPayload['instructions']);
-        $this->assertFalse($requestPayload['store']);
-        $this->assertSame(0.1, $requestPayload['temperature']);
-        $this->assertSame(1200, $requestPayload['max_output_tokens']);
-        $this->assertSame('json_schema', $requestPayload['text']['format']['type']);
-        $this->assertSame('openemr_agent_answer', $requestPayload['text']['format']['name']);
+        $requestRecord = $logger->firstRecordWithMessagePrefix('info', 'agent.llm.request_readable');
+        $this->assertNotNull($requestRecord);
+        $requestLog = $requestRecord['message'];
+        $this->assertStringContainsString("\r\nllm_request:\r\n", $requestLog);
+        $this->assertStringContainsString('model: fixture-model', $requestLog);
+        $this->assertStringContainsString('You are the Clinical Co-Pilot inside OpenEMR.', $requestLog);
+        $this->assertStringContainsString('"not found in checked evidence"', $requestLog);
+        $this->assertStringContainsString('do not add completeness statements', $requestLog);
+        $this->assertStringContainsString('store: false', $requestLog);
+        $this->assertStringContainsString('temperature: 0.1', $requestLog);
+        $this->assertStringContainsString('max_output_tokens: 1200', $requestLog);
+        $this->assertStringContainsString('"type": "json_schema"', $requestLog);
+        $this->assertStringContainsString('"name": "openemr_agent_answer"', $requestLog);
+        $this->assertStringNotContainsString('\u0026quot;', $requestLog);
+        $this->assertStringNotContainsString('&quot;', $requestLog);
+        $this->assertStringNotContainsString('\n', $requestLog);
 
-        $input = json_decode($requestPayload['input'], true, flags: JSON_THROW_ON_ERROR);
+        $inputStart = strpos($requestLog, "input:\r\n");
+        $this->assertIsInt($inputStart);
+        $inputEnd = strpos($requestLog, "\r\n  store:", $inputStart);
+        $this->assertIsInt($inputEnd);
+        $inputJson = substr(
+            $requestLog,
+            $inputStart + strlen("input:\r\n"),
+            $inputEnd - $inputStart - strlen("input:\r\n")
+        );
+        $normalizedInputJson = preg_replace('/^    /m', '', $inputJson);
+        $this->assertIsString($normalizedInputJson);
+        $input = json_decode($normalizedInputJson, true, flags: JSON_THROW_ON_ERROR);
         $this->assertSame(AgentIntentCatalog::CURRENT_MEDICATIONS, $input['intent']['intent_id']);
         $this->assertSame('request-123', $input['evidence_packet']['request_id']);
         $this->assertSame(
@@ -386,6 +406,20 @@ final class AgentLlmOrchestratorCapturingLogger extends AbstractLogger
     {
         foreach ($this->records as $record) {
             if ($record['level'] === $level && $record['message'] === $message) {
+                return $record;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{level: mixed, message: string, context: array<string, mixed>}|null
+     */
+    public function firstRecordWithMessagePrefix(string $level, string $messagePrefix): ?array
+    {
+        foreach ($this->records as $record) {
+            if ($record['level'] === $level && str_starts_with($record['message'], $messagePrefix)) {
                 return $record;
             }
         }

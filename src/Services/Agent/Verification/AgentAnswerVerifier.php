@@ -203,6 +203,10 @@ final class AgentAnswerVerifier
             $errors[] = $path . ' must phrase missingness as not found in checked evidence.';
         }
 
+        if ($this->isCompletenessStatement($text)) {
+            $errors[] = $path . ' must not contain a completeness statement; leave missing_or_uncertain empty when there are no true missing or uncertain items.';
+        }
+
         foreach ($this->stringList($item['citation_ids'] ?? []) as $citationId) {
             if (!isset($sourceMap[$citationId])) {
                 $errors[] = $path . ' cites unknown source_id ' . $citationId . '.';
@@ -374,6 +378,14 @@ final class AgentAnswerVerifier
             || preg_match('/\bnot checked\b/i', $text) === 1
             || preg_match('/\bunavailable\b/i', $text) === 1
             || preg_match('/\bunknown in checked (evidence|records)\b/i', $text) === 1;
+    }
+
+    private function isCompletenessStatement(string $text): bool
+    {
+        return preg_match(
+            '/\bno\s+(additional|other|more)\b.*\b(found|identified|listed|seen|present)\b/i',
+            $text
+        ) === 1;
     }
 
     /**

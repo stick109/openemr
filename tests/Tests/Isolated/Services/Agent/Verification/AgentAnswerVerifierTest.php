@@ -75,6 +75,22 @@ class AgentAnswerVerifierTest extends TestCase
         $this->assertStringContainsString('unknown intent', implode(' ', $result->errors()));
     }
 
+    public function testRejectsCompletenessStatementInMissingOrUncertain(): void
+    {
+        $answer = $this->supportedAnswer();
+        $answer['missing_or_uncertain'] = [
+            [
+                'text' => 'No additional current medications were found in checked evidence.',
+                'citation_ids' => ['medication:lists_medication:77'],
+            ],
+        ];
+
+        $result = (new AgentAnswerVerifier())->verify($answer, $this->accessToken(), $this->packet());
+
+        $this->assertFalse($result->passed());
+        $this->assertStringContainsString('must not contain a completeness statement', implode(' ', $result->errors()));
+    }
+
     /**
      * @return array<string, mixed>
      */

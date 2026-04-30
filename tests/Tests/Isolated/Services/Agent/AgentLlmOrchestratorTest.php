@@ -98,6 +98,7 @@ class AgentLlmOrchestratorTest extends TestCase
         $requestPayload = $context['llm_request'];
         $this->assertSame('fixture-model', $requestPayload['model']);
         $this->assertStringContainsString('Clinical Co-Pilot', $requestPayload['instructions']);
+        $this->assertStringContainsString('do not add completeness statements', $requestPayload['instructions']);
         $this->assertFalse($requestPayload['store']);
         $this->assertSame(0.1, $requestPayload['temperature']);
         $this->assertSame(1200, $requestPayload['max_output_tokens']);
@@ -137,6 +138,33 @@ class AgentLlmOrchestratorTest extends TestCase
         $this->assertSame('deterministic_verified_fallback', $response['response_generation']);
         $this->assertSame('verification_failed', $response['llm']['fallback_reason']);
         $this->assertSame($this->deterministicAnswer(), $response['answer']);
+    }
+
+    public function testFallsBackWhenProviderPutsCompletenessStatementInMissingOrUncertain(): void
+    {
+        $badAnswer = $this->supportedAnswer();
+        $badAnswer['missing_or_uncertain'] = [
+            [
+                'text' => 'No additional current medications were found in checked evidence.',
+                'citation_ids' => ['medication:lists_medication:77'],
+            ],
+        ];
+        $orchestrator = new AgentLlmOrchestrator(
+            provider: new AgentLlmOrchestratorProviderFixture($badAnswer),
+            logger: new NullLogger()
+        );
+
+        $response = $orchestrator->buildVerifiedAnswer(
+            $this->intent(),
+            $this->accessToken(),
+            $this->packet(),
+            $this->deterministicAnswer()
+        );
+
+        $this->assertSame('verified', $response['status']);
+        $this->assertSame('deterministic_verified_fallback', $response['response_generation']);
+        $this->assertSame('verification_failed', $response['llm']['fallback_reason']);
+        $this->assertSame([], $response['answer']['missing_or_uncertain']);
     }
 
     public function testLogsProviderAnswerAndErrorsWhenProviderOutputFailsVerification(): void

@@ -98,6 +98,7 @@ class AgentIntentRestControllerTest extends TestCase
         $this->assertSame('Current medications', $body['data']['answer']['answer_blocks'][0]['heading']);
         $this->assertSame('active', $body['data']['answer']['answer_blocks'][0]['claims'][0]['certainty']);
         $this->assertSame(['medication:lists_medication:77'], $body['data']['answer']['answer_blocks'][0]['claims'][0]['citation_ids']);
+        $this->assertSame([], $body['data']['answer']['missing_or_uncertain']);
         $this->assertSame('medication:lists_medication:77', $body['data']['citations'][0]['source_id']);
         $this->assertSame(['medications'], $body['data']['checked_evidence']);
         $this->assertSame('passed', $body['data']['verification']['status']);

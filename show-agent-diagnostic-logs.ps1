@@ -1,5 +1,6 @@
 param(
-    [int]$Hours = 24
+    [int]$Hours = 24,
+    [switch]$Pretty
 )
 
 $ErrorActionPreference = "Stop"
@@ -184,7 +185,11 @@ foreach ($line in $rawLines) {
         }
     }
 
-    Write-Output (Format-EmbeddedJson -Line $line)
+    if ($Pretty) {
+        Write-Output (Format-EmbeddedJson -Line $line)
+    } else {
+        Write-Output $line
+    }
     $emitted++
 }
 

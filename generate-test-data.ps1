@@ -37,7 +37,7 @@ function Invoke-SelfElevated {
         $scriptArguments += "-SkipWait"
     }
 
-    Write-Host "This script resets the OpenEMR dev database and loads demo data. Approve the UAC prompt to continue."
+    Write-Host "WARNING: GENERATE-TEST-DATA.PS1 IS REQUESTING ADMIN APPROVAL TO RESET THE OPENEMR DEV DATABASE AND LOAD DEMO DATA. APPROVE THE UAC PROMPT TO CONTINUE."
     $process = Start-Process -FilePath $powerShellPath -ArgumentList $scriptArguments -Verb RunAs -WorkingDirectory $PSScriptRoot -Wait -PassThru
     if ($process.ExitCode -ne 0) {
         exit $process.ExitCode

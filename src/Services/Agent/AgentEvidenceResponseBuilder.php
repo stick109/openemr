@@ -35,6 +35,7 @@ final class AgentEvidenceResponseBuilder
         private readonly AgentIntentPlaceholderResponseBuilder $placeholderResponseBuilder = new AgentIntentPlaceholderResponseBuilder(),
         private readonly AgentEvidenceToolset $toolset = new AgentEvidenceToolset(),
         private readonly Anonymizer $anonymizer = new Anonymizer(),
+        private readonly AgentLlmOrchestrator $llmOrchestrator = new AgentLlmOrchestrator(),
         private readonly LoggerInterface $logger = new SystemLogger()
     ) {
     }
@@ -83,12 +84,21 @@ final class AgentEvidenceResponseBuilder
             'placeholder_count' => $this->anonymizer->placeholderCount($accessToken),
         ]);
 
+        $verifiedResponse = $this->llmOrchestrator->buildVerifiedAnswer(
+            $intent,
+            $accessToken,
+            $packet,
+            $this->answerFromPacket($intent, $packet)
+        );
+
         return [
-            'status' => 'evidence_ready',
-            'response_generation' => 'deterministic_evidence_packet',
-            'answer' => $this->answerFromPacket($intent, $packet),
+            'status' => $verifiedResponse['status'],
+            'response_generation' => $verifiedResponse['response_generation'],
+            'answer' => $verifiedResponse['answer'],
             'citations' => $packet['sources'],
             'checked_evidence' => $packet['checked_evidence'],
+            'verification' => $verifiedResponse['verification'],
+            'llm' => $verifiedResponse['llm'],
             'evidence_packet' => $packet,
         ];
     }
@@ -129,7 +139,7 @@ final class AgentEvidenceResponseBuilder
 
         return [
             'status' => 'source_required',
-            'response_generation' => 'deterministic_evidence_packet',
+            'response_generation' => 'deterministic_verified',
             'answer' => [
                 'answer_blocks' => [
                     [
@@ -148,6 +158,20 @@ final class AgentEvidenceResponseBuilder
             ],
             'citations' => [],
             'checked_evidence' => [],
+            'verification' => [
+                'status' => 'passed',
+                'errors' => [],
+                'warnings' => [],
+                'unsupported_claim_count' => 0,
+            ],
+            'llm' => [
+                'provider' => 'disabled',
+                'model' => '',
+                'configured' => false,
+                'used' => false,
+                'configuration_issue' => 'source_required',
+                'usage' => [],
+            ],
             'evidence_packet' => $packet,
         ];
     }
@@ -223,17 +247,12 @@ final class AgentEvidenceResponseBuilder
         $missingOrUncertain = [];
         if ($claims === []) {
             $claims[] = [
-                'text' => 'No matching records were found in the bounded evidence checked for this intent.',
+                'text' => 'No matching records were found in checked evidence for this intent.',
                 'citation_ids' => [],
                 'certainty' => 'not_found',
             ];
             $missingOrUncertain[] = [
                 'text' => 'This does not prove absence from the full chart; it only reflects the bounded evidence retrieved for this request.',
-                'citation_ids' => [],
-            ];
-        } elseif ((string) $intent['intent_id'] !== AgentIntentCatalog::SHOW_SOURCE) {
-            $missingOrUncertain[] = [
-                'text' => 'This phase-three response lists source records only; LLM synthesis and verification are not connected yet.',
                 'citation_ids' => [],
             ];
         }

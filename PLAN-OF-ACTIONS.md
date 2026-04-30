@@ -48,11 +48,11 @@ Status values: `Done`, `Pending`.
 
 | ID   | Status  | Work Item                                                                                           | Dependencies / Notes                                                     |
 | ---- | ------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| P5.1 | Pending | Add server-side LLM provider client behind a configuration interface.                               | Depends on the provider BAA being in place (LLM input is raw evidence, not anonymized). |
-| P5.2 | Pending | Keep provider keys server-side.                                                                     | Depends on P5.1 and deployment configuration.                            |
-| P5.3 | Pending | Add structured output schema.                                                                       | Depends on P5.1 and P3.3 because outputs must cite evidence packet IDs.  |
-| P5.4 | Pending | Add verifier for citations, patient ownership, unsupported claims, and out-of-scope clinical advice. | Depends on P2.3, P3.3, and P5.3.                                        |
-| P5.5 | Pending | Render only verified output.                                                                        | Depends on P5.4.                                                         |
+| P5.1 | Done    | Add server-side LLM provider client behind a configuration interface.                               | Depends on the provider BAA being in place (LLM input is raw evidence, not anonymized). |
+| P5.2 | Done    | Keep provider keys server-side.                                                                     | Depends on P5.1 and deployment configuration.                            |
+| P5.3 | Done    | Add structured output schema.                                                                       | Depends on P5.1 and P3.3 because outputs must cite evidence packet IDs.  |
+| P5.4 | Done    | Add verifier for citations, patient ownership, unsupported claims, and out-of-scope clinical advice. | Depends on P2.3, P3.3, and P5.3.                                        |
+| P5.5 | Done    | Render only verified output.                                                                        | Depends on P5.4.                                                         |
 
 ## Phase 6: Observability And Evals
 

@@ -93,13 +93,16 @@ class AgentIntentRestControllerTest extends TestCase
         $this->assertSame([], $body['validationErrors']);
         $this->assertSame('current_medications', $body['data']['intent_id']);
         $this->assertSame('Current medications', $body['data']['button_label']);
-        $this->assertSame('evidence_ready', $body['data']['status']);
-        $this->assertSame('deterministic_evidence_packet', $body['data']['response_generation']);
+        $this->assertSame('verified', $body['data']['status']);
+        $this->assertSame('deterministic_verified', $body['data']['response_generation']);
         $this->assertSame('Current medications', $body['data']['answer']['answer_blocks'][0]['heading']);
         $this->assertSame('active', $body['data']['answer']['answer_blocks'][0]['claims'][0]['certainty']);
         $this->assertSame(['medication:lists_medication:77'], $body['data']['answer']['answer_blocks'][0]['claims'][0]['citation_ids']);
         $this->assertSame('medication:lists_medication:77', $body['data']['citations'][0]['source_id']);
         $this->assertSame(['medications'], $body['data']['checked_evidence']);
+        $this->assertSame('passed', $body['data']['verification']['status']);
+        $this->assertFalse($body['data']['llm']['configured']);
+        $this->assertFalse($body['data']['llm']['used']);
         $this->assertSame('agent-test-request', $body['data']['evidence_packet']['request_id']);
         $this->assertIsArray($request->attributes->get('agentAnonymizedPayloadLog'));
         $this->assertArrayNotHasKey('placeholder_map', $request->attributes->get('agentAnonymizedPayloadLog'));
@@ -149,7 +152,7 @@ class AgentIntentRestControllerTest extends TestCase
 
             $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
             $this->assertSame($intentId, $body['data']['intent_id']);
-            $this->assertSame('evidence_ready', $body['data']['status']);
+            $this->assertSame('verified', $body['data']['status']);
             $this->assertNotEmpty($body['data']['answer']['answer_blocks'][0]['claims'][0]['text']);
         }
     }
@@ -181,7 +184,7 @@ class AgentIntentRestControllerTest extends TestCase
         $body = $this->decodeJsonBody($response);
 
         $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
-        $this->assertSame('evidence_ready', $body['data']['status']);
+        $this->assertSame('verified', $body['data']['status']);
         $this->assertSame('medication:lists_medication:77', $body['data']['citations'][0]['source_id']);
         $this->assertStringContainsString('Source medication', $body['data']['answer']['answer_blocks'][0]['claims'][0]['text']);
     }

@@ -48,6 +48,29 @@ class AgentLlmOrchestratorTest extends TestCase
         $this->assertTrue($response['llm']['used']);
     }
 
+    public function testLogsProviderAnswerWhenProviderOutputPassesVerification(): void
+    {
+        $logger = new AgentLlmOrchestratorCapturingLogger();
+        $orchestrator = new AgentLlmOrchestrator(
+            provider: new AgentLlmOrchestratorProviderFixture($this->supportedAnswer()),
+            logger: $logger
+        );
+
+        $orchestrator->buildVerifiedAnswer(
+            $this->intent(),
+            $this->accessToken(),
+            $this->packet(),
+            $this->deterministicAnswer()
+        );
+
+        $record = $logger->firstRecord('info', 'agent.llm.finished');
+        $this->assertNotNull($record);
+
+        $context = $record['context'];
+        $this->assertSame('passed', $context['verification_status']);
+        $this->assertSame($this->supportedAnswer(), $context['llm_response']);
+    }
+
     public function testFallsBackToDeterministicAnswerWhenProviderOutputFailsVerification(): void
     {
         $badAnswer = $this->supportedAnswer();
@@ -70,7 +93,7 @@ class AgentLlmOrchestratorTest extends TestCase
         $this->assertSame($this->deterministicAnswer(), $response['answer']);
     }
 
-    public function testLogsProviderAnswerWhenProviderOutputFailsVerification(): void
+    public function testLogsProviderAnswerAndErrorsWhenProviderOutputFailsVerification(): void
     {
         $badAnswer = $this->supportedAnswer();
         $badAnswer['answer_blocks'][0]['claims'][0]['citation_ids'] = ['fabricated:source:1'];
@@ -87,16 +110,20 @@ class AgentLlmOrchestratorTest extends TestCase
             $this->deterministicAnswer()
         );
 
-        $record = $logger->firstRecord('warning', 'agent.verification.failed');
-        $this->assertNotNull($record);
+        $finishedRecord = $logger->firstRecord('info', 'agent.llm.finished');
+        $this->assertNotNull($finishedRecord);
+        $finishedContext = $finishedRecord['context'];
+        $this->assertSame('failed', $finishedContext['verification_status']);
+        $this->assertSame($badAnswer, $finishedContext['llm_response']);
 
-        $context = $record['context'];
+        $failureRecord = $logger->firstRecord('warning', 'agent.verification.failed');
+        $this->assertNotNull($failureRecord);
+        $context = $failureRecord['context'];
         $this->assertSame(1, $context['error_count']);
         $this->assertSame(
             ['answer_blocks[0].claims[0] cites unknown source_id fabricated:source:1.'],
             $context['verification_errors']
         );
-        $this->assertSame($badAnswer, $context['llm_response']);
     }
 
     /**

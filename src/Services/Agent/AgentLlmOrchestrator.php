@@ -72,6 +72,7 @@ final class AgentLlmOrchestrator
                     'provider' => (string) ($llmMetadata['provider'] ?? ''),
                     'model' => (string) ($llmMetadata['model'] ?? ''),
                     'verification_status' => $verification->passed() ? 'passed' : 'failed',
+                    'llm_response' => $this->anonymizedLlmResponse($accessToken, $answer),
                 ]);
 
                 if ($verification->passed()) {
@@ -83,7 +84,7 @@ final class AgentLlmOrchestrator
                     );
                 }
 
-                $this->logVerificationFailure($intent, $accessToken, $packet, $answer, $verification);
+                $this->logVerificationFailure($intent, $packet, $verification);
                 $llmMetadata['fallback_reason'] = 'verification_failed';
             } catch (Throwable $throwable) {
                 $this->logger->warning('agent.llm.failed', [
@@ -144,13 +145,10 @@ final class AgentLlmOrchestrator
     /**
      * @param array<string, mixed> $intent
      * @param array<string, mixed> $packet
-     * @param array<string, mixed> $answer
      */
     private function logVerificationFailure(
         array $intent,
-        AgentAccessToken $accessToken,
         array $packet,
-        array $answer,
         AgentVerificationResult $verification
     ): void {
         $this->logger->warning('agent.verification.failed', [
@@ -159,7 +157,6 @@ final class AgentLlmOrchestrator
             'provider' => $this->provider->getProviderName(),
             'error_count' => count($verification->errors()),
             'verification_errors' => $verification->errors(),
-            'llm_response' => $this->anonymizedLlmResponse($accessToken, $answer),
         ]);
     }
 

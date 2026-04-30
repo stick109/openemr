@@ -25,6 +25,8 @@ class PatientAgentTabTest extends TestCase
 
     private string $templateContent = '';
 
+    private string $scriptContent = '';
+
     /**
      * @var array<int, array<string, mixed>>
      */
@@ -35,22 +37,37 @@ class PatientAgentTabTest extends TestCase
         $dashboardPath = realpath(__DIR__ . '/../../../../interface/patient_file/summary/demographics.php');
         $pagePath = realpath(__DIR__ . '/../../../../interface/patient_file/summary/agent.php');
         $templatePath = realpath(__DIR__ . '/../../../../templates/patient/agent_panel.html.twig');
+        $scriptPath = realpath(__DIR__ . '/../../../../interface/patient_file/summary/agent_panel.js');
         $menuPath = realpath(__DIR__ . '/../../../../interface/main/tabs/menu/menus/patient_menus/standard.json');
-        if (!is_string($dashboardPath) || !is_string($pagePath) || !is_string($templatePath) || !is_string($menuPath)) {
+        if (
+            !is_string($dashboardPath)
+            || !is_string($pagePath)
+            || !is_string($templatePath)
+            || !is_string($scriptPath)
+            || !is_string($menuPath)
+        ) {
             $this->markTestSkipped('Agent tab files not found');
         }
 
         $dashboardContent = file_get_contents($dashboardPath);
         $pageContent = file_get_contents($pagePath);
         $templateContent = file_get_contents($templatePath);
+        $scriptContent = file_get_contents($scriptPath);
         $menuContent = file_get_contents($menuPath);
-        if ($dashboardContent === false || $pageContent === false || $templateContent === false || $menuContent === false) {
+        if (
+            $dashboardContent === false
+            || $pageContent === false
+            || $templateContent === false
+            || $scriptContent === false
+            || $menuContent === false
+        ) {
             $this->markTestSkipped('Failed to read agent tab files');
         }
 
         $this->dashboardContent = $dashboardContent;
         $this->pageContent = $pageContent;
         $this->templateContent = $templateContent;
+        $this->scriptContent = $scriptContent;
         $this->patientMenu = json_decode($menuContent, true, flags: JSON_THROW_ON_ERROR);
     }
 
@@ -90,28 +107,36 @@ class PatientAgentTabTest extends TestCase
     {
         $this->assertStringContainsString('data-intent-id="{{ intent.intent_id|attr }}"', $this->templateContent);
         $this->assertStringContainsString('data-prompt-text="{{ intent.prompt_text|attr }}"', $this->templateContent);
-        $this->assertStringContainsString("'APICSRFTOKEN': apiCsrfToken", $this->templateContent);
-        $this->assertStringContainsString("active_patient_context: 'server-session'", $this->templateContent);
-        $this->assertStringContainsString('fetch(apiUrl', $this->templateContent);
+        $this->assertStringContainsString('data-api-url="{{ apiUrl|attr }}"', $this->templateContent);
+        $this->assertStringContainsString('data-api-csrf-token="{{ apiCsrfToken|attr }}"', $this->templateContent);
+        $this->assertStringContainsString('/interface/patient_file/summary/agent_panel.js?v={{ assetVersion|attr_url }}', $this->templateContent);
+        $this->assertStringContainsString('APICSRFTOKEN: apiCsrfToken', $this->scriptContent);
+        $this->assertStringContainsString("active_patient_context: 'server-session'", $this->scriptContent);
+        $this->assertStringContainsString('fetch(apiUrl', $this->scriptContent);
         $this->assertStringContainsString('js-agent-prompt-preview', $this->templateContent);
         $this->assertStringContainsString('readonly', $this->templateContent);
         $this->assertStringContainsString('aria-readonly="true"', $this->templateContent);
         $this->assertStringContainsString('disabled>{{ "Send"|xlt }}</button>', $this->templateContent);
-        $this->assertStringContainsString('const intentPrompts = new Map', $this->templateContent);
-        $this->assertStringContainsString('promptPreviewNode.value = intentPrompts.get(intentId)', $this->templateContent);
-        $this->assertStringContainsString('loading: {{ "LOADING"|xlj }} +', $this->templateContent);
-        $this->assertStringContainsString("panel.classList.toggle('is-agent-loading', loading)", $this->templateContent);
-        $this->assertStringContainsString("document.body.classList.toggle('agent-loading-cursor', loading)", $this->templateContent);
+        $this->assertStringContainsString('var intentPrompts = new Map', $this->scriptContent);
+        $this->assertStringContainsString('promptPreviewNode.value = intentPrompts.get(intentId)', $this->scriptContent);
+        $this->assertStringContainsString('data-loading-label="{{ "LOADING"|xla }}..."', $this->templateContent);
+        $this->assertStringContainsString("panel.classList.toggle('is-agent-loading', loading)", $this->scriptContent);
+        $this->assertStringContainsString("document.body.classList.toggle('agent-loading-cursor', loading)", $this->scriptContent);
         $this->assertStringContainsString('cursor: wait !important;', $this->templateContent);
-        $this->assertStringContainsString('outputNode.hidden = loading', $this->templateContent);
-        $this->assertStringContainsString("panel.querySelectorAll('button')", $this->templateContent);
-        $this->assertStringContainsString('button.dataset.agentWasDisabled', $this->templateContent);
-        $this->assertStringContainsString("panel.setAttribute('aria-busy', loading ? 'true' : 'false')", $this->templateContent);
+        $this->assertStringContainsString('outputNode.hidden = loading', $this->scriptContent);
+        $this->assertStringContainsString("panel.querySelectorAll('button')", $this->scriptContent);
+        $this->assertStringContainsString('button.dataset.agentWasDisabled', $this->scriptContent);
+        $this->assertStringContainsString("panel.setAttribute('aria-busy', loading ? 'true' : 'false')", $this->scriptContent);
+        $this->assertStringNotContainsString('function renderAnswer', $this->templateContent);
+        $this->assertStringNotContainsString('function renderValidationErrors', $this->templateContent);
+        $this->assertStringNotContainsString('const apiUrl =', $this->templateContent);
+        $this->assertStringNotContainsString('const intents =', $this->templateContent);
         $this->assertStringNotContainsString('<textarea', $this->templateContent);
         $this->assertStringNotContainsString('contenteditable', $this->templateContent);
         $this->assertStringNotContainsString('llm_user_text', $this->templateContent);
-        $this->assertStringNotContainsString('prompt_text: promptPreviewNode.value', $this->templateContent);
-        $this->assertStringNotContainsString('prompt_text:', $this->templateContent);
+        $this->assertStringNotContainsString('llm_user_text', $this->scriptContent);
+        $this->assertStringNotContainsString('prompt_text: promptPreviewNode.value', $this->scriptContent);
+        $this->assertStringNotContainsString('prompt_text:', $this->scriptContent);
         $this->assertStringNotContainsString('name="prompt', $this->templateContent);
     }
 }

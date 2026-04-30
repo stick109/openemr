@@ -5,21 +5,102 @@
     .agent-panel.is-agent-loading * {
         cursor: wait !important;
     }
+
+    .agent-panel {
+        max-width: 1180px;
+    }
+
+    .agent-panel__toolbar {
+        gap: 0.5rem;
+    }
+
+    .agent-panel__intents {
+        gap: 0.375rem;
+    }
+
+    .agent-panel__intents .btn,
+    .agent-panel__followups .btn,
+    .agent-panel__citation {
+        border-radius: 0.25rem;
+    }
+
+    .agent-panel__prompt {
+        min-width: min(28rem, 100%);
+        max-width: 40rem;
+    }
+
+    .agent-panel__status {
+        min-height: 1.25rem;
+    }
+
+    .agent-panel__output[hidden] {
+        display: none !important;
+    }
+
+    .agent-panel__output:not(:empty) {
+        border-top: 1px solid #dee2e6;
+        margin-top: 0.5rem;
+        padding-top: 0.75rem;
+    }
+
+    .agent-panel__heading {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .agent-panel__claim-list {
+        margin-bottom: 0.75rem;
+        padding-left: 1.25rem;
+    }
+
+    .agent-panel__claim-list li + li {
+        margin-top: 0.375rem;
+    }
+
+    .agent-panel__citation-list {
+        margin-top: 0.25rem;
+    }
+
+    .agent-panel__citation {
+        font-size: 0.75rem;
+        line-height: 1.2;
+    }
+
+    @media (max-width: 575.98px) {
+        .agent-panel__prompt {
+            flex-basis: 100%;
+            max-width: none;
+        }
+    }
 </style>
 
-<div class="agent-panel mt-3" data-agent-panel="patient-chart">
-    <div class="d-flex flex-wrap align-items-start mb-2">
-        <div class="d-flex flex-wrap mr-2 mb-1">
+<div
+    class="agent-panel mt-3"
+    data-agent-panel="patient-chart"
+    data-api-url="{{ apiUrl|attr }}"
+    data-api-csrf-token="{{ apiCsrfToken|attr }}"
+    data-loading-label="{{ "LOADING"|xla }}..."
+    data-request-failed-label="{{ "Request failed."|xla }}"
+    data-no-response-label="{{ "No agent response was returned."|xla }}"
+    data-unavailable-label="{{ "Agent endpoint is unavailable."|xla }}"
+    data-followups-label="{{ "Follow-up"|xla }}"
+    data-missing-label="{{ "Missing or uncertain"|xla }}"
+    data-evidence-label="{{ "Checked evidence"|xla }}"
+    data-none-label="{{ "None"|xla }}"
+>
+    <div class="agent-panel__toolbar d-flex flex-wrap align-items-start mb-2">
+        <div class="agent-panel__intents d-flex flex-wrap mb-1">
             {% for intent in intents %}
                 <button
                     type="button"
-                    class="btn btn-sm btn-outline-primary mr-1 mb-1 js-agent-intent"
+                    class="btn btn-sm btn-outline-primary js-agent-intent"
                     data-intent-id="{{ intent.intent_id|attr }}"
                     data-prompt-text="{{ intent.prompt_text|attr }}"
                 >{{ intent.button_label|text }}</button>
             {% endfor %}
         </div>
-        <div class="input-group flex-grow-1 mb-1">
+        <div class="agent-panel__prompt input-group flex-grow-1 mb-1">
             <input
                 type="text"
                 class="form-control js-agent-prompt-preview"
@@ -34,247 +115,8 @@
             </div>
         </div>
     </div>
-    <div class="small text-muted mb-2 js-agent-status" aria-live="polite">{{ "Ready"|xlt }}</div>
-    <div class="js-agent-output pt-2"></div>
+    <div class="agent-panel__status small text-muted mb-2 js-agent-status" aria-live="polite">{{ "Ready"|xlt }}</div>
+    <div class="agent-panel__output js-agent-output"></div>
 </div>
 
-<script>
-    (function () {
-        const panel = document.currentScript.previousElementSibling;
-        if (!panel || panel.dataset.agentPanelInitialized === 'true') {
-            return;
-        }
-        panel.dataset.agentPanelInitialized = 'true';
-
-        const apiUrl = {{ apiUrl|json_encode }};
-        const apiCsrfToken = {{ apiCsrfToken|json_encode }};
-        const intents = {{ intents|json_encode }};
-        const intentLabels = new Map(intents.map((intent) => [intent.intent_id, intent.button_label]));
-        const intentPrompts = new Map(intents.map((intent) => [intent.intent_id, intent.prompt_text]));
-        const conversationId = 'chart-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
-        const statusNode = panel.querySelector('.js-agent-status');
-        const outputNode = panel.querySelector('.js-agent-output');
-        const promptPreviewNode = panel.querySelector('.js-agent-prompt-preview');
-        const buttons = Array.from(panel.querySelectorAll('.js-agent-intent'));
-        const messages = {
-            loading: {{ "LOADING"|xlj }} + '...',
-            requestFailed: {{ "Request failed."|xlj }},
-            noResponse: {{ "No agent response was returned."|xlj }},
-            unavailable: {{ "Agent endpoint is unavailable."|xlj }},
-            followUps: {{ "Follow-up"|xlj }},
-            missing: {{ "Missing or uncertain"|xlj }},
-            evidence: {{ "Checked evidence"|xlj }},
-            none: {{ "None"|xlj }}
-        };
-
-        function clearNode(node) {
-            while (node.firstChild) {
-                node.removeChild(node.firstChild);
-            }
-        }
-
-        function appendTextElement(parent, tagName, className, text) {
-            const element = document.createElement(tagName);
-            if (className) {
-                element.className = className;
-            }
-            element.textContent = text;
-            parent.appendChild(element);
-            return element;
-        }
-
-        function appendCitationChips(parent, citationIds) {
-            if (!Array.isArray(citationIds) || citationIds.length === 0) {
-                return;
-            }
-
-            const chipContainer = document.createElement('div');
-            chipContainer.className = 'mt-1';
-            citationIds.forEach((citationId) => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'badge badge-light border mr-1';
-                chip.dataset.sourceId = citationId;
-                chip.textContent = citationId;
-                chip.addEventListener('click', () => requestIntent('show_source', citationId));
-                chipContainer.appendChild(chip);
-            });
-            parent.appendChild(chipContainer);
-        }
-
-        function setButtonsDisabled(disabled) {
-            Array.from(panel.querySelectorAll('button')).forEach((button) => {
-                if (disabled) {
-                    button.dataset.agentWasDisabled = button.disabled ? 'true' : 'false';
-                    button.disabled = true;
-                    return;
-                }
-
-                if (button.dataset.agentWasDisabled !== 'true') {
-                    button.disabled = false;
-                }
-                delete button.dataset.agentWasDisabled;
-            });
-        }
-
-        function setLoadingState(loading) {
-            panel.classList.toggle('is-agent-loading', loading);
-            document.body.classList.toggle('agent-loading-cursor', loading);
-            panel.setAttribute('aria-busy', loading ? 'true' : 'false');
-            outputNode.hidden = loading;
-            if (loading) {
-                clearNode(outputNode);
-            }
-            setButtonsDisabled(loading);
-        }
-
-        function showOutput() {
-            outputNode.hidden = false;
-        }
-
-        function renderValidationErrors(errors) {
-            showOutput();
-            clearNode(outputNode);
-            const alert = appendTextElement(outputNode, 'div', 'alert alert-warning py-2 mb-0', messages.requestFailed);
-            Object.keys(errors).forEach((field) => {
-                (errors[field] || []).forEach((message) => {
-                    appendTextElement(alert, 'div', '', field + ': ' + message);
-                });
-            });
-        }
-
-        function renderError(message) {
-            showOutput();
-            clearNode(outputNode);
-            appendTextElement(outputNode, 'div', 'alert alert-danger py-2 mb-0', message);
-        }
-
-        function renderFollowUps(followupIntents) {
-            if (!Array.isArray(followupIntents) || followupIntents.length === 0) {
-                return;
-            }
-
-            appendTextElement(outputNode, 'div', 'small font-weight-bold mt-2 mb-1', messages.followUps);
-            const container = document.createElement('div');
-            container.className = 'd-flex flex-wrap';
-            followupIntents.forEach((intentId) => {
-                if (!intentLabels.has(intentId)) {
-                    return;
-                }
-                const followupButton = document.createElement('button');
-                followupButton.type = 'button';
-                followupButton.className = 'btn btn-sm btn-outline-secondary mr-1 mb-1 js-agent-intent';
-                followupButton.dataset.intentId = intentId;
-                followupButton.textContent = intentLabels.get(intentId);
-                followupButton.addEventListener('click', () => requestIntent(intentId));
-                container.appendChild(followupButton);
-            });
-            outputNode.appendChild(container);
-        }
-
-        function renderAnswer(data) {
-            showOutput();
-            clearNode(outputNode);
-            if (!data || !data.answer) {
-                appendTextElement(outputNode, 'div', 'text-muted', messages.noResponse);
-                return;
-            }
-
-            (data.answer.answer_blocks || []).forEach((block) => {
-                appendTextElement(outputNode, 'div', 'font-weight-bold mb-1', block.heading || data.button_label);
-                const claims = Array.isArray(block.claims) ? block.claims : [];
-                const list = document.createElement('ul');
-                list.className = 'pl-3 mb-2';
-                claims.forEach((claim) => {
-                    const item = document.createElement('li');
-                    appendTextElement(item, 'span', '', claim.text || '');
-                    if (claim.certainty) {
-                        appendTextElement(item, 'span', 'text-muted ml-1', '(' + claim.certainty + ')');
-                    }
-                    appendCitationChips(item, claim.citation_ids);
-                    list.appendChild(item);
-                });
-                outputNode.appendChild(list);
-            });
-
-            if (Array.isArray(data.answer.missing_or_uncertain) && data.answer.missing_or_uncertain.length > 0) {
-                appendTextElement(outputNode, 'div', 'small font-weight-bold mb-1', messages.missing);
-                const missingList = document.createElement('ul');
-                missingList.className = 'pl-3 mb-2';
-                data.answer.missing_or_uncertain.forEach((item) => {
-                    const missingItem = document.createElement('li');
-                    appendTextElement(missingItem, 'span', '', item.text || '');
-                    appendCitationChips(missingItem, item.citation_ids);
-                    missingList.appendChild(missingItem);
-                });
-                outputNode.appendChild(missingList);
-            }
-
-            const evidence = Array.isArray(data.checked_evidence) && data.checked_evidence.length > 0
-                ? data.checked_evidence.join(', ')
-                : messages.none;
-            appendTextElement(outputNode, 'div', 'small text-muted', messages.evidence + ': ' + evidence);
-            renderFollowUps(data.answer.followup_intents);
-        }
-
-        async function requestIntent(intentId, sourceId) {
-            if (promptPreviewNode) {
-                promptPreviewNode.value = intentPrompts.get(intentId) || '';
-            }
-
-            setLoadingState(true);
-            statusNode.textContent = messages.loading;
-
-            try {
-                if (window.top && typeof window.top.restoreSession === 'function') {
-                    window.top.restoreSession();
-                }
-
-                const payload = {
-                    intent_id: intentId,
-                    conversation_id: conversationId,
-                    active_patient_context: 'server-session'
-                };
-                if (sourceId) {
-                    payload.source_id = sourceId;
-                }
-
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    credentials: 'same-origin',
-                    headers: {
-                        'APICSRFTOKEN': apiCsrfToken,
-                        'Accept': 'application/json',
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                });
-                const body = await response.json();
-
-                if (body.validationErrors && Object.keys(body.validationErrors).length > 0) {
-                    renderValidationErrors(body.validationErrors);
-                    statusNode.textContent = messages.requestFailed;
-                    return;
-                }
-
-                if (!response.ok) {
-                    renderError(messages.requestFailed);
-                    statusNode.textContent = messages.requestFailed;
-                    return;
-                }
-
-                renderAnswer(body.data);
-                statusNode.textContent = body.data && body.data.button_label ? body.data.button_label : '';
-            } catch (error) {
-                renderError(messages.unavailable);
-                statusNode.textContent = messages.requestFailed;
-            } finally {
-                setLoadingState(false);
-            }
-        }
-
-        buttons.forEach((button) => {
-            button.addEventListener('click', () => requestIntent(button.dataset.intentId));
-        });
-    }());
-</script>
+<script src="{{ webroot|attr }}/interface/patient_file/summary/agent_panel.js?v={{ assetVersion|attr_url }}"></script>

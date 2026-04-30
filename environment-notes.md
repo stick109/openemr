@@ -1,6 +1,6 @@
 # Environment Notes
 
-Last verified: 2026-04-29
+Last verified: 2026-04-30
 
 ## Current State
 
@@ -53,6 +53,7 @@ The Redis extension is a manually installed PECL DLL. If PHP is upgraded, replac
 - 2026-04-29: Symptom: host-side `php bin\console ...` can fail after a Docker easy-dev install with `mysqli_query(): Argument #1 ($mysql) must be of type mysqli, false given`. Likely cause: `sites\default\sqlconf.php` points at the Compose service hostname `mysql`, which resolves inside Docker but not from the Windows host. Workaround: run OpenEMR console/app checks inside the container with `docker compose -p openemr exec openemr ...`, or use host-accessible database settings only for a host-native install. Follow-up: keep Docker and host-native runtime assumptions separate.
 - 2026-04-29: Symptom: inline commands like `docker compose ... exec openemr sh -lc '... grep -E "a|b" ...'` can still be split unexpectedly when launched from Windows PowerShell. Likely cause: nested quoting across PowerShell, Docker Compose, and BusyBox `sh` does not preserve pipe-heavy patterns reliably. Workaround: the global PowerShell profile defines `dcsh`, which writes a UTF-8-no-BOM temp script, copies it into the Compose service, and runs it with `sh`; pipe a here-string to `dcsh` instead of using inline `sh -lc`. Follow-up: prefer `dcsh` for container shell scripts with pipes, quotes, regex alternation, or multiline logic.
 - 2026-04-29: Symptom: after `docker compose -p openemr exec openemr /root/devtools dev-reset-install`, `http://localhost:8300/meta/health/readyz` can still return `{"status":"setup_required","checks":{"installed":false,...}}` while the login page works and the OpenEMR container is Docker-healthy. Likely cause: the health endpoint's readiness checks are stricter/different from the development login path, including OAuth key checks. Workaround: for local development, verify `http://localhost:8300/interface/login/login.php?site=default` and `docker compose -p openemr ps`; do not treat the readyz JSON alone as proof the dev UI is unavailable. Follow-up: revisit if deployment health probes depend on this endpoint.
+- 2026-04-30: Symptom: `docker ps --format "table {{.ID}} ... {{.Label \"com.docker.compose.project\"}}"` fails with `failed to parse template: template: :1: unterminated quoted string`. Likely cause: PowerShell does not use backslash to escape quotes, so `\"` breaks the outer quoted string before Docker receives a valid Go template. Workaround: use single quotes around the Docker format string, for example `docker ps --format 'table {{.ID}}\t{{.Names}}\t{{.Label "com.docker.compose.project"}}'`, or avoid nested quoting with `docker ps --format '{{json .}}'`. Follow-up: when a Docker Go template needs literal double quotes in PowerShell, prefer single-quoted PowerShell strings or JSON output.
 
 ## Remaining Environment Work
 

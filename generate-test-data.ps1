@@ -38,7 +38,7 @@ function Invoke-SelfElevated {
     }
 
     Write-Host "WARNING: GENERATE-TEST-DATA.PS1 IS REQUESTING ADMIN APPROVAL TO RESET THE OPENEMR DEV DATABASE AND LOAD DEMO DATA. APPROVE THE UAC PROMPT TO CONTINUE."
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 2500
     try {
         $process = Start-Process -FilePath $powerShellPath -ArgumentList $scriptArguments -Verb RunAs -WorkingDirectory $PSScriptRoot -Wait -PassThru
     } catch {
@@ -103,6 +103,7 @@ $composeDirectory = Join-Path $repoRoot "docker\development-easy"
 $composeFile = Join-Path $composeDirectory "docker-compose.yml"
 $medicationSqlPath = Join-Path $repoRoot "sql\demo_current_medications.sql"
 $allergySqlPath = Join-Path $repoRoot "sql\demo_current_allergies.sql"
+$recentEventSqlPath = Join-Path $repoRoot "sql\demo_recent_events.sql"
 
 if (-not (Test-Path $composeFile)) {
     throw "Compose file not found at $composeFile."
@@ -116,6 +117,10 @@ if (-not (Test-Path $allergySqlPath)) {
     throw "Allergy seed SQL not found at $allergySqlPath."
 }
 
+if (-not (Test-Path $recentEventSqlPath)) {
+    throw "Recent event seed SQL not found at $recentEventSqlPath."
+}
+
 $upArguments = @("up", "--detach")
 if (-not $SkipWait) {
     $upArguments += "--wait"
@@ -127,6 +132,11 @@ $loadMedicationSql = 'dbclient=mysql; if command -v mariadb >/dev/null 2>&1; the
 $missingAllergySql = "SELECT COUNT(*) FROM patient_data p WHERE NOT EXISTS (SELECT 1 FROM lists l WHERE l.pid = p.pid AND l.type = 'allergy' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()));"
 $allergySummarySql = "SELECT p.pid, CONCAT(p.fname, ' ', p.lname) AS patient, COUNT(l.id) AS active_allergies FROM patient_data p LEFT JOIN lists l ON l.pid = p.pid AND l.type = 'allergy' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()) GROUP BY p.pid, p.fname, p.lname ORDER BY p.pid;"
 $loadAllergySql = 'dbclient=mysql; if command -v mariadb >/dev/null 2>&1; then dbclient=mariadb; fi; "$dbclient" -hmysql -uopenemr -popenemr openemr < /openemr/sql/demo_current_allergies.sql'
+$missingRecentEventSql = "SELECT COUNT(*) FROM patient_data p WHERE NOT EXISTS (SELECT 1 FROM form_encounter fe WHERE fe.pid = p.pid AND fe.date >= CURDATE() - INTERVAL 30 DAY);"
+$recentEventSummarySql = "SELECT p.pid, CONCAT(p.fname, ' ', p.lname) AS patient, COUNT(fe.id) AS recent_events FROM patient_data p LEFT JOIN form_encounter fe ON fe.pid = p.pid AND fe.date >= CURDATE() - INTERVAL 30 DAY GROUP BY p.pid, p.fname, p.lname ORDER BY p.pid;"
+$missingUserRecentEventSql = "SELECT COUNT(*) FROM users u WHERE u.active = 1 AND u.authorized = 1 AND NOT EXISTS (SELECT 1 FROM form_encounter fe WHERE fe.provider_id = u.id AND fe.date >= CURDATE() - INTERVAL 30 DAY);"
+$userRecentEventSummarySql = "SELECT u.id, u.username, CONCAT(COALESCE(u.fname, ''), ' ', COALESCE(u.lname, '')) AS user, COUNT(fe.id) AS recent_events FROM users u LEFT JOIN form_encounter fe ON fe.provider_id = u.id AND fe.date >= CURDATE() - INTERVAL 30 DAY WHERE u.active = 1 AND u.authorized = 1 GROUP BY u.id, u.username, u.fname, u.lname ORDER BY u.id;"
+$loadRecentEventSql = 'dbclient=mysql; if command -v mariadb >/dev/null 2>&1; then dbclient=mariadb; fi; "$dbclient" -hmysql -uopenemr -popenemr openemr < /openemr/sql/demo_recent_events.sql'
 
 function ConvertTo-VerifiedCount {
     param(
@@ -158,6 +168,9 @@ try {
     Write-Host "Adding demo current allergies for patients missing active allergies..."
     Invoke-DockerCompose -ComposeArguments @("exec", "-T", "openemr", "sh", "-c", $loadAllergySql)
 
+    Write-Host "Adding demo recent events for patients and active users missing recent events..."
+    Invoke-DockerCompose -ComposeArguments @("exec", "-T", "openemr", "sh", "-c", $loadRecentEventSql)
+
     Write-Host "Verifying every patient has at least one active medication..."
     $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingMedicationSql)
     $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-medication"
@@ -178,7 +191,27 @@ try {
 
     Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $allergySummarySql)
 
-    Write-Host "Done. Demo data is loaded and every patient has at least one active medication and allergy."
+    Write-Host "Verifying every patient has at least one recent event..."
+    $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingRecentEventSql)
+    $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-recent-event"
+
+    if ($missingCount -ne 0) {
+        throw "Recent event verification failed: $missingCount patient(s) still lack recent event entries."
+    }
+
+    Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $recentEventSummarySql)
+
+    Write-Host "Verifying every active user has at least one recent event..."
+    $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingUserRecentEventSql)
+    $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-user-recent-event"
+
+    if ($missingCount -ne 0) {
+        throw "Recent event verification failed: $missingCount active user(s) still lack recent event entries."
+    }
+
+    Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $userRecentEventSummarySql)
+
+    Write-Host "Done. Demo data is loaded and every patient has at least one active medication, allergy, and recent event."
 }
 finally {
     Pop-Location

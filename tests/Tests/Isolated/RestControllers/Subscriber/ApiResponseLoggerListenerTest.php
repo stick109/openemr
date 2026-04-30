@@ -161,7 +161,7 @@ class ApiResponseLoggerListenerTest extends TestCase
         $request->setResource('agent/intent');
         $request->attributes->set('skipResponseLogging', true);
         $safePayload = [
-            'payload_version' => 'agent.anonymized.v1',
+            'payload_version' => 'agent.log.v1',
             'evidence_packet' => [
                 'sources' => [
                     [

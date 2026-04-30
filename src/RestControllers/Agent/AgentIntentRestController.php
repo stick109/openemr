@@ -13,11 +13,13 @@ declare(strict_types=1);
 namespace OpenEMR\RestControllers\Agent;
 
 use OpenEMR\Common\Http\HttpRestRequest;
+use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Services\Agent\AgentAccessBroker;
 use OpenEMR\Services\Agent\AgentAccessDecision;
 use OpenEMR\Services\Agent\AgentEvidenceResponseBuilder;
 use OpenEMR\Services\Agent\AgentIntentCatalog;
 use OpenEMR\Services\Agent\Evidence\AgentEvidenceAccessException;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -48,7 +50,8 @@ final class AgentIntentRestController
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
         private readonly AgentAccessBroker $accessBroker = new AgentAccessBroker(),
-        private readonly AgentEvidenceResponseBuilder $responseBuilder = new AgentEvidenceResponseBuilder()
+        private readonly AgentEvidenceResponseBuilder $responseBuilder = new AgentEvidenceResponseBuilder(),
+        private readonly LoggerInterface $logger = new SystemLogger()
     ) {
     }
 
@@ -58,6 +61,10 @@ final class AgentIntentRestController
 
         $decodeResult = $this->decodePayload($request);
         if (isset($decodeResult['errors'])) {
+            $this->logger->warning('agent.intent.invalid_payload', [
+                'stage' => 'decode',
+                'fields' => array_keys($decodeResult['errors']),
+            ]);
             return $this->badRequest($decodeResult['errors']);
         }
 
@@ -69,23 +76,50 @@ final class AgentIntentRestController
      */
     public function handlePayload(array $payload, HttpRestRequest $request): JsonResponse
     {
+        $intentIdInput = is_string($payload['intent_id'] ?? null) ? $payload['intent_id'] : null;
+        $conversationId = is_string($payload['conversation_id'] ?? null) ? $payload['conversation_id'] : null;
+        $this->logger->info('agent.intent.received', [
+            'intent_id' => $intentIdInput,
+            'conversation_id' => $conversationId,
+            'has_source_id' => isset($payload['source_id']),
+            'has_active_patient_context' => isset($payload['active_patient_context']),
+        ]);
+
         $validationErrors = $this->validatePayload($payload);
         if ($validationErrors !== []) {
+            $this->logger->warning('agent.intent.invalid_payload', [
+                'stage' => 'validate',
+                'intent_id' => $intentIdInput,
+                'fields' => array_keys($validationErrors),
+            ]);
             return $this->badRequest($validationErrors);
         }
 
         $intent = $this->intentCatalog->get($payload['intent_id']);
         if ($intent === null) {
+            $this->logger->warning('agent.intent.invalid_payload', [
+                'stage' => 'catalog',
+                'intent_id' => $intentIdInput,
+                'fields' => ['intent_id'],
+            ]);
             return $this->badRequest(['intent_id' => ['Unknown agent intent_id.']]);
         }
 
         $accessDecision = $this->accessBroker->authorize($request, $intent['intent_id'], $payload);
         if (!$accessDecision->isAllowed()) {
+            $this->logger->warning('agent.intent.access_denied', [
+                'intent_id' => $intent['intent_id'],
+                'reason_code' => $accessDecision->getReasonCode(),
+            ]);
             return $this->accessDenied($accessDecision);
         }
 
         $accessToken = $accessDecision->getAccessToken();
         if ($accessToken === null) {
+            $this->logger->error('agent.intent.evidence_denied', [
+                'intent_id' => $intent['intent_id'],
+                'reason' => 'missing_access_token',
+            ]);
             return $this->evidenceDenied('Agent access token was not available.');
         }
 
@@ -95,10 +129,21 @@ final class AgentIntentRestController
                 $accessToken,
                 $this->sourceIdFromPayload($payload)
             );
-            $request->attributes->set('agentAnonymizedPayloadLog', $this->responseBuilder->getLastAnonymizedPayload());
+            $request->attributes->set('agentAnonymizedPayloadLog', $this->responseBuilder->getLastLogPayload());
         } catch (AgentEvidenceAccessException $exception) {
+            $this->logger->warning('agent.intent.evidence_denied', [
+                'intent_id' => $intent['intent_id'],
+                'reason_code' => $exception->getReasonCode(),
+            ]);
             return $this->evidenceDenied($exception->getPublicMessage());
         }
+
+        $this->logger->info('agent.intent.completed', [
+            'intent_id' => $intent['intent_id'],
+            'status' => is_string($agentResponse['status'] ?? null) ? $agentResponse['status'] : 'unknown',
+            'citation_count' => is_array($agentResponse['citations'] ?? null) ? count($agentResponse['citations']) : 0,
+            'claim_count' => $this->countClaims($agentResponse),
+        ]);
 
         return new JsonResponse([
             'validationErrors' => [],
@@ -108,6 +153,24 @@ final class AgentIntentRestController
                 'button_label' => $intent['button_label'],
             ], $agentResponse),
         ], Response::HTTP_OK);
+    }
+
+    /**
+     * @param array<string, mixed> $agentResponse
+     */
+    private function countClaims(array $agentResponse): int
+    {
+        $blocks = $agentResponse['answer']['answer_blocks'] ?? null;
+        if (!is_array($blocks)) {
+            return 0;
+        }
+        $total = 0;
+        foreach ($blocks as $block) {
+            if (is_array($block) && is_array($block['claims'] ?? null)) {
+                $total += count($block['claims']);
+            }
+        }
+        return $total;
     }
 
     /**

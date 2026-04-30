@@ -3,6 +3,11 @@
 /**
  * Anonymizer
  *
+ * Server-side PHI redactor used immediately before durable logging. The LLM
+ * provider operates under a signed BAA, so model input is sent without
+ * placeholder substitution; only payloads bound for `api_log` or other
+ * durable sinks pass through this component.
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -11,6 +16,11 @@
 declare(strict_types=1);
 
 namespace OpenEMR\Services\Agent;
+
+use OpenEMR\Common\Logging\EventAuditLogger;
+use OpenEMR\Common\Logging\SystemLogger;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 final class Anonymizer
 {
@@ -62,8 +72,26 @@ final class Anonymizer
      */
     private array $scopes = [];
 
-    public function __construct(private readonly int $tokenLifetimeSeconds = self::DEFAULT_TOKEN_LIFETIME_SECONDS)
-    {
+    /**
+     * @var callable(string, string, string, int, string, ?int): void
+     */
+    private $auditLogger;
+
+    public function __construct(
+        private readonly int $tokenLifetimeSeconds = self::DEFAULT_TOKEN_LIFETIME_SECONDS,
+        private readonly LoggerInterface $logger = new SystemLogger(),
+        ?callable $auditLogger = null
+    ) {
+        $this->auditLogger = $auditLogger ?? static function (
+            string $event,
+            string $user,
+            string $groupname,
+            int $success,
+            string $comments,
+            ?int $patientId
+        ): void {
+            EventAuditLogger::getInstance()->newEvent($event, $user, $groupname, $success, $comments, $patientId);
+        };
     }
 
     /**
@@ -72,13 +100,33 @@ final class Anonymizer
      */
     public function anonymizeEvidencePacket(AgentAccessToken $accessToken, array $packet): array
     {
-        $anonymized = $this->anonymizePayload($accessToken, $packet);
-        return is_array($anonymized) ? $anonymized : [];
+        try {
+            $anonymized = $this->anonymizeValue($accessToken, $packet, '');
+            $result = is_array($anonymized) ? $anonymized : [];
+            $this->logger->debug('agent.anonymizer.completed', [
+                'mode' => 'evidence_packet',
+                'placeholder_count' => $this->placeholderCount($accessToken),
+            ]);
+            return $result;
+        } catch (Throwable $exception) {
+            $this->reportFailure($accessToken, 'evidence_packet', $exception);
+            throw $exception;
+        }
     }
 
     public function anonymizePayload(AgentAccessToken $accessToken, mixed $payload): mixed
     {
-        return $this->anonymizeValue($accessToken, $payload, '');
+        try {
+            $result = $this->anonymizeValue($accessToken, $payload, '');
+            $this->logger->debug('agent.anonymizer.completed', [
+                'mode' => 'payload',
+                'placeholder_count' => $this->placeholderCount($accessToken),
+            ]);
+            return $result;
+        } catch (Throwable $exception) {
+            $this->reportFailure($accessToken, 'payload', $exception);
+            throw $exception;
+        }
     }
 
     public function placeholderCount(AgentAccessToken $accessToken): int
@@ -324,5 +372,33 @@ final class Anonymizer
         $normalized = strtolower(trim($rawValue));
         $normalized = preg_replace('/\s+/', ' ', $normalized);
         return $normalized === null ? '' : $normalized;
+    }
+
+    private function reportFailure(AgentAccessToken $accessToken, string $mode, Throwable $exception): void
+    {
+        $this->logger->error('agent.anonymizer.failure', [
+            'mode' => $mode,
+            'error_class' => $exception::class,
+            'exception' => $exception,
+        ]);
+
+        try {
+            ($this->auditLogger)(
+                'agent-anonymizer-failure',
+                'agent',
+                'agent',
+                0,
+                sprintf('agent_anonymizer mode=%s error=%s', $mode, $exception::class),
+                $accessToken->getPatientContext()->getPid()
+            );
+        } catch (\RuntimeException $auditException) {
+            // Audit-side runtime failures (e.g. DB writes) must not mask the
+            // original exception. \Error and \ErrorException are intentionally
+            // left to propagate per project policy — they signal real bugs.
+            $this->logger->error('agent.anonymizer.audit_failure', [
+                'mode' => $mode,
+                'error_class' => $auditException::class,
+            ]);
+        }
     }
 }

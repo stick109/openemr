@@ -16,6 +16,8 @@ use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\Common\Logging\EventAuditLogger;
+use OpenEMR\Common\Logging\SystemLogger;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 use Throwable;
 
@@ -95,7 +97,8 @@ final class AgentAccessBroker
         ?callable $csrfVerifier = null,
         ?callable $aclChecker = null,
         ?callable $auditLogger = null,
-        ?callable $tokenIdFactory = null
+        ?callable $tokenIdFactory = null,
+        private readonly LoggerInterface $logger = new SystemLogger()
     ) {
         $this->csrfVerifier = $csrfVerifier ?? static function (string $token, SessionInterface $session): bool {
             return CsrfUtils::verifyCsrfToken($token, $session, 'api');
@@ -132,6 +135,10 @@ final class AgentAccessBroker
      */
     public function authorize(HttpRestRequest $request, string $intentId, array $payload): AgentAccessDecision
     {
+        $this->logger->debug('agent.access.evaluating', [
+            'intent_id' => $this->safeAuditValue($intentId),
+        ]);
+
         if (!$this->intentCatalog->has($intentId)) {
             return $this->denyAndAudit(
                 $request,
@@ -245,6 +252,11 @@ final class AgentAccessBroker
         );
         $decision = AgentAccessDecision::allowed($intentId, $accessToken);
         $this->auditDecision($request, $decision);
+        $this->logger->info('agent.access.allowed', [
+            'intent_id' => $this->safeAuditValue($intentId),
+            'data_class_count' => count($accessSet['data_classes']),
+            'tool_count' => count($accessSet['tools']),
+        ]);
 
         return $decision;
     }
@@ -351,6 +363,10 @@ final class AgentAccessBroker
     ): AgentAccessDecision {
         $decision = AgentAccessDecision::denied($intentId, $reasonCode, $publicMessage, $patientContext);
         $this->auditDecision($request, $decision);
+        $this->logger->warning('agent.access.denied', [
+            'intent_id' => $this->safeAuditValue($intentId),
+            'reason_code' => $this->safeAuditValue($reasonCode),
+        ]);
 
         return $decision;
     }

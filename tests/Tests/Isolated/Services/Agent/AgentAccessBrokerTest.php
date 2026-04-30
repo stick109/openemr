@@ -18,6 +18,7 @@ use OpenEMR\Services\Agent\AgentAccessBroker;
 use OpenEMR\Services\Agent\AgentIntentCatalog;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 
@@ -222,7 +223,8 @@ class AgentAccessBrokerTest extends TestCase
             },
             tokenIdFactory: static function (string $intentId, $patientContext, array $accessSet): string {
                 return 'test-token-' . $intentId . '-' . $patientContext->getPid();
-            }
+            },
+            logger: new NullLogger()
         );
     }
 

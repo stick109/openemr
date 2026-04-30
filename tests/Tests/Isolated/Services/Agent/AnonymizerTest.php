@@ -18,6 +18,7 @@ use OpenEMR\Services\Agent\AgentPatientContext;
 use OpenEMR\Services\Agent\Anonymizer;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\NullLogger;
 
 #[Group('isolated')]
 #[Group('agent')]
@@ -25,7 +26,7 @@ class AnonymizerTest extends TestCase
 {
     public function testAnonymizesDirectIdentifiersInStructuredFieldsAndFreeText(): void
     {
-        $anonymizer = new Anonymizer();
+        $anonymizer = new Anonymizer(logger: new NullLogger());
         $packet = [
             'request_id' => 'request-123',
             'intent_id' => AgentIntentCatalog::BASIC_PATIENT_DATA,
@@ -72,7 +73,7 @@ class AnonymizerTest extends TestCase
 
     public function testPlaceholdersAreStableWithinTokenAndResetAcrossTokens(): void
     {
-        $anonymizer = new Anonymizer();
+        $anonymizer = new Anonymizer(logger: new NullLogger());
 
         $first = $anonymizer->anonymizePayload($this->accessToken('token-a'), [
             'text' => 'Call 555-111-2222.',
@@ -91,7 +92,7 @@ class AnonymizerTest extends TestCase
 
     public function testPurgesServerSidePlaceholderScopeAfterTokenLifetime(): void
     {
-        $anonymizer = new Anonymizer(1);
+        $anonymizer = new Anonymizer(tokenLifetimeSeconds: 1, logger: new NullLogger());
         $token = $this->accessToken('token-a');
 
         $anonymizer->anonymizePayload($token, ['text' => 'Email jane.doe@example.test.']);

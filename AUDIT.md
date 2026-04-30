@@ -274,7 +274,7 @@ Impact for the agent: letting the model call arbitrary OpenEMR routes will incre
 
 Required control:
 
-- Add server-owned tools such as `getPatientBriefingEvidence`, `getActiveMedicationEvidence`, `getRecentLabEvidence`, and `getEncounterTimelineEvidence`.
+- Add server-owned tools such as `get_patient_snapshot`, `get_current_medications`, `get_recent_events`, and `get_changed_since_last_visit`.
 - Return source IDs, table/resource names, timestamps, and display text separately.
 - Keep model-visible data minimized and already filtered.
 
@@ -469,13 +469,10 @@ Before implementing the Clinical Co-Pilot, complete these gate items:
 7. Disable or redact full API response logging for any agent endpoint.
 8. Render model output only through escaped text or a strict safe-markdown renderer.
 
-## Open Questions
-
-- What exact deployment environment will host OpenEMR and any LLM/observability components?
-- Which LLM and tracing providers will receive PHI, and what BAA/no-training settings will be documented?
-
 ## Resolved Questions
 
 - **Workflow choice (`USERS.md`):** picked a single doctor user preparing to see a scheduled outpatient.
 - **Citation form (`ARCHITECTURE.md`):** record-level citation chips, with a `show_source` intent for drilldown — no unbounded note dumps in the briefing.
 - **Output persistence (MVP):** read-only MVP; outputs are not persisted. `ARCHITECTURE.md` State Management defers persistence to a later design with provenance, retention, and review.
+- **Deployment environment:** Railway will host the OpenEMR fork and the agent server.
+- **LLM and tracing PHI exposure:** the LLM provider is covered by a signed BAA with no-training and bounded retention, so raw evidence is sent to the model without redaction. The anonymizer (`ARCHITECTURE.md` Anonymizer Component) is reserved for the durable logging path (`api_log` and equivalent sinks): it strips direct identifiers from any payload before it is persisted, so durable log records never contain raw PHI. Provider, BAA, retention, and access controls remain the primary HIPAA controls for model-bound traffic.

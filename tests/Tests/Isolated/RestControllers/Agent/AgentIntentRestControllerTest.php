@@ -17,6 +17,7 @@ use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\RestControllers\Agent\AgentIntentRestController;
 use OpenEMR\Services\Agent\AgentAccessBroker;
 use OpenEMR\Services\Agent\AgentEvidenceResponseBuilder;
+use OpenEMR\Services\Agent\Anonymizer;
 use OpenEMR\Services\Agent\Evidence\AgentEvidenceToolset;
 use OpenEMR\Services\Agent\Evidence\EvidenceCaps;
 use OpenEMR\Services\Agent\Evidence\EvidenceRecordRepositoryInterface;
@@ -46,7 +47,9 @@ class AgentIntentRestControllerTest extends TestCase
                 repository: new AgentIntentRestControllerEvidenceRepository(),
                 logger: new NullLogger(),
                 requestIdFactory: static fn (): string => 'agent-test-request'
-            )
+            ),
+            anonymizer: new Anonymizer(logger: new NullLogger()),
+            logger: new NullLogger()
         );
         $this->controller = new AgentIntentRestController(
             accessBroker: new AgentAccessBroker(
@@ -67,9 +70,11 @@ class AgentIntentRestControllerTest extends TestCase
                         'comments' => $comments,
                         'patient_id' => $patientId,
                     ];
-                }
+                },
+                logger: new NullLogger()
             ),
-            responseBuilder: $responseBuilder
+            responseBuilder: $responseBuilder,
+            logger: new NullLogger()
         );
     }
 
@@ -100,7 +105,7 @@ class AgentIntentRestControllerTest extends TestCase
         $this->assertArrayNotHasKey('placeholder_map', $request->attributes->get('agentAnonymizedPayloadLog'));
     }
 
-    public function testStoresAnonymizedPayloadForLlmAndOptionalPayloadLogs(): void
+    public function testStoresAnonymizedPayloadForOptionalPayloadLogs(): void
     {
         $request = $this->requestWithJson([
             'intent_id' => 'basic_patient_data',
@@ -115,7 +120,7 @@ class AgentIntentRestControllerTest extends TestCase
         $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
         $this->assertStringContainsString('Public ID P123', $body['data']['evidence_packet']['sources'][0]['display']);
         $this->assertIsArray($anonymizedPayload);
-        $this->assertSame('agent.anonymized.v1', $anonymizedPayload['payload_version']);
+        $this->assertSame('agent.log.v1', $anonymizedPayload['payload_version']);
         $this->assertSame('basic_patient_data', $anonymizedPayload['intent_id']);
         $this->assertSame('agent-test-request', $anonymizedPayload['evidence_packet']['request_id']);
         $this->assertSame('demographics:patient_data:123', $anonymizedPayload['evidence_packet']['sources'][0]['source_id']);

@@ -13,20 +13,29 @@ declare(strict_types=1);
 namespace OpenEMR\Services\Agent;
 
 use InvalidArgumentException;
+use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Services\Agent\Evidence\AgentEvidenceToolset;
+use Psr\Log\LoggerInterface;
+use Throwable;
 
 final class AgentEvidenceResponseBuilder
 {
     /**
+     * Anonymized projection of the evidence packet, prepared exclusively for
+     * `api_log`-style durable logging. The LLM is called separately under the
+     * provider BAA with raw evidence, so this payload never participates in
+     * model input.
+     *
      * @var array<string, mixed>
      */
-    private array $lastAnonymizedPayload = [];
+    private array $lastLogPayload = [];
 
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
         private readonly AgentIntentPlaceholderResponseBuilder $placeholderResponseBuilder = new AgentIntentPlaceholderResponseBuilder(),
         private readonly AgentEvidenceToolset $toolset = new AgentEvidenceToolset(),
-        private readonly Anonymizer $anonymizer = new Anonymizer()
+        private readonly Anonymizer $anonymizer = new Anonymizer(),
+        private readonly LoggerInterface $logger = new SystemLogger()
     ) {
     }
 
@@ -35,22 +44,44 @@ final class AgentEvidenceResponseBuilder
      */
     public function build(string $intentId, AgentAccessToken $accessToken, ?string $sourceId = null): array
     {
-        $this->lastAnonymizedPayload = [];
+        $this->lastLogPayload = [];
+        $this->logger->debug('agent.response.building', [
+            'intent_id' => $intentId,
+            'has_source_id' => $sourceId !== null && $sourceId !== '',
+        ]);
+
         $intent = $this->intentCatalog->get($intentId);
         if ($intent === null) {
+            $this->logger->warning('agent.response.unknown_intent', [
+                'intent_id' => $intentId,
+            ]);
             throw new InvalidArgumentException('Unknown agent intent_id.');
         }
 
         if (!$this->toolset->supportsIntent($intentId)) {
+            $this->logger->info('agent.response.placeholder', [
+                'intent_id' => $intentId,
+            ]);
             return $this->placeholderResponseBuilder->build($intentId);
         }
 
         if ($intentId === AgentIntentCatalog::SHOW_SOURCE && ($sourceId === null || $sourceId === '')) {
+            $this->logger->info('agent.response.source_required', [
+                'intent_id' => $intentId,
+            ]);
             return $this->sourceRequiredResponse($intent, $accessToken);
         }
 
         $packet = $this->toolset->buildPacket($intentId, $accessToken, $intent, $sourceId);
-        $this->lastAnonymizedPayload = $this->anonymizedPayload($intent, $accessToken, $packet);
+        $this->lastLogPayload = $this->safeBuildLogPayload($intent, $accessToken, $packet);
+
+        $this->logger->info('agent.response.evidence_ready', [
+            'intent_id' => $intentId,
+            'request_id' => (string) ($packet['request_id'] ?? ''),
+            'citation_count' => is_array($packet['sources'] ?? null) ? count($packet['sources']) : 0,
+            'checked_evidence_count' => is_array($packet['checked_evidence'] ?? null) ? count($packet['checked_evidence']) : 0,
+            'placeholder_count' => $this->anonymizer->placeholderCount($accessToken),
+        ]);
 
         return [
             'status' => 'evidence_ready',
@@ -63,11 +94,17 @@ final class AgentEvidenceResponseBuilder
     }
 
     /**
+     * Anonymized payload prepared for the most recent `build()` call, suitable
+     * for `api_log` writes. Returns an empty array when no evidence was
+     * produced (placeholder intents or source-required responses with no
+     * resolved sources). Never used as model input — LLM calls run under the
+     * provider BAA with raw evidence.
+     *
      * @return array<string, mixed>
      */
-    public function getLastAnonymizedPayload(): array
+    public function getLastLogPayload(): array
     {
-        return $this->lastAnonymizedPayload;
+        return $this->lastLogPayload;
     }
 
     /**
@@ -88,7 +125,7 @@ final class AgentEvidenceResponseBuilder
             'checked_evidence' => [],
             'tool_runs' => [],
         ];
-        $this->lastAnonymizedPayload = $this->anonymizedPayload($intent, $accessToken, $packet);
+        $this->lastLogPayload = $this->safeBuildLogPayload($intent, $accessToken, $packet);
 
         return [
             'status' => 'source_required',
@@ -116,19 +153,49 @@ final class AgentEvidenceResponseBuilder
     }
 
     /**
+     * Build the anonymized log projection of an evidence packet. This is the
+     * only call site that invokes the Anonymizer, and its output is consumed
+     * solely by `ApiResponseLoggerListener` to keep raw PHI out of `api_log`.
+     * The LLM orchestrator receives the raw `$packet` separately under the
+     * provider BAA.
+     *
      * @param array<string, mixed> $intent
      * @param array<string, mixed> $packet
      * @return array<string, mixed>
      */
-    private function anonymizedPayload(array $intent, AgentAccessToken $accessToken, array $packet): array
+    private function buildLogPayload(array $intent, AgentAccessToken $accessToken, array $packet): array
     {
         return [
-            'payload_version' => 'agent.anonymized.v1',
+            'payload_version' => 'agent.log.v1',
             'intent_id' => (string) $intent['intent_id'],
             'prompt_text' => $this->anonymizer->anonymizePayload($accessToken, (string) $intent['prompt_text']),
             'evidence_packet' => $this->anonymizer->anonymizeEvidencePacket($accessToken, $packet),
             'placeholder_count' => $this->anonymizer->placeholderCount($accessToken),
         ];
+    }
+
+    /**
+     * Wrap {@see buildLogPayload()} so that an Anonymizer failure cannot break
+     * the request flow. Anonymization is for durable logging only; the LLM
+     * call and verifier do not depend on this output. On failure, drop the
+     * optional log entry and let `Anonymizer::reportFailure()` carry the
+     * audit trail.
+     *
+     * @param array<string, mixed> $intent
+     * @param array<string, mixed> $packet
+     * @return array<string, mixed>
+     */
+    private function safeBuildLogPayload(array $intent, AgentAccessToken $accessToken, array $packet): array
+    {
+        try {
+            return $this->buildLogPayload($intent, $accessToken, $packet);
+        } catch (Throwable $exception) {
+            $this->logger->warning('agent.response.log_payload_skipped', [
+                'intent_id' => (string) ($intent['intent_id'] ?? ''),
+                'error_class' => $exception::class,
+            ]);
+            return [];
+        }
     }
 
     /**

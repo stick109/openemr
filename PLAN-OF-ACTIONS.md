@@ -41,14 +41,14 @@ Status values: `Done`, `Pending`.
 | P4.1 | Done    | Implement `src\Services\Agent\Anonymizer`.                                                                     | Depends on P3.3 for the evidence packet shape it will transform.                     |
 | P4.2 | Done    | Replace direct identifiers with stable per-interaction placeholders.                                            | Depends on P4.1.                                                                     |
 | P4.3 | Done    | Keep the placeholder map server-side and scoped to the agent access token lifetime.                             | Depends on P2.1 and P4.1.                                                           |
-| P4.4 | Done    | Route all LLM-bound evidence and optional payload logs through the anonymizer.                                  | Depends on P4.1 through P4.3 and must be complete before external LLM calls.         |
+| P4.4 | Done    | Route optional payload logs through the anonymizer. LLM-bound evidence is sent raw because the provider is covered by a signed BAA. | Depends on P4.1 through P4.3.                                                       |
 | P4.5 | Done    | Add tests for names, addresses, SSNs, phone numbers, emails, insurance IDs, and free-text identifiers.          | Depends on P4.1 through P4.4.                                                       |
 
 ## Phase 5: LLM And Verification
 
 | ID   | Status  | Work Item                                                                                           | Dependencies / Notes                                                     |
 | ---- | ------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| P5.1 | Pending | Add server-side LLM provider client behind a configuration interface.                               | Depends on P4.4 so model-bound evidence is anonymized first.             |
+| P5.1 | Pending | Add server-side LLM provider client behind a configuration interface.                               | Depends on the provider BAA being in place (LLM input is raw evidence, not anonymized). |
 | P5.2 | Pending | Keep provider keys server-side.                                                                     | Depends on P5.1 and deployment configuration.                            |
 | P5.3 | Pending | Add structured output schema.                                                                       | Depends on P5.1 and P3.3 because outputs must cite evidence packet IDs.  |
 | P5.4 | Pending | Add verifier for citations, patient ownership, unsupported claims, and out-of-scope clinical advice. | Depends on P2.3, P3.3, and P5.3.                                        |

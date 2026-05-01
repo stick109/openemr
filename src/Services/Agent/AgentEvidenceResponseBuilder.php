@@ -372,6 +372,10 @@ final class AgentEvidenceResponseBuilder
     {
         $display = trim((string) ($source['display'] ?? 'Source record'));
 
+        if ($intentId === AgentIntentCatalog::CURRENT_MEDICATIONS) {
+            return $this->currentMedicationClaimText($source, $display);
+        }
+
         if ($intentId === AgentIntentCatalog::SHOW_SOURCE) {
             $date = trim((string) ($source['date'] ?? ''));
             $status = trim((string) ($source['status'] ?? 'unknown'));
@@ -385,6 +389,78 @@ final class AgentEvidenceResponseBuilder
         }
 
         return $display;
+    }
+
+    /**
+     * Keep the visible deterministic medication answer short enough for the
+     * verifier while preserving the expanded source packet for citations and
+     * source drilldown.
+     *
+     * @param array<string, mixed> $source
+     */
+    private function currentMedicationClaimText(array $source, string $display): string
+    {
+        if ((string) ($source['source_type'] ?? '') === 'medication_review') {
+            return $this->truncateClaimText($display, 140);
+        }
+
+        $segments = array_values(array_filter(
+            array_map('trim', explode(';', $display)),
+            static fn (string $segment): bool => $segment !== ''
+        ));
+
+        $preferredPrefixes = [
+            'medication:',
+            'prescription drug:',
+            'linked prescription drug:',
+            'status:',
+            'dosage instructions:',
+            'prescription dosage instructions:',
+            'dosage:',
+            'route:',
+            'quantity:',
+            'rxnorm:',
+            'usage category:',
+            'adherence value:',
+            'record type:',
+        ];
+
+        $selected = [];
+        foreach ($preferredPrefixes as $prefix) {
+            foreach ($segments as $segment) {
+                if (stripos($segment, $prefix) === 0) {
+                    $selected[] = $segment;
+                    break;
+                }
+            }
+        }
+
+        if ($selected === []) {
+            $selected = $segments === [] ? [$display] : [reset($segments)];
+        }
+
+        return $this->truncateClaimText($this->joinClaimSegments($selected), 140);
+    }
+
+    /**
+     * @param list<string> $segments
+     */
+    private function joinClaimSegments(array $segments): string
+    {
+        return implode('; ', array_values(array_unique(array_filter(
+            $segments,
+            static fn (string $segment): bool => trim($segment) !== ''
+        ))));
+    }
+
+    private function truncateClaimText(string $text, int $limit): string
+    {
+        $text = trim($text);
+        if ($text === '' || strlen($text) <= $limit) {
+            return $text;
+        }
+
+        return rtrim(substr($text, 0, max(0, $limit - 3))) . '...';
     }
 
     /**

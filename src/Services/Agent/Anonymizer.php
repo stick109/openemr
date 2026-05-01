@@ -275,6 +275,12 @@ final class Anonymizer
         ) ?? $text;
 
         $text = preg_replace_callback(
+            '/\b((?:employer(?: name)?(?!\s+address\b)|workplace)\s*[:#]?\s*)([A-Z0-9][A-Za-z0-9&.,\' -]{1,80})(?=\s*(?:;|\.|$))/i',
+            fn (array $matches): string => $matches[1] . $this->placeholderFor($accessToken, 'employer_name', $matches[2]),
+            $text
+        ) ?? $text;
+
+        $text = preg_replace_callback(
             '/\b((?:insurance|member|policy|subscriber)\s*(?:id|number|no\.?|#)\s*[:#]?\s*)([A-Z0-9][A-Z0-9._-]{4,})\b/i',
             fn (array $matches): string => $matches[1] . $this->placeholderFor($accessToken, 'insurance_id', $matches[2]),
             $text
@@ -348,6 +354,16 @@ final class Anonymizer
 
         if (
             in_array($fieldName, [
+                'employer',
+                'employer_name',
+                'workplace',
+            ], true)
+        ) {
+            return 'employer_name';
+        }
+
+        if (
+            in_array($fieldName, [
                 'patient_name',
                 'full_name',
                 'first_name',
@@ -412,6 +428,7 @@ final class Anonymizer
             'phone' => '[PATIENT_PHONE_' . $counter . ']',
             'email' => '[PATIENT_EMAIL_' . $counter . ']',
             'insurance_id' => '[INSURANCE_ID_' . $counter . ']',
+            'employer_name' => '[EMPLOYER_NAME_' . $counter . ']',
             default => '[REDACTED_IDENTIFIER_' . $counter . ']',
         };
     }

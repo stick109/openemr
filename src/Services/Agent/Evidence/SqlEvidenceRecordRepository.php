@@ -20,6 +20,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
 {
     private const BASIC_PATIENT_ADDRESS_LIMIT = 3;
     private const BASIC_PATIENT_TELECOM_LIMIT = 5;
+    private const BASIC_PATIENT_CONTACT_LIMIT = 1;
+    private const BASIC_PATIENT_EMPLOYER_LIMIT = 1;
 
     /**
      * @return list<array<string, mixed>>
@@ -128,6 +130,24 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             }
 
             $records[] = $this->mapTelecomRecord($telecomRow);
+            $remaining--;
+            if ($remaining <= 0) {
+                break;
+            }
+        }
+
+        $contactLimit = min(self::BASIC_PATIENT_CONTACT_LIMIT, $remaining);
+        foreach ($this->fetchPatientContactRows($pid, $contactLimit) as $contactRow) {
+            $records[] = $this->mapContactRecord($contactRow);
+            $remaining--;
+            if ($remaining <= 0) {
+                return $records;
+            }
+        }
+
+        $employerLimit = min(self::BASIC_PATIENT_EMPLOYER_LIMIT, $remaining);
+        foreach ($this->fetchPatientEmployerRows($pid, $employerLimit) as $employerRow) {
+            $records[] = $this->mapEmployerRecord($employerRow);
             $remaining--;
             if ($remaining <= 0) {
                 break;
@@ -409,8 +429,10 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
 
         return match ($table) {
             'patient_data' => $this->fetchPatientSource($pid, $recordId),
+            'contact' => $this->fetchContactSource($pid, $recordId),
             'addresses' => $this->fetchAddressSource($pid, $recordId),
             'contact_telecom' => $this->fetchContactTelecomSource($pid, $recordId),
+            'employer_data' => $this->fetchEmployerSource($pid, $recordId),
             'lists' => $this->fetchListSource($pid, $recordId),
             'lists_medication' => $this->fetchMedicationIssueSource($pid, $recordId),
             'form_encounter' => $this->fetchEncounterSource($pid, $recordId),
@@ -437,6 +459,29 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         }
 
         return $rows;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fetchPatientContactRows(int $pid, int $limit): array
+    {
+        if ($limit <= 0) {
+            return [];
+        }
+
+        return $this->fetchRows(
+            "SELECT
+                id AS contact_id,
+                foreign_table_name,
+                foreign_id AS patient_id
+             FROM contact
+             WHERE foreign_table_name = 'patient_data'
+                AND foreign_id = ?
+             ORDER BY id ASC
+             LIMIT " . $limit,
+            [$pid]
+        );
     }
 
     /**
@@ -484,6 +529,48 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
                 AND c.foreign_id = ?
                 AND ca.status = 'A'
              ORDER BY ca.is_primary DESC, COALESCE(ca.priority, 999999) ASC, ca.id ASC
+             LIMIT " . $limit,
+            [$pid]
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fetchPatientEmployerRows(int $pid, int $limit): array
+    {
+        if ($limit <= 0) {
+            return [];
+        }
+
+        return $this->fetchRows(
+            "SELECT
+                emp.id AS employer_data_id,
+                emp.uuid AS employer_uuid,
+                emp.name,
+                emp.street,
+                emp.street_line_2,
+                emp.postal_code,
+                emp.city,
+                emp.state,
+                emp.country,
+                emp.date,
+                emp.pid AS patient_id,
+                emp.start_date,
+                emp.end_date,
+                emp.occupation,
+                occupation.title AS occupation_title,
+                emp.industry,
+                industry.title AS industry_title
+             FROM employer_data emp
+             LEFT JOIN list_options occupation
+                ON occupation.list_id = 'OccupationODH'
+                    AND occupation.option_id = emp.occupation
+             LEFT JOIN list_options industry
+                ON industry.list_id = 'IndustryODH'
+                    AND industry.option_id = emp.industry
+             WHERE emp.pid = ?
+             ORDER BY COALESCE(emp.date, '1000-01-01 00:00:00') DESC, emp.id DESC
              LIMIT " . $limit,
             [$pid]
         );
@@ -643,6 +730,39 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
+    private function mapContactRecord(array $row): array
+    {
+        $displayParts = [];
+        $fieldsUsed = [];
+
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'structured contact profile',
+            'patient contact record',
+            ['foreign_table_name', 'foreign_id']
+        );
+
+        return [
+            'source_id' => 'demographics:contact:' . (int) $row['contact_id'],
+            'source_type' => 'contact',
+            'data_class' => 'demographics',
+            'table' => 'contact',
+            'record_id' => (string) (int) $row['contact_id'],
+            'patient_id' => (int) $row['patient_id'],
+            'date' => null,
+            'status' => 'available',
+            'display' => $this->joinDisplay($displayParts, 'Structured patient contact profile'),
+            'excerpt' => $this->joinDisplay($displayParts, 'Structured patient contact profile'),
+            'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
+            'reliability' => 'structured_patient_contact_profile',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
     private function mapAddressRecord(array $row): array
     {
         $displayParts = [];
@@ -724,6 +844,46 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'excerpt' => $this->joinDisplay($displayParts, 'Structured patient contact'),
             'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_patient_contact',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function mapEmployerRecord(array $row): array
+    {
+        $displayParts = [];
+        $fieldsUsed = [];
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'employer', $row['name'] ?? null, ['name']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'employer address', $this->formatEmployerAddress($row), $this->filledFields($row, [
+            'street',
+            'street_line_2',
+            'city',
+            'state',
+            'postal_code',
+            'country',
+        ]));
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'occupation', $this->optionLabel($row['occupation'] ?? null, $row['occupation_title'] ?? null), ['occupation']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'industry', $this->optionLabel($row['industry'] ?? null, $row['industry_title'] ?? null), ['industry']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'employment start', $this->dateValue($row, ['start_date']), ['start_date']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'employment end', $this->dateValue($row, ['end_date']), ['end_date']);
+
+        return [
+            'source_id' => 'demographics:employer_data:' . (int) $row['employer_data_id'],
+            'source_type' => 'employer',
+            'data_class' => 'demographics',
+            'table' => 'employer_data',
+            'record_id' => (string) (int) $row['employer_data_id'],
+            'record_uuid' => $this->uuidToString($row['employer_uuid'] ?? null),
+            'patient_id' => (int) $row['patient_id'],
+            'date' => $this->dateValue($row, ['date']),
+            'status' => 'available',
+            'display' => $this->joinDisplay($displayParts, 'Patient employer record'),
+            'excerpt' => $this->joinDisplay($displayParts, 'Patient employer record'),
+            'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
+            'reliability' => 'structured_patient_employer',
         ];
     }
 
@@ -858,6 +1018,24 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         return $records[0] ?? null;
     }
 
+    private function fetchContactSource(int $pid, int $recordId): ?array
+    {
+        $row = sqlQuery(
+            "SELECT
+                id AS contact_id,
+                foreign_table_name,
+                foreign_id AS patient_id
+             FROM contact
+             WHERE foreign_table_name = 'patient_data'
+                AND foreign_id = ?
+                AND id = ?
+             LIMIT 1",
+            [$pid, $recordId]
+        );
+
+        return is_array($row) && $row !== [] ? $this->mapContactRecord($row) : null;
+    }
+
     private function fetchAddressSource(int $pid, int $recordId): ?array
     {
         $row = sqlQuery(
@@ -939,6 +1117,43 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         );
 
         return is_array($row) && $row !== [] ? $this->mapTelecomRecord($row) : null;
+    }
+
+    private function fetchEmployerSource(int $pid, int $recordId): ?array
+    {
+        $row = sqlQuery(
+            "SELECT
+                emp.id AS employer_data_id,
+                emp.uuid AS employer_uuid,
+                emp.name,
+                emp.street,
+                emp.street_line_2,
+                emp.postal_code,
+                emp.city,
+                emp.state,
+                emp.country,
+                emp.date,
+                emp.pid AS patient_id,
+                emp.start_date,
+                emp.end_date,
+                emp.occupation,
+                occupation.title AS occupation_title,
+                emp.industry,
+                industry.title AS industry_title
+             FROM employer_data emp
+             LEFT JOIN list_options occupation
+                ON occupation.list_id = 'OccupationODH'
+                    AND occupation.option_id = emp.occupation
+             LEFT JOIN list_options industry
+                ON industry.list_id = 'IndustryODH'
+                    AND industry.option_id = emp.industry
+             WHERE emp.pid = ?
+                AND emp.id = ?
+             LIMIT 1",
+            [$pid, $recordId]
+        );
+
+        return is_array($row) && $row !== [] ? $this->mapEmployerRecord($row) : null;
     }
 
     private function fetchListSource(int $pid, int $recordId): ?array
@@ -1124,6 +1339,19 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             $this->localityLine($row['city'] ?? null, $row['state'] ?? null, $row['postal_code'] ?? null),
             $row['county'] ?? null,
             $row['country_code'] ?? null,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function formatEmployerAddress(array $row): string
+    {
+        return $this->formatAddressFromValues([
+            $row['street'] ?? null,
+            $row['street_line_2'] ?? null,
+            $this->localityLine($row['city'] ?? null, $row['state'] ?? null, $row['postal_code'] ?? null),
+            $row['country'] ?? null,
         ]);
     }
 

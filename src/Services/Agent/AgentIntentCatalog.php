@@ -40,7 +40,7 @@ final class AgentIntentCatalog
             'prompt_text' => 'Show me basic patient data.',
             'primary_users' => ['doctor'],
             'use_case_traces' => ['D1'],
-            'max_records' => 10,
+            'max_records' => 11,
             'max_documents' => 0,
             'lookback_days' => 0,
         ],

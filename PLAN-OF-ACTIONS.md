@@ -69,7 +69,7 @@ Status values: `Done`, `Pending`.
 
 | ID   | Status  | Work Item                                                                                              | Dependencies / Notes                                                       |
 | ---- | ------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned structured contact addresses, and patient-owned structured telecom values. | Implemented with bounded child sources and `max_records = 10`. Public patient id and last-updated timestamp are excluded. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
+| P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned contact records, structured contact addresses, structured telecom values, and latest employer data. | Implemented with bounded child sources and `max_records = 11`. Public patient id and last-updated timestamp are excluded. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
 
 ### P7.1 Detailed Plan: Expand `basic_patient_data`
 
@@ -93,10 +93,12 @@ Expand the `basic_patient_data` evidence packet so the button answers the natura
 - Implemented in [SqlEvidenceRecordRepository.php](src\Services\Agent\Evidence\SqlEvidenceRecordRepository.php), [AgentIntentCatalog.php](src\Services\Agent\AgentIntentCatalog.php), [AgentEvidenceResponseBuilder.php](src\Services\Agent\AgentEvidenceResponseBuilder.php), [EvidencePacketNormalizer.php](src\Services\Agent\Evidence\EvidencePacketNormalizer.php), and [Anonymizer.php](src\Services\Agent\Anonymizer.php).
 - The primary patient source now uses the curated `patient_data` projection and continues to emit `demographics:patient_data:{pid}`.
 - Public patient id and last-updated timestamp are intentionally not selected or emitted by `basic_patient_data`.
+- One patient-owned `contact` source is emitted when a `contact.foreign_table_name = 'patient_data'` row exists.
 - Structured addresses are emitted only through the patient-owned `contact` -> `contact_address` -> `addresses` pattern and are capped at 3 child sources.
 - Structured phone, SMS, fax, and email values are emitted only through the patient-owned `contact` -> `contact_telecom` pattern and are capped at 5 child sources.
+- The latest patient-owned `employer_data` row is emitted with employer name, employer address, occupation, industry, and employment period when available.
 - Direct `phone_numbers.foreign_id` reads were not implemented because `phone_numbers` is generic and does not provide a safe patient ownership discriminator by itself.
-- Source drilldown now supports the emitted `patient_data`, `addresses`, and `contact_telecom` source ids with current-patient ownership checks.
+- Source drilldown now supports the emitted `patient_data`, `contact`, `addresses`, `contact_telecom`, and `employer_data` source ids with current-patient ownership checks.
 - Missing address and phone responses now explicitly say the values were not found in checked evidence instead of implying a global absence.
 - Focused isolated tests cover richer patient data output, privacy exclusions, ownership checks, deduplication, caps, source drilldown, catalog caps, and anonymizer coverage.
 
@@ -105,7 +107,7 @@ Expand the `basic_patient_data` evidence packet so the button answers the natura
 - Do not include medications from `lists`, `lists_medication`, or `prescriptions`.
 - Do not include allergies from `lists`.
 - Do not include problems, health concerns, surgeries, devices, or dental issues from `lists`.
-- Do not include encounters, forms, notes, SOAP notes, dictation, documents, labs, procedures, orders, immunizations, SDOH history, questionnaires, claims, billing, payments, insurance, care-team tables, employer tables, portal activity, reminders, or audit logs.
+- Do not include encounters, forms, notes, SOAP notes, dictation, documents, labs, procedures, orders, immunizations, SDOH history, questionnaires, claims, billing, payments, insurance, care-team tables, portal activity, reminders, or audit logs.
 - Do not add a new UI button as part of this work. The existing `Basic patient data` button should keep working.
 - Do not add free-text routing. This remains a closed-intent retrieval path.
 - Do not create or modify schema.
@@ -129,6 +131,16 @@ Expand the `basic_patient_data` evidence packet so the button answers the natura
    - Candidate join key: `phone_numbers.foreign_id = patient_data.pid`.
    - Implementation must confirm this ownership convention before reading rows, because `phone_numbers` is a generic table and can also support non-patient entities in other workflows.
    - If no reliable patient-only discriminator exists, implementation should either use the existing patient phone service/pattern already trusted elsewhere in the codebase or defer structured `phone_numbers` until safe ownership can be proven.
+
+4. `contact`
+   - Purpose: patient-owned contact container rows used to link structured address and telecom records.
+   - Ownership rule: `contact.foreign_table_name = 'patient_data'` and `contact.foreign_id = patient_data.pid`.
+   - Emit at most one contact source because the table itself carries only ownership/container data.
+
+5. `employer_data`
+   - Purpose: latest employer, employer address, occupation, industry, and employment-period context.
+   - Ownership rule: `employer_data.pid = patient_data.pid`.
+   - Emit at most one latest row ordered by employer record date and id.
 
 #### `patient_data` Field Plan
 
@@ -273,7 +285,7 @@ Preferred implementation shape:
 - Add narrower source types for child rows only if they improve citations, for example `address` and `phone`.
 - Keep `max_documents = 0`; these are structured records, not documents.
 - Revisit `max_records` for `basic_patient_data`. The current cap of 1 cannot represent patient row plus address rows plus phone rows if each row is a separate source.
-- Preferred cap model: keep one primary patient source and allow bounded child sources under the same intent. If the existing cap object cannot represent child caps, increase `max_records` enough to cover one patient row plus address and phone rows, for example `max_records = 10`.
+- Preferred cap model: keep one primary patient source and allow bounded child sources under the same intent. If the existing cap object cannot represent child caps, increase `max_records` enough to cover one patient row plus contact, address, phone, and employer rows, for example `max_records = 11`.
 - Every emitted source must include `source_id`, `source_type`, `data_class`, `table`, `record_id`, `patient_id`, `date`, `status`, `display`, `excerpt`, `fields_used`, and `reliability`.
 - Primary source id should remain stable for the patient row: `demographics:patient_data:{pid}`.
 - Address source ids, if emitted as separate citations, should be stable and table-specific: `demographics:addresses:{id}`.
@@ -326,7 +338,7 @@ The answer should also be explicit about missing data:
 
 - Raw evidence may still go to the configured LLM provider only through the existing BAA-covered LLM path.
 - Durable API logging must continue to use anonymized evidence only.
-- Address, phone, email, name, and DOB must be included in anonymizer coverage.
+- Address, phone, email, name, DOB, and employer name must be included in anonymizer coverage.
 - SSN and driver's license should remain excluded from P7.1 evidence to avoid unnecessary high-risk identifier exposure.
 - Free-text fields should be kept out of P7.1 unless they have clear bounded semantics. Avoid broad text fields that can carry unrelated notes.
 

@@ -44,6 +44,16 @@ namespace OpenEMR\Services\Agent\Evidence {
         public static array $telecomRows = [];
 
         /**
+         * @var list<array<string, mixed>>
+         */
+        public static array $contactRows = [];
+
+        /**
+         * @var list<array<string, mixed>>
+         */
+        public static array $employerRows = [];
+
+        /**
          * @var list<array{sql: string, params: array<int, mixed>}>
          */
         public static array $queries = [];
@@ -60,6 +70,8 @@ namespace OpenEMR\Services\Agent\Evidence {
             self::$patientRows = [];
             self::$addressRows = [];
             self::$telecomRows = [];
+            self::$contactRows = [];
+            self::$employerRows = [];
             self::$queries = [];
             self::$statements = [];
             self::$statementCount = 0;
@@ -81,6 +93,14 @@ namespace OpenEMR\Services\Agent\Evidence {
                 return self::firstOwnedRow(self::$telecomRows, 'contact_telecom_id', $params);
             }
 
+            if (str_contains($sql, 'FROM contact')) {
+                return self::firstOwnedRow(self::$contactRows, 'contact_id', $params);
+            }
+
+            if (str_contains($sql, 'FROM employer_data')) {
+                return self::firstOwnedRow(self::$employerRows, 'employer_data_id', $params);
+            }
+
             return false;
         }
 
@@ -93,6 +113,10 @@ namespace OpenEMR\Services\Agent\Evidence {
                 $rows = self::ownedRows(self::$addressRows, (int) ($params[0] ?? 0), self::limitFromSql($sql));
             } elseif (str_contains($sql, 'INNER JOIN contact_telecom')) {
                 $rows = self::ownedRows(self::$telecomRows, (int) ($params[0] ?? 0), self::limitFromSql($sql));
+            } elseif (str_contains($sql, 'FROM contact')) {
+                $rows = self::ownedRows(self::$contactRows, (int) ($params[0] ?? 0), self::limitFromSql($sql));
+            } elseif (str_contains($sql, 'FROM employer_data')) {
+                $rows = self::ownedRows(self::$employerRows, (int) ($params[0] ?? 0), self::limitFromSql($sql));
             }
 
             $id = 'stmt-' . (++self::$statementCount);
@@ -250,6 +274,50 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $this->assertNotContains('demographics:contact_telecom:603', $sourceIds);
             $this->assertStringContainsString("c.foreign_table_name = 'patient_data'", $sql);
             $this->assertStringNotContainsString('phone_numbers', $sql);
+        }
+
+        public function testContactAndEmployerRowsArePatientScopedAndDrilldownable(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$patientRows[123] = $this->patientRow();
+            SqlEvidenceRecordRepositorySqlFixture::$contactRows = [
+                $this->contactRow(701, 123),
+                $this->contactRow(702, 999),
+            ];
+            SqlEvidenceRecordRepositorySqlFixture::$employerRows = [
+                $this->employerRow(801, 123, [
+                    'name' => 'Acme Health',
+                    'street' => '99 Work Rd',
+                    'city' => 'Boston',
+                    'state' => 'MA',
+                    'postal_code' => '02110',
+                    'occupation' => '15-1252.00',
+                    'occupation_title' => 'Software Developers',
+                    'industry' => '541511',
+                    'industry_title' => 'Custom Computer Programming Services',
+                    'start_date' => '2020-01-01 00:00:00',
+                ]),
+                $this->employerRow(802, 999, ['name' => 'Other Patient Employer']),
+            ];
+            $repository = new SqlEvidenceRecordRepository();
+
+            $records = $repository->fetchBasicPatientData(123, new EvidenceCaps(11, 0, 0));
+            $sourceIds = array_column($records, 'source_id');
+            $contact = $repository->fetchSourceRecord(123, 'demographics:contact:701', new EvidenceCaps(11, 0, 0));
+            $employer = $repository->fetchSourceRecord(123, 'demographics:employer_data:801', new EvidenceCaps(11, 0, 0));
+
+            $this->assertContains('demographics:contact:701', $sourceIds);
+            $this->assertContains('demographics:employer_data:801', $sourceIds);
+            $this->assertNotContains('demographics:contact:702', $sourceIds);
+            $this->assertNotContains('demographics:employer_data:802', $sourceIds);
+            $this->assertSame('demographics:contact:701', $contact['source_id'] ?? null);
+            $this->assertSame('demographics:employer_data:801', $employer['source_id'] ?? null);
+            $this->assertStringContainsString('structured contact profile: patient contact record', $contact['display'] ?? '');
+            $this->assertStringContainsString('employer: Acme Health', $employer['display'] ?? '');
+            $this->assertStringContainsString('employer address: 99 Work Rd, Boston MA 02110', $employer['display'] ?? '');
+            $this->assertStringContainsString('occupation: Software Developers', $employer['display'] ?? '');
+            $this->assertStringContainsString('industry: Custom Computer Programming Services', $employer['display'] ?? '');
+            $this->assertNull($repository->fetchSourceRecord(999, 'demographics:contact:701', new EvidenceCaps(11, 0, 0)));
+            $this->assertNull($repository->fetchSourceRecord(999, 'demographics:employer_data:801', new EvidenceCaps(11, 0, 0)));
         }
 
         public function testBasicPatientDataCapsChildSources(): void
@@ -410,6 +478,46 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
                 'period_start' => '2026-01-01 00:00:00',
                 'period_end' => null,
                 'created_date' => '2026-01-01 00:00:00',
+            ];
+        }
+
+        /**
+         * @param array<string, mixed> $overrides
+         * @return array<string, mixed>
+         */
+        private function contactRow(int $id, int $pid, array $overrides = []): array
+        {
+            return $overrides + [
+                'contact_id' => $id,
+                'foreign_table_name' => 'patient_data',
+                'patient_id' => $pid,
+            ];
+        }
+
+        /**
+         * @param array<string, mixed> $overrides
+         * @return array<string, mixed>
+         */
+        private function employerRow(int $id, int $pid, array $overrides = []): array
+        {
+            return $overrides + [
+                'employer_data_id' => $id,
+                'employer_uuid' => null,
+                'name' => '',
+                'street' => '',
+                'street_line_2' => '',
+                'postal_code' => '',
+                'city' => '',
+                'state' => '',
+                'country' => '',
+                'date' => '2026-01-01 00:00:00',
+                'patient_id' => $pid,
+                'start_date' => null,
+                'end_date' => null,
+                'occupation' => '',
+                'occupation_title' => '',
+                'industry' => '',
+                'industry_title' => '',
             ];
         }
     }

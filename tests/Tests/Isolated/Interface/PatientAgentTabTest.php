@@ -136,6 +136,9 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString("panel.setAttribute('aria-busy', loading ? 'true' : 'false')", $this->scriptContent);
         $this->assertStringContainsString('function appendCitationLinks', $this->scriptContent);
         $this->assertStringContainsString('function appendCitationText', $this->scriptContent);
+        $this->assertStringContainsString('function appendClaimText', $this->scriptContent);
+        $this->assertStringContainsString("label.textContent = match[1] + ':'", $this->scriptContent);
+        $this->assertStringContainsString("appendClaimText(item, claim.text || '')", $this->scriptContent);
         $this->assertStringContainsString("sourceLink.textContent = citationIds.length === 1", $this->scriptContent);
         $this->assertStringContainsString("sourceLink.dataset.sourceId = citationId", $this->scriptContent);
         $this->assertStringContainsString("data.intent_id === 'show_source' ? appendCitationText : appendCitationLinks", $this->scriptContent);

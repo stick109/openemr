@@ -122,13 +122,13 @@ class AgentIntentRestControllerTest extends TestCase
         $anonymizedPayload = $request->attributes->get('agentAnonymizedPayloadLog');
 
         $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
-        $this->assertStringContainsString('Public ID P123', $body['data']['evidence_packet']['sources'][0]['display']);
+        $this->assertStringNotContainsString('Public ID', $body['data']['evidence_packet']['sources'][0]['display']);
         $this->assertSame(
-            ['Public ID P123', 'sex Female', 'age 52', 'status single'],
+            ['sex: Female', 'age: 52', 'status: single'],
             array_column($body['data']['answer']['answer_blocks'][0]['claims'], 'text')
         );
         $this->assertSame(
-            ['source_record', 'source_record', 'source_record', 'source_record'],
+            ['source_record', 'source_record', 'source_record'],
             array_column($body['data']['answer']['answer_blocks'][0]['claims'], 'certainty')
         );
         $this->assertIsArray($anonymizedPayload);
@@ -137,7 +137,6 @@ class AgentIntentRestControllerTest extends TestCase
         $this->assertSame('agent-test-request', $anonymizedPayload['evidence_packet']['request_id']);
         $this->assertSame('demographics:patient_data:123', $anonymizedPayload['evidence_packet']['sources'][0]['source_id']);
         $this->assertStringNotContainsString('P123', $anonymizedPayload['evidence_packet']['sources'][0]['display']);
-        $this->assertStringContainsString('[REDACTED_IDENTIFIER_1]', $anonymizedPayload['evidence_packet']['sources'][0]['display']);
         $this->assertArrayNotHasKey('placeholder_map', $anonymizedPayload);
     }
 
@@ -377,8 +376,8 @@ final class AgentIntentRestControllerEvidenceRepository implements EvidenceRecor
                 'patient_id' => 123,
                 'date' => '2026-04-20',
                 'status' => 'available',
-                'display' => 'Public ID P123; sex Female; age 52; status single',
-                'fields_used' => ['pubpid', 'DOB', 'sex', 'status'],
+                'display' => 'sex: Female; age: 52; status: single',
+                'fields_used' => ['DOB', 'sex', 'status'],
                 'reliability' => 'structured_patient_record',
             ],
         ];

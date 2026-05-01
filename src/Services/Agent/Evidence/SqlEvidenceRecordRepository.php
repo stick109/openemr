@@ -24,7 +24,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
     public function fetchBasicPatientData(int $pid, EvidenceCaps $caps): array
     {
         $row = sqlQuery(
-            "SELECT pid, uuid, pubpid, DOB, sex, status, date
+            "SELECT pid, uuid, DOB, sex, status, date
              FROM patient_data
              WHERE pid = ?
              LIMIT 1",
@@ -365,10 +365,9 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
     private function mapPatientRecord(array $row): array
     {
         $displayParts = [
-            $this->filled($row['pubpid'] ?? null) !== '' ? 'Public ID ' . $this->filled($row['pubpid']) : '',
-            $this->filled($row['sex'] ?? null) !== '' ? 'sex ' . $this->filled($row['sex']) : '',
+            $this->filled($row['sex'] ?? null) !== '' ? 'sex: ' . $this->filled($row['sex']) : '',
             $this->ageFromDob($row['DOB'] ?? null),
-            $this->filled($row['status'] ?? null) !== '' ? 'status ' . $this->filled($row['status']) : '',
+            $this->filled($row['status'] ?? null) !== '' ? 'status: ' . $this->filled($row['status']) : '',
         ];
 
         return [
@@ -384,7 +383,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'status' => 'available',
             'display' => $this->joinDisplay($displayParts, 'Patient demographic record'),
             'excerpt' => $this->joinDisplay($displayParts, 'Patient demographic record'),
-            'fields_used' => ['pubpid', 'DOB', 'sex', 'status'],
+            'fields_used' => ['DOB', 'sex', 'status'],
             'reliability' => 'structured_patient_record',
         ];
     }
@@ -665,7 +664,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
 
         try {
             $birthDate = new DateTimeImmutable($value);
-            return 'age ' . $birthDate->diff(new DateTimeImmutable())->y;
+            return 'age: ' . $birthDate->diff(new DateTimeImmutable())->y;
         } catch (Throwable) {
             return '';
         }

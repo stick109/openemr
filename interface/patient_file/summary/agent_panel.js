@@ -53,6 +53,23 @@
             return element;
         }
 
+        function appendClaimText(parent, text) {
+            var match = /^([A-Za-z][A-Za-z0-9 /_-]{0,40}):\s*(.*)$/.exec(text || '');
+            if (!match) {
+                appendTextElement(parent, 'span', '', text || '');
+                return;
+            }
+
+            var claimText = document.createElement('span');
+            var label = document.createElement('strong');
+            label.textContent = match[1] + ':';
+            claimText.appendChild(label);
+            if (match[2] !== '') {
+                claimText.appendChild(document.createTextNode(' ' + match[2]));
+            }
+            parent.appendChild(claimText);
+        }
+
         function appendCitationLinks(parent, citationIds) {
             if (!Array.isArray(citationIds) || citationIds.length === 0) {
                 return;
@@ -161,7 +178,7 @@
                 list.className = 'agent-panel__claim-list';
                 claims.forEach(function (claim) {
                     var item = document.createElement('li');
-                    appendTextElement(item, 'span', '', claim.text || '');
+                    appendClaimText(item, claim.text || '');
                     if (shouldShowCertainty(claim.certainty)) {
                         appendTextElement(item, 'span', 'text-muted ml-1', '(' + claim.certainty + ')');
                     }
@@ -177,7 +194,7 @@
                 missingList.className = 'agent-panel__claim-list';
                 data.answer.missing_or_uncertain.forEach(function (item) {
                     var missingItem = document.createElement('li');
-                    appendTextElement(missingItem, 'span', '', item.text || '');
+                    appendClaimText(missingItem, item.text || '');
                     citationRenderer(missingItem, item.citation_ids);
                     missingList.appendChild(missingItem);
                 });

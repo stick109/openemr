@@ -121,6 +121,9 @@ class TwigTemplateCompilationTest extends TestCase
 
                 $absolutePath = $file->getPathname();
                 $relativePath = substr($absolutePath, strlen($fileroot) + 1);
+                // Normalize Windows backslashes so prefix checks and Twig template
+                // names use forward slashes regardless of the host OS.
+                $relativePath = str_replace('\\', '/', $relativePath);
                 $templateName = self::resolveTemplateName($relativePath);
 
                 // Use the relative path as the dataset key for readable --testdox output

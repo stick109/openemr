@@ -35,7 +35,7 @@ final class AgentLlmConfig
         $provider = strtolower(trim($env->getString('OPENEMR_AGENT_LLM_PROVIDER', self::PROVIDER_DISABLED)));
         $model = trim($env->getString('OPENEMR_AGENT_LLM_MODEL', ''));
         $baseUri = trim($env->getString('OPENEMR_AGENT_LLM_BASE_URI', 'https://api.openai.com/v1/'));
-        $timeoutSeconds = max(1, $env->getInt('OPENEMR_AGENT_LLM_TIMEOUT_SECONDS', 20));
+        $timeoutSeconds = self::getOptionalPositiveInt($env, 'OPENEMR_AGENT_LLM_TIMEOUT_SECONDS', 20);
 
         $apiKey = '';
         if ($provider === self::PROVIDER_OPENAI) {
@@ -52,6 +52,21 @@ final class AgentLlmConfig
             baseUri: $baseUri !== '' ? $baseUri : 'https://api.openai.com/v1/',
             timeoutSeconds: $timeoutSeconds
         );
+    }
+
+    private static function getOptionalPositiveInt(OEEnvBag $env, string $name, int $default): int
+    {
+        $value = trim($env->getString($name, ''));
+        if ($value === '') {
+            return $default;
+        }
+
+        $validated = filter_var($value, FILTER_VALIDATE_INT);
+        if ($validated === false) {
+            return $default;
+        }
+
+        return max(1, (int) $validated);
     }
 
     public function getProvider(): string

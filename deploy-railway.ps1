@@ -32,6 +32,12 @@ param(
 
     [switch]$Ci,
 
+    [string]$EnvFile = ".env",
+
+    [switch]$SkipEnvSync,
+
+    [switch]$AllowEmptyEnvValues,
+
     [switch]$SkipDeploy
 )
 
@@ -60,7 +66,8 @@ function Invoke-Railway {
 function Invoke-RailwayWithInput {
     param(
         [string[]]$Arguments,
-        [securestring]$Secret
+        [securestring]$Secret,
+        [switch]$SuppressSuccessOutput
     )
 
     $railwayCommand = Get-Command railway -ErrorAction Stop
@@ -92,14 +99,22 @@ function Invoke-RailwayWithInput {
         $standardError = $process.StandardError.ReadToEnd()
         $process.WaitForExit()
 
-        if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
-            Write-Host $standardOutput.TrimEnd()
-        }
-        if (-not [string]::IsNullOrWhiteSpace($standardError)) {
-            Write-Error $standardError.TrimEnd()
-        }
         if ($process.ExitCode -ne 0) {
+            if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
+                Write-Host $standardOutput.TrimEnd()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($standardError)) {
+                Write-Error $standardError.TrimEnd()
+            }
             throw "railway $($Arguments -join ' ') failed with exit code $($process.ExitCode)."
+        }
+        if (-not $SuppressSuccessOutput) {
+            if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
+                Write-Host $standardOutput.TrimEnd()
+            }
+            if (-not [string]::IsNullOrWhiteSpace($standardError)) {
+                Write-Host $standardError.TrimEnd()
+            }
         }
     }
     finally {
@@ -140,6 +155,16 @@ function New-RailwayServiceScopeArguments {
     return $scopeArguments
 }
 
+function New-RailwayRedeployScopeArguments {
+    $scopeArguments = @()
+
+    if (-not [string]::IsNullOrWhiteSpace($Service)) {
+        $scopeArguments += @("--service", $Service)
+    }
+
+    return $scopeArguments
+}
+
 function Confirm-RailwayLogin {
     & railway whoami | Out-Null
     if ($LASTEXITCODE -ne 0) {
@@ -153,7 +178,7 @@ function Confirm-RailwayProject {
         return
     }
 
-    if (-not $ConfigureVariables -and -not $CreateSitesVolume -and -not [string]::IsNullOrWhiteSpace($Project)) {
+    if (-not $ConfigureVariables -and -not $CreateSitesVolume -and -not $script:ShouldSyncEnvFile -and -not [string]::IsNullOrWhiteSpace($Project)) {
         Write-Warning "No local Railway link was found. Continuing because -Project was supplied and this run does not need service variables or volumes."
         return
     }
@@ -170,6 +195,86 @@ function Read-RequiredSecureString {
     }
 
     return $secret
+}
+
+function ConvertFrom-DotEnvValue {
+    param(
+        [string]$RawValue,
+        [string]$Path,
+        [int]$LineNumber
+    )
+
+    $value = $RawValue.Trim()
+    if ($value.Length -eq 0) {
+        return ""
+    }
+
+    $doubleQuote = [char]34
+    $singleQuote = [char]39
+    $backslash = [char]92
+
+    if ($value[0] -eq $doubleQuote -or $value[0] -eq $singleQuote) {
+        $quote = $value[0]
+        $builder = New-Object System.Text.StringBuilder
+        $escaped = $false
+
+        for ($i = 1; $i -lt $value.Length; $i++) {
+            $character = $value[$i]
+
+            if ($quote -eq $doubleQuote -and $escaped) {
+                switch ($character) {
+                    "n" { $null = $builder.Append("`n") }
+                    "r" { $null = $builder.Append("`r") }
+                    "t" { $null = $builder.Append("`t") }
+                    default { $null = $builder.Append($character) }
+                }
+                $escaped = $false
+                continue
+            }
+
+            if ($quote -eq $doubleQuote -and $character -eq $backslash) {
+                $escaped = $true
+                continue
+            }
+
+            if ($character -eq $quote) {
+                $remainder = $value.Substring($i + 1).Trim()
+                if ($remainder.Length -gt 0 -and -not $remainder.StartsWith("#")) {
+                    throw "Invalid .env syntax in $Path at line ${LineNumber}: unexpected characters after quoted value."
+                }
+
+                return $builder.ToString()
+            }
+
+            $null = $builder.Append($character)
+        }
+
+        throw "Invalid .env syntax in $Path at line ${LineNumber}: quoted value is not terminated."
+    }
+
+    return ($value -replace "\s+#.*$", "").Trim()
+}
+
+function ConvertFrom-DotEnvLine {
+    param(
+        [string]$Line,
+        [string]$Path,
+        [int]$LineNumber
+    )
+
+    $trimmed = $Line.Trim()
+    if ([string]::IsNullOrWhiteSpace($trimmed) -or $trimmed.StartsWith("#")) {
+        return $null
+    }
+
+    if ($trimmed -notmatch "^(?:export\s+)?(?<Name>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?<Value>.*)$") {
+        throw "Invalid .env syntax in $Path at line ${LineNumber}: expected KEY=VALUE."
+    }
+
+    return [pscustomobject]@{
+        Name = $Matches.Name
+        Value = ConvertFrom-DotEnvValue -RawValue $Matches.Value -Path $Path -LineNumber $LineNumber
+    }
 }
 
 function Set-RailwayVariable {
@@ -198,7 +303,51 @@ function Set-RailwaySecretVariable {
     $arguments += "--stdin"
     $arguments += $Name
 
-    Invoke-RailwayWithInput -Arguments $arguments -Secret $Secret
+    Invoke-RailwayWithInput -Arguments $arguments -Secret $Secret -SuppressSuccessOutput
+}
+
+function Set-RailwayDotEnvVariables {
+    param([string]$Path)
+
+    $resolvedPath = (Resolve-Path -LiteralPath $Path -ErrorAction Stop).Path
+    $variables = [ordered]@{}
+    $skippedEmptyVariables = New-Object System.Collections.Generic.List[string]
+    $lineNumber = 0
+
+    foreach ($line in [System.IO.File]::ReadLines($resolvedPath)) {
+        $lineNumber++
+        $entry = ConvertFrom-DotEnvLine -Line $line -Path $resolvedPath -LineNumber $lineNumber
+        if ($null -eq $entry) {
+            continue
+        }
+
+        $variables[$entry.Name] = $entry.Value
+    }
+
+    if ($variables.Count -eq 0) {
+        Write-Host "No variables found in $resolvedPath."
+        return
+    }
+
+    Write-Host "Syncing variables from $resolvedPath to Railway. Values will not be printed."
+    foreach ($name in $variables.Keys) {
+        $value = $variables[$name]
+        if (-not $AllowEmptyEnvValues -and [string]::IsNullOrEmpty($value)) {
+            $skippedEmptyVariables.Add($name)
+            continue
+        }
+
+        $secret = ConvertTo-SecureString -String $value -AsPlainText -Force
+        Set-RailwaySecretVariable -Name $name -Secret $secret
+        $script:SyncedDotEnvVariableCount++
+        Write-Host "Synced Railway variable $name."
+    }
+
+    if ($skippedEmptyVariables.Count -gt 0) {
+        Write-Host "Skipped empty .env values: $($skippedEmptyVariables -join ', '). Use -AllowEmptyEnvValues to deploy empty values intentionally."
+    }
+
+    Write-Host "Synced $script:SyncedDotEnvVariableCount variable(s) from $resolvedPath."
 }
 
 function Set-OpenEmrVariables {
@@ -246,7 +395,7 @@ function Invoke-RailwayDeploy {
     $arguments = @("up")
     $arguments += New-RailwayDeployScopeArguments
     $arguments += "--message"
-    $arguments += "Deploy OpenEMR production image"
+    $arguments += "Deploy OpenEMR source overlay"
 
     if ($Detach) {
         $arguments += "--detach"
@@ -254,6 +403,37 @@ function Invoke-RailwayDeploy {
     if ($Ci) {
         $arguments += "--ci"
     }
+
+    Invoke-Railway -Arguments $arguments
+}
+
+$script:SyncedDotEnvVariableCount = 0
+$script:ShouldSyncEnvFile = (-not $SkipEnvSync -and (Test-Path -LiteralPath $EnvFile))
+
+function Get-LatestRailwayDeployment {
+    $arguments = @("deployment", "list")
+    $arguments += New-RailwayServiceScopeArguments
+    $arguments += "--limit"
+    $arguments += "1"
+    $arguments += "--json"
+
+    $json = & railway @arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "railway $($arguments -join ' ') failed with exit code $LASTEXITCODE."
+    }
+
+    $deployments = $json | ConvertFrom-Json
+    if ($null -eq $deployments -or $deployments.Count -eq 0) {
+        return $null
+    }
+
+    return @($deployments)[0]
+}
+
+function Invoke-RailwayRedeploy {
+    $arguments = @("redeploy")
+    $arguments += New-RailwayRedeployScopeArguments
+    $arguments += "--yes"
 
     Invoke-Railway -Arguments $arguments
 }
@@ -269,6 +449,16 @@ else {
     Write-Host "Skipping variable setup. Use -ConfigureVariables when you are ready to set OpenEMR and MySQL secrets."
 }
 
+if ($SkipEnvSync) {
+    Write-Host "Skipping .env variable sync because -SkipEnvSync was supplied."
+}
+elseif (Test-Path -LiteralPath $EnvFile) {
+    Set-RailwayDotEnvVariables -Path $EnvFile
+}
+else {
+    Write-Host "No $EnvFile file found. Skipping .env variable sync."
+}
+
 if ($CreateSitesVolume) {
     New-OpenEmrSitesVolume
 }
@@ -279,3 +469,11 @@ if ($SkipDeploy) {
 }
 
 Invoke-RailwayDeploy
+
+if ($script:SyncedDotEnvVariableCount -gt 0) {
+    $latestDeployment = Get-LatestRailwayDeployment
+    if ($null -ne $latestDeployment -and $latestDeployment.status -eq "SKIPPED") {
+        Write-Host "Railway skipped the source upload. Redeploying the latest image so synced variables take effect."
+        Invoke-RailwayRedeploy
+    }
+}

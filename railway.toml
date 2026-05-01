@@ -1,11 +1,8 @@
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.railway"
-watchPatterns = [
-  "Dockerfile.railway",
-  "railway.toml",
-  ".railwayignore"
-]
+# Watch patterns are intentionally omitted so any uploaded source change
+# triggers a Railway build.
 
 [deploy]
 healthcheckPath = "/meta/health/readyz"

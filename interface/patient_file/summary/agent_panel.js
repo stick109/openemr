@@ -25,7 +25,8 @@
             evidence: panel.dataset.evidenceLabel || 'Checked evidence',
             none: panel.dataset.noneLabel || 'None',
             source: panel.dataset.sourceLabel || 'source',
-            sourceAria: panel.dataset.sourceAriaLabel || 'Show source'
+            sourceAria: panel.dataset.sourceAriaLabel || 'Show source',
+            sourcePrompt: panel.dataset.sourcePromptText || ''
         };
 
         buttons.forEach(function (button) {
@@ -178,7 +179,9 @@
 
         async function requestIntent(intentId, sourceId) {
             if (promptPreviewNode) {
-                promptPreviewNode.value = intentPrompts.get(intentId) || '';
+                promptPreviewNode.value = intentId === 'show_source' && sourceId
+                    ? messages.sourcePrompt
+                    : intentPrompts.get(intentId) || '';
             }
 
             setLoadingState(true);

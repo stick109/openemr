@@ -91,6 +91,9 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString('use OpenEMR\Services\Agent\AgentIntentCatalog;', $this->pageContent);
         $this->assertStringContainsString('new AgentIntentCatalog()', $this->pageContent);
         $this->assertStringContainsString('patient/agent_panel.html.twig', $this->pageContent);
+        $this->assertStringContainsString('AgentIntentCatalog::SHOW_SOURCE', $this->pageContent);
+        $this->assertStringContainsString("'intents' => \$displayIntents", $this->pageContent);
+        $this->assertStringContainsString("'sourceIntent' => \$sourceIntent", $this->pageContent);
         $this->assertStringContainsString("CsrfUtils::collectCsrfToken(\$session, 'api')", $this->pageContent);
         $this->assertStringContainsString("/api/agent/intent", $this->pageContent);
         $this->assertStringContainsString('$list_id = "clinical_copilot";', $this->pageContent);
@@ -118,10 +121,11 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString('aria-readonly="true"', $this->templateContent);
         $this->assertStringContainsString('disabled>{{ "Send"|xlt }}</button>', $this->templateContent);
         $this->assertStringContainsString('var intentPrompts = new Map', $this->scriptContent);
-        $this->assertStringContainsString('promptPreviewNode.value = intentPrompts.get(intentId)', $this->scriptContent);
+        $this->assertStringContainsString("intentPrompts.get(intentId) || ''", $this->scriptContent);
         $this->assertStringContainsString('data-loading-label="{{ "LOADING"|xla }}..."', $this->templateContent);
         $this->assertStringContainsString('data-source-label="{{ "source"|xla }}"', $this->templateContent);
         $this->assertStringContainsString('data-source-aria-label="{{ "Show source"|xla }}"', $this->templateContent);
+        $this->assertStringContainsString("data-source-prompt-text=\"{{ sourceIntent.prompt_text|default('')|attr }}\"", $this->templateContent);
         $this->assertStringContainsString("panel.classList.toggle('is-agent-loading', loading)", $this->scriptContent);
         $this->assertStringContainsString("document.body.classList.toggle('agent-loading-cursor', loading)", $this->scriptContent);
         $this->assertStringContainsString('cursor: wait !important;', $this->templateContent);
@@ -132,6 +136,8 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString('function appendCitationLinks', $this->scriptContent);
         $this->assertStringContainsString("sourceLink.textContent = citationIds.length === 1", $this->scriptContent);
         $this->assertStringContainsString("sourceLink.dataset.sourceId = citationId", $this->scriptContent);
+        $this->assertStringContainsString('sourcePrompt: panel.dataset.sourcePromptText', $this->scriptContent);
+        $this->assertStringContainsString("promptPreviewNode.value = intentId === 'show_source' && sourceId", $this->scriptContent);
         $this->assertStringNotContainsString('function renderAnswer', $this->templateContent);
         $this->assertStringNotContainsString('function renderValidationErrors', $this->templateContent);
         $this->assertStringNotContainsString('const apiUrl =', $this->templateContent);

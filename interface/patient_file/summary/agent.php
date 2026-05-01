@@ -42,6 +42,11 @@ $arrOeUiSettings = [
 ];
 $oemr_ui = new OemrUI($arrOeUiSettings);
 $agentCatalog = new AgentIntentCatalog();
+$displayIntents = array_values(array_filter(
+    $agentCatalog->all(),
+    static fn (array $intent): bool => ($intent['intent_id'] ?? null) !== AgentIntentCatalog::SHOW_SOURCE
+));
+$sourceIntent = $agentCatalog->get(AgentIntentCatalog::SHOW_SOURCE);
 $agentSiteId = (string) ($session->get('site_id') ?? 'default');
 ?>
 <!DOCTYPE html>
@@ -63,7 +68,8 @@ $agentSiteId = (string) ($session->get('site_id') ?? 'default');
         $menuPatient->displayHorizNavBarMenu();
 
         echo $twig->getTwig()->render('patient/agent_panel.html.twig', [
-            'intents' => $agentCatalog->all(),
+            'intents' => $displayIntents,
+            'sourceIntent' => $sourceIntent,
             'apiUrl' => OEGlobalsBag::getInstance()->getWebRoot()
                 . '/apis/'
                 . rawurlencode($agentSiteId)

@@ -4,4 +4,4 @@ WORKDIR /var/www/localhost/htdocs/openemr
 
 # Overlay this checkout's application source onto the pinned production image.
 # Runtime secrets come from Railway variables, not from files copied into the image.
-COPY . /var/www/localhost/htdocs/openemr/
+COPY --chown=apache:apache . /var/www/localhost/htdocs/openemr/

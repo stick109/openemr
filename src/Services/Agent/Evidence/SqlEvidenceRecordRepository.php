@@ -879,8 +879,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'patient_uuid' => $this->uuidToString($row['uuid'] ?? null),
             'date' => $this->dateValue($row, ['date']),
             'status' => 'available',
-            'display' => $this->joinDisplay($displayParts, 'Patient demographic record'),
-            'excerpt' => $this->joinDisplay($displayParts, 'Patient demographic record'),
+            'display' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Patient demographic record')),
+            'excerpt' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Patient demographic record')),
             'fields_used' => $fieldsUsed === [] ? ['pid'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_patient_record',
         ];
@@ -926,8 +926,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'patient_id' => (int) $row['patient_id'],
             'date' => $this->dateValue($row, ['period_start', 'created_date']),
             'status' => 'available',
-            'display' => $this->joinDisplay($displayParts, 'Structured patient address'),
-            'excerpt' => $this->joinDisplay($displayParts, 'Structured patient address'),
+            'display' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Structured patient address')),
+            'excerpt' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Structured patient address')),
             'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_patient_address',
         ];
@@ -967,8 +967,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'patient_id' => (int) $row['patient_id'],
             'date' => $this->dateValue($row, ['period_start', 'created_date']),
             'status' => 'available',
-            'display' => $this->joinDisplay($displayParts, 'Structured patient contact'),
-            'excerpt' => $this->joinDisplay($displayParts, 'Structured patient contact'),
+            'display' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Structured patient contact')),
+            'excerpt' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Structured patient contact')),
             'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_patient_contact',
         ];
@@ -1007,8 +1007,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'patient_id' => (int) $row['patient_id'],
             'date' => $this->dateValue($row, ['date']),
             'status' => 'available',
-            'display' => $this->joinDisplay($displayParts, 'Patient employer record'),
-            'excerpt' => $this->joinDisplay($displayParts, 'Patient employer record'),
+            'display' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Patient employer record')),
+            'excerpt' => $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Patient employer record')),
             'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_patient_employer',
         ];
@@ -2127,6 +2127,21 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
     {
         $filled = array_values(array_filter(array_map('trim', $parts), static fn (string $part): bool => $part !== ''));
         return $filled === [] ? $fallback : implode('; ', array_unique($filled));
+    }
+
+    private function displayWithCapitalizedProperties(string $display): string
+    {
+        $segments = explode('; ', $display);
+        foreach ($segments as $index => $segment) {
+            $segments[$index] = preg_replace_callback(
+                '/\A([a-z])([^:]{0,80}:)/',
+                static fn (array $matches): string => strtoupper($matches[1]) . $matches[2],
+                $segment,
+                1
+            ) ?? $segment;
+        }
+
+        return implode('; ', $segments);
     }
 
     private function ageFromDob(mixed $dob): string

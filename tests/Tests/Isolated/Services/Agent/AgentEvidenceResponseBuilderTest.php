@@ -95,6 +95,34 @@ class AgentEvidenceResponseBuilderTest extends TestCase
         $this->assertStringContainsString('Allergy list review marker: reviewed/touched on 2026-04-30 11:22:33', $claimText);
     }
 
+    public function testBasicPatientDataPropertiesAreCapitalizedInClaims(): void
+    {
+        $builder = new AgentEvidenceResponseBuilder(
+            toolset: new AgentEvidenceToolset(
+                repository: new AgentEvidenceResponseBuilderBasicPatientRepository(),
+                logger: new NullLogger(),
+                requestIdFactory: static fn (): string => 'request-basic-patient-data'
+            ),
+            anonymizer: new Anonymizer(logger: new NullLogger()),
+            llmOrchestrator: new AgentLlmOrchestrator(
+                provider: new DisabledAgentLlmProvider(),
+                logger: new NullLogger()
+            ),
+            logger: new NullLogger()
+        );
+
+        $response = $builder->build(AgentIntentCatalog::BASIC_PATIENT_DATA, $this->basicPatientAccessToken());
+        $claimTexts = array_column($response['answer']['answer_blocks'][0]['claims'], 'text');
+
+        $this->assertSame('verified', $response['status']);
+        $this->assertSame([
+            'Name: Jane Doe',
+            'Age: 52',
+            'Mobile phone: (555) 111-2222',
+            'Email: jane.doe@example.test',
+        ], $claimTexts);
+    }
+
     public function testAllergyDeterministicAnswerStaysVerifiedWithExpandedEvidence(): void
     {
         $builder = new AgentEvidenceResponseBuilder(
@@ -179,6 +207,19 @@ class AgentEvidenceResponseBuilderTest extends TestCase
         );
     }
 
+    private function basicPatientAccessToken(): AgentAccessToken
+    {
+        return new AgentAccessToken(
+            'token',
+            AgentIntentCatalog::BASIC_PATIENT_DATA,
+            new AgentPatientContext(123),
+            ['demographics'],
+            [AgentIntentCatalog::BASIC_PATIENT_DATA, AgentIntentCatalog::SHOW_SOURCE],
+            [],
+            1234567890
+        );
+    }
+
     private function allergyAccessToken(): AgentAccessToken
     {
         return new AgentAccessToken(
@@ -190,6 +231,53 @@ class AgentEvidenceResponseBuilderTest extends TestCase
             [],
             1234567890
         );
+    }
+}
+
+final class AgentEvidenceResponseBuilderBasicPatientRepository implements EvidenceRecordRepositoryInterface
+{
+    public function fetchBasicPatientData(int $pid, EvidenceCaps $caps): array
+    {
+        return [
+            [
+                'source_id' => 'demographics:patient_data:123',
+                'source_type' => 'demographics',
+                'data_class' => 'demographics',
+                'table' => 'patient_data',
+                'record_id' => '123',
+                'patient_id' => 123,
+                'date' => '2026-04-20',
+                'status' => 'available',
+                'display' => 'name: Jane Doe; age: 52; mobile phone: (555) 111-2222; email: jane.doe@example.test',
+                'fields_used' => ['fname', 'lname', 'DOB', 'phone_cell', 'email'],
+                'reliability' => 'structured_patient_record',
+            ],
+        ];
+    }
+
+    public function fetchCurrentMedications(int $pid, EvidenceCaps $caps): array
+    {
+        return [];
+    }
+
+    public function fetchAllergiesToConfirm(int $pid, EvidenceCaps $caps): array
+    {
+        return [];
+    }
+
+    public function fetchRecentEvents(int $pid, EvidenceCaps $caps): array
+    {
+        return [];
+    }
+
+    public function fetchChangedSinceLastVisit(int $pid, EvidenceCaps $caps, array $grantedDataClasses): array
+    {
+        return [];
+    }
+
+    public function fetchSourceRecord(int $pid, string $sourceId, EvidenceCaps $caps): ?array
+    {
+        return null;
     }
 }
 

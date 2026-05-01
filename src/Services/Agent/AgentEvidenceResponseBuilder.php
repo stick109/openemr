@@ -387,7 +387,24 @@ final class AgentEvidenceResponseBuilder
             static fn (string $part): bool => $part !== ''
         ));
 
-        return $parts === [] ? [$text] : $parts;
+        if ($parts === []) {
+            return [$this->capitalizedPropertyClaimText($text)];
+        }
+
+        return array_map(
+            fn (string $part): string => $this->capitalizedPropertyClaimText($part),
+            $parts
+        );
+    }
+
+    private function capitalizedPropertyClaimText(string $text): string
+    {
+        return preg_replace_callback(
+            '/\A([a-z])([^:]{0,80}:)/',
+            static fn (array $matches): string => strtoupper($matches[1]) . $matches[2],
+            $text,
+            1
+        ) ?? $text;
     }
 
     /**

@@ -128,7 +128,7 @@ class AgentIntentRestControllerTest extends TestCase
         $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
         $this->assertStringNotContainsString('Public ID', $body['data']['evidence_packet']['sources'][0]['display']);
         $this->assertSame(
-            ['sex: Female', 'age: 52', 'status: single'],
+            ['Sex: Female', 'Age: 52', 'Status: single'],
             array_column($body['data']['answer']['answer_blocks'][0]['claims'], 'text')
         );
         $this->assertSame(

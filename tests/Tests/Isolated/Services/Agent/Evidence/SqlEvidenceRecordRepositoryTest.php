@@ -290,13 +290,13 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
 
             $this->assertCount(1, $records);
             $this->assertSame('demographics:patient_data:123', $records[0]['source_id']);
-            $this->assertStringContainsString('name: Jane Quinn Doe', $records[0]['display']);
-            $this->assertStringContainsString('preferred name: Janie', $records[0]['display']);
-            $this->assertStringContainsString('date of birth: 1974-04-15', $records[0]['display']);
-            $this->assertStringContainsString('sex at birth: Female', $records[0]['display']);
-            $this->assertStringContainsString('address: 123 Main St, Boston MA 02111', $records[0]['display']);
-            $this->assertStringContainsString('mobile phone:', $records[0]['display']);
-            $this->assertStringContainsString('email: jane.doe@example.test', $records[0]['display']);
+            $this->assertStringContainsString('Name: Jane Quinn Doe', $records[0]['display']);
+            $this->assertStringContainsString('Preferred name: Janie', $records[0]['display']);
+            $this->assertStringContainsString('Date of birth: 1974-04-15', $records[0]['display']);
+            $this->assertStringContainsString('Sex at birth: Female', $records[0]['display']);
+            $this->assertStringContainsString('Address: 123 Main St, Boston MA 02111', $records[0]['display']);
+            $this->assertStringContainsString('Mobile phone:', $records[0]['display']);
+            $this->assertStringContainsString('Email: jane.doe@example.test', $records[0]['display']);
             $this->assertStringNotContainsString('public patient id', $records[0]['display']);
             $this->assertStringNotContainsString('MRN-12345', $records[0]['display']);
             $this->assertStringNotContainsString('last updated', $records[0]['display']);
@@ -376,10 +376,10 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $this->assertNotContains('demographics:employer_data:803', $sourceIds);
             $this->assertNotContains('demographics:employer_data:802', $sourceIds);
             $this->assertSame('demographics:employer_data:801', $employer['source_id'] ?? null);
-            $this->assertStringContainsString('employer: Acme Health', $employer['display'] ?? '');
-            $this->assertStringContainsString('employer address: 99 Work Rd, Boston MA 02110', $employer['display'] ?? '');
-            $this->assertStringContainsString('occupation: Software Developers', $employer['display'] ?? '');
-            $this->assertStringContainsString('industry: Custom Computer Programming Services', $employer['display'] ?? '');
+            $this->assertStringContainsString('Employer: Acme Health', $employer['display'] ?? '');
+            $this->assertStringContainsString('Employer address: 99 Work Rd, Boston MA 02110', $employer['display'] ?? '');
+            $this->assertStringContainsString('Occupation: Software Developers', $employer['display'] ?? '');
+            $this->assertStringContainsString('Industry: Custom Computer Programming Services', $employer['display'] ?? '');
             $this->assertNull($repository->fetchSourceRecord(999, 'demographics:employer_data:801', new EvidenceCaps(10, 0, 0)));
             $this->assertNull($repository->fetchSourceRecord(123, 'demographics:contact:701', new EvidenceCaps(10, 0, 0)));
         }

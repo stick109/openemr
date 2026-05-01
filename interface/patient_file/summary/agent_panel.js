@@ -82,6 +82,17 @@
             parent.appendChild(sourceContainer);
         }
 
+        function appendCitationText(parent, citationIds) {
+            if (!Array.isArray(citationIds) || citationIds.length === 0) {
+                return;
+            }
+
+            var citationContainer = document.createElement('span');
+            citationContainer.className = 'agent-panel__source-list text-muted';
+            citationContainer.textContent = ' (' + citationIds.join(', ') + ')';
+            parent.appendChild(citationContainer);
+        }
+
         function shouldShowCertainty(certainty) {
             return certainty && certainty !== 'source_record' && certainty !== 'supported';
         }
@@ -141,6 +152,8 @@
                 return;
             }
 
+            var citationRenderer = data.intent_id === 'show_source' ? appendCitationText : appendCitationLinks;
+
             (data.answer.answer_blocks || []).forEach(function (block) {
                 appendTextElement(outputNode, 'div', 'agent-panel__heading', block.heading || data.button_label || '');
                 var claims = Array.isArray(block.claims) ? block.claims : [];
@@ -152,7 +165,7 @@
                     if (shouldShowCertainty(claim.certainty)) {
                         appendTextElement(item, 'span', 'text-muted ml-1', '(' + claim.certainty + ')');
                     }
-                    appendCitationLinks(item, claim.citation_ids);
+                    citationRenderer(item, claim.citation_ids);
                     list.appendChild(item);
                 });
                 outputNode.appendChild(list);
@@ -165,7 +178,7 @@
                 data.answer.missing_or_uncertain.forEach(function (item) {
                     var missingItem = document.createElement('li');
                     appendTextElement(missingItem, 'span', '', item.text || '');
-                    appendCitationLinks(missingItem, item.citation_ids);
+                    citationRenderer(missingItem, item.citation_ids);
                     missingList.appendChild(missingItem);
                 });
                 outputNode.appendChild(missingList);

@@ -111,7 +111,13 @@
         }
 
         function shouldShowCertainty(certainty) {
-            return certainty && certainty !== 'source_record' && certainty !== 'supported';
+            return certainty && certainty !== 'active' && certainty !== 'source_record' && certainty !== 'supported';
+        }
+
+        function shouldShowBlockHeading(block, data) {
+            var heading = block && block.heading ? String(block.heading).trim() : '';
+            var label = data && data.button_label ? String(data.button_label).trim() : '';
+            return heading !== '' && heading !== label;
         }
 
         function setButtonsDisabled(disabled) {
@@ -172,7 +178,9 @@
             var citationRenderer = data.intent_id === 'show_source' ? appendCitationText : appendCitationLinks;
 
             (data.answer.answer_blocks || []).forEach(function (block) {
-                appendTextElement(outputNode, 'div', 'agent-panel__heading', block.heading || data.button_label || '');
+                if (shouldShowBlockHeading(block, data)) {
+                    appendTextElement(outputNode, 'div', 'agent-panel__heading', block.heading);
+                }
                 var claims = Array.isArray(block.claims) ? block.claims : [];
                 var list = document.createElement('ul');
                 list.className = 'agent-panel__claim-list';

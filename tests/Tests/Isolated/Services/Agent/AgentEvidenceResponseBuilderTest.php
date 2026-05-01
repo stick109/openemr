@@ -47,16 +47,18 @@ class AgentEvidenceResponseBuilderTest extends TestCase
         );
 
         $response = $builder->build(AgentIntentCatalog::CURRENT_MEDICATIONS, $this->accessToken());
+        $claimTexts = array_column($response['answer']['answer_blocks'][0]['claims'], 'text');
         $claimText = implode(
             "\n",
-            array_column($response['answer']['answer_blocks'][0]['claims'], 'text')
+            $claimTexts
         );
 
         $this->assertSame('verified', $response['status']);
         $this->assertSame('deterministic_verified', $response['response_generation']);
         $this->assertSame('passed', $response['verification']['status']);
         $this->assertCount(25, $response['answer']['answer_blocks'][0]['claims']);
-        $this->assertStringContainsString('medication: Medication 1', $claimText);
+        $this->assertStringStartsWith('Medication 1', $claimTexts[0]);
+        $this->assertStringNotContainsString('medication: Medication 1', $claimText);
         $this->assertStringContainsString('status: active', $claimText);
         $this->assertStringNotContainsString('A verified answer is not available', $claimText);
         $this->assertStringNotContainsString('start date', $claimText);

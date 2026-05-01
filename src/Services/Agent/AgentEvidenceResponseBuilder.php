@@ -454,7 +454,7 @@ final class AgentEvidenceResponseBuilder
         foreach ($preferredPrefixes as $prefix) {
             foreach ($segments as $segment) {
                 if (stripos($segment, $prefix) === 0) {
-                    $selected[] = $segment;
+                    $selected[] = $this->currentMedicationClaimSegment($segment, $prefix);
                     break;
                 }
             }
@@ -465,6 +465,15 @@ final class AgentEvidenceResponseBuilder
         }
 
         return $this->truncateClaimText($this->joinClaimSegments($selected), 140);
+    }
+
+    private function currentMedicationClaimSegment(string $segment, string $matchedPrefix): string
+    {
+        if (strtolower($matchedPrefix) !== 'medication:') {
+            return $segment;
+        }
+
+        return trim(substr($segment, strlen($matchedPrefix)));
     }
 
     /**

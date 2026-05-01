@@ -137,6 +137,9 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString('function appendCitationLinks', $this->scriptContent);
         $this->assertStringContainsString('function appendCitationText', $this->scriptContent);
         $this->assertStringContainsString('function appendClaimText', $this->scriptContent);
+        $this->assertStringContainsString('function shouldShowBlockHeading', $this->scriptContent);
+        $this->assertStringContainsString("heading !== '' && heading !== label", $this->scriptContent);
+        $this->assertStringContainsString("certainty !== 'active'", $this->scriptContent);
         $this->assertStringContainsString("label.textContent = match[1] + ':'", $this->scriptContent);
         $this->assertStringContainsString("appendClaimText(item, claim.text || '')", $this->scriptContent);
         $this->assertStringContainsString("sourceLink.textContent = citationIds.length === 1", $this->scriptContent);
@@ -152,6 +155,7 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringNotContainsString('contenteditable', $this->templateContent);
         $this->assertStringNotContainsString('llm_user_text', $this->templateContent);
         $this->assertStringNotContainsString('llm_user_text', $this->scriptContent);
+        $this->assertStringNotContainsString("appendTextElement(outputNode, 'div', 'agent-panel__heading', block.heading || data.button_label || '')", $this->scriptContent);
         $this->assertStringNotContainsString('prompt_text: promptPreviewNode.value', $this->scriptContent);
         $this->assertStringNotContainsString('prompt_text:', $this->scriptContent);
         $this->assertStringNotContainsString('name="prompt', $this->templateContent);

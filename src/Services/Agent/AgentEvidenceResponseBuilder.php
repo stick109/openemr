@@ -271,6 +271,27 @@ final class AgentEvidenceResponseBuilder
             }
         }
 
+        if ((string) ($intent['intent_id'] ?? '') === AgentIntentCatalog::CURRENT_MEDICATIONS) {
+            $hasMedicationRecord = false;
+            $hasReviewMarker = false;
+            foreach ($sources as $source) {
+                if (!is_array($source)) {
+                    continue;
+                }
+                $sourceType = (string) ($source['source_type'] ?? '');
+                $hasMedicationRecord = $hasMedicationRecord || $sourceType === 'medication';
+                $hasReviewMarker = $hasReviewMarker || $sourceType === 'medication_review';
+            }
+
+            if (!$hasMedicationRecord && $hasReviewMarker) {
+                array_unshift($claims, [
+                    'text' => 'Current medication records were not found in checked evidence.',
+                    'citation_ids' => [],
+                    'certainty' => 'not_found',
+                ]);
+            }
+        }
+
         $missingOrUncertain = [];
         if ($claims === []) {
             $claims[] = [

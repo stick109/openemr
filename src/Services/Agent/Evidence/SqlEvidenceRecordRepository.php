@@ -167,7 +167,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             return [];
         }
 
-        $rows = $this->fetchRows(
+        $medicationRows = $this->fetchRows(
             "SELECT
                 l.id AS list_id,
                 l.uuid AS list_uuid,
@@ -175,28 +175,61 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
                 l.date,
                 l.begdate,
                 l.enddate,
+                l.subtype,
                 l.title,
+                l.diagnosis AS list_diagnosis,
+                l.external_id AS list_external_id,
+                l.list_option_id,
+                l.erx_source AS list_erx_source,
+                l.erx_uploaded AS list_erx_uploaded,
                 l.activity,
                 l.comments,
                 l.modifydate,
                 lm.id AS medication_issue_id,
+                lm.list_id AS medication_list_id,
                 lm.drug_dosage_instructions,
+                lm.usage_category,
                 lm.usage_category_title,
+                lm.request_intent,
                 lm.request_intent_title,
+                lm.medication_adherence_information_source,
                 lm.medication_adherence,
                 lm.medication_adherence_date_asserted,
-                lm.prescription_id
+                lm.prescription_id AS linked_prescription_id,
+                lm.is_primary_record,
+                lm.reporting_source_record_id,
+                " . $this->prescriptionSelectColumns('p') . "
              FROM lists l
              LEFT JOIN lists_medication lm ON lm.list_id = l.id
+             LEFT JOIN prescriptions p
+                ON p.id = lm.prescription_id
+                    AND p.patient_id = ?
              WHERE l.pid = ?
                 AND l.type = 'medication'
-                AND (l.activity = 1 OR l.enddate IS NULL OR l.enddate >= CURDATE())
+                AND (l.activity = 1 OR l.enddate IS NULL OR l.enddate = '0000-00-00' OR l.enddate >= CURDATE())
              ORDER BY COALESCE(l.modifydate, l.date, l.begdate) DESC, l.id DESC
              LIMIT " . $limit,
-            [$pid]
+            [$pid, $pid]
         );
 
-        return array_map(fn (array $row): array => $this->mapMedicationRecord($row), $rows);
+        $records = array_map(fn (array $row): array => $this->mapMedicationRecord($row), $medicationRows);
+        $remaining = $limit - count($records);
+
+        if ($remaining > 0) {
+            foreach ($this->fetchStandaloneCurrentPrescriptionRows($pid, $remaining) as $row) {
+                $records[] = $this->mapPrescriptionRecord($row);
+            }
+            $remaining = $limit - count($records);
+        }
+
+        if ($records === [] && $remaining > 0) {
+            $reviewRow = $this->fetchMedicationReviewRow($pid);
+            if ($reviewRow !== null) {
+                $records[] = $this->mapMedicationReviewRecord($reviewRow);
+            }
+        }
+
+        return array_slice($records, 0, $limit);
     }
 
     /**
@@ -417,12 +450,13 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
      */
     public function fetchSourceRecord(int $pid, string $sourceId, EvidenceCaps $caps): ?array
     {
-        if (preg_match('/\A[A-Za-z0-9_]+:([A-Za-z0-9_]+):([0-9]+)\z/', $sourceId, $matches) !== 1) {
+        if (preg_match('/\A([A-Za-z0-9_]+):([A-Za-z0-9_]+):([0-9]+)\z/', $sourceId, $matches) !== 1) {
             return null;
         }
 
-        $table = $matches[1];
-        $recordId = (int) $matches[2];
+        $sourceGroup = $matches[1];
+        $table = $matches[2];
+        $recordId = (int) $matches[3];
         if ($recordId <= 0) {
             return null;
         }
@@ -432,8 +466,10 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'addresses' => $this->fetchAddressSource($pid, $recordId),
             'contact_telecom' => $this->fetchContactTelecomSource($pid, $recordId),
             'employer_data' => $this->fetchEmployerSource($pid, $recordId),
-            'lists' => $this->fetchListSource($pid, $recordId),
-            'lists_medication' => $this->fetchMedicationIssueSource($pid, $recordId),
+            'lists' => $this->fetchListSource($pid, $recordId, $sourceGroup),
+            'lists_medication' => $sourceGroup === 'medication' ? $this->fetchMedicationIssueSource($pid, $recordId) : null,
+            'prescriptions' => $sourceGroup === 'medication' ? $this->fetchPrescriptionSource($pid, $recordId) : null,
+            'lists_touch' => $sourceGroup === 'medication' ? $this->fetchMedicationReviewSource($pid, $recordId) : null,
             'form_encounter' => $this->fetchEncounterSource($pid, $recordId),
             'documents' => $this->fetchDocumentSource($pid, $recordId),
             default => null,
@@ -458,6 +494,104 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         }
 
         return $rows;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fetchStandaloneCurrentPrescriptionRows(int $pid, int $limit): array
+    {
+        if ($limit <= 0) {
+            return [];
+        }
+
+        return $this->fetchRows(
+            "SELECT
+                p.patient_id AS patient_id,
+                " . $this->prescriptionSelectColumns('p') . "
+             FROM prescriptions p
+             WHERE p.patient_id = ?
+                AND p.active = 1
+                AND (p.end_date IS NULL OR p.end_date = '0000-00-00' OR p.end_date >= CURDATE())
+                AND NOT EXISTS (
+                    SELECT 1
+                    FROM lists l
+                    INNER JOIN lists_medication lm ON lm.list_id = l.id
+                    WHERE l.pid = p.patient_id
+                        AND l.type = 'medication'
+                        AND lm.prescription_id = p.id
+                        AND (l.activity = 1 OR l.enddate IS NULL OR l.enddate = '0000-00-00' OR l.enddate >= CURDATE())
+                )
+             ORDER BY COALESCE(p.date_modified, p.date_added, p.datetime, p.start_date, p.txDate) DESC, p.id DESC
+             LIMIT " . $limit,
+            [$pid]
+        );
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function fetchMedicationReviewRow(int $pid): ?array
+    {
+        $row = sqlQuery(
+            "SELECT
+                pid AS patient_id,
+                type,
+                date
+             FROM lists_touch
+             WHERE pid = ?
+                AND type = 'medication'
+             LIMIT 1",
+            [$pid]
+        );
+
+        return is_array($row) && $row !== [] ? $row : null;
+    }
+
+    private function prescriptionSelectColumns(string $alias): string
+    {
+        return "{$alias}.id AS prescription_record_id,
+                {$alias}.uuid AS prescription_uuid,
+                {$alias}.patient_id AS prescription_patient_id,
+                {$alias}.encounter AS prescription_encounter,
+                {$alias}.provider_id AS prescription_provider_id,
+                {$alias}.filled_by_id AS prescription_filled_by_id,
+                {$alias}.pharmacy_id AS prescription_pharmacy_id,
+                {$alias}.drug AS prescription_drug,
+                {$alias}.drug_id AS prescription_drug_id,
+                {$alias}.rxnorm_drugcode AS prescription_rxnorm_drugcode,
+                {$alias}.medication AS prescription_medication,
+                {$alias}.date_added AS prescription_date_added,
+                {$alias}.date_modified AS prescription_date_modified,
+                {$alias}.start_date AS prescription_start_date,
+                {$alias}.end_date AS prescription_end_date,
+                {$alias}.filled_date AS prescription_filled_date,
+                {$alias}.datetime AS prescription_datetime,
+                {$alias}.active AS prescription_active,
+                {$alias}.txDate AS prescription_txDate,
+                {$alias}.drug_dosage_instructions AS prescription_drug_dosage_instructions,
+                {$alias}.dosage AS prescription_dosage,
+                {$alias}.quantity AS prescription_quantity,
+                {$alias}.size AS prescription_size,
+                {$alias}.unit AS prescription_unit,
+                {$alias}.route AS prescription_route,
+                {$alias}.`interval` AS prescription_interval,
+                {$alias}.form AS prescription_form,
+                {$alias}.substitute AS prescription_substitute,
+                {$alias}.refills AS prescription_refills,
+                {$alias}.per_refill AS prescription_per_refill,
+                {$alias}.prn AS prescription_prn,
+                {$alias}.note AS prescription_note,
+                {$alias}.usage_category AS prescription_usage_category,
+                {$alias}.usage_category_title AS prescription_usage_category_title,
+                {$alias}.request_intent AS prescription_request_intent,
+                {$alias}.request_intent_title AS prescription_request_intent_title,
+                {$alias}.indication AS prescription_indication,
+                {$alias}.diagnosis AS prescription_diagnosis,
+                {$alias}.erx_source AS prescription_erx_source,
+                {$alias}.erx_uploaded AS prescription_erx_uploaded,
+                {$alias}.external_id AS prescription_external_id,
+                {$alias}.prescriptionguid AS prescription_guid";
     }
 
     /**
@@ -838,13 +972,77 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
     {
         $sourceTable = !empty($row['medication_issue_id']) ? 'lists_medication' : 'lists';
         $recordId = !empty($row['medication_issue_id']) ? (int) $row['medication_issue_id'] : (int) $row['list_id'];
-        $status = ((string) ($row['activity'] ?? '') === '1') ? 'active' : 'unknown';
-        $displayParts = [
-            $this->filled($row['title'] ?? null),
-            $this->filled($row['drug_dosage_instructions'] ?? null),
-            $this->filled($row['usage_category_title'] ?? null),
-            $this->filled($row['request_intent_title'] ?? null),
-        ];
+        $status = $this->medicationListStatus($row);
+        $displayParts = [];
+        $fieldsUsed = [];
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'medication', $row['title'] ?? null, ['title']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'status', $status === 'active' ? 'active' : '', ['activity']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'start date', $this->dateValue($row, ['begdate']), ['begdate']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'end date', $this->dateValue($row, ['enddate']), ['enddate']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'subtype', $row['subtype'] ?? null, ['subtype']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'diagnosis', $row['list_diagnosis'] ?? null, ['diagnosis']);
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'dosage instructions',
+            $this->boundedText($row['drug_dosage_instructions'] ?? null, 220),
+            ['drug_dosage_instructions']
+        );
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'usage category',
+            $this->codedOptionLabel($row['usage_category'] ?? null, $row['usage_category_title'] ?? null),
+            $this->filledFields($row, ['usage_category', 'usage_category_title'])
+        );
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'request intent',
+            $this->codedOptionLabel($row['request_intent'] ?? null, $row['request_intent_title'] ?? null),
+            $this->filledFields($row, ['request_intent', 'request_intent_title'])
+        );
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'adherence value', $row['medication_adherence'] ?? null, ['medication_adherence']);
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'adherence information source',
+            $row['medication_adherence_information_source'] ?? null,
+            ['medication_adherence_information_source']
+        );
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'adherence asserted',
+            $this->dateValue($row, ['medication_adherence_date_asserted']),
+            ['medication_adherence_date_asserted']
+        );
+        if ($this->yesNoValue($row['is_primary_record'] ?? null) === 'no') {
+            $this->addDisplayPart($displayParts, $fieldsUsed, 'record type', 'reported/non-primary medication', ['is_primary_record']);
+            $this->addDisplayPart(
+                $displayParts,
+                $fieldsUsed,
+                'reporting source record id',
+                $this->nonZeroValue($row['reporting_source_record_id'] ?? null),
+                ['reporting_source_record_id']
+            );
+        }
+
+        if ($this->filled($row['prescription_record_id'] ?? null) !== '') {
+            $this->addPrescriptionDisplayParts($row, $displayParts, $fieldsUsed, false);
+        } elseif ($this->filled($row['linked_prescription_id'] ?? ($row['prescription_id'] ?? null)) !== '') {
+            $this->addDisplayPart(
+                $displayParts,
+                $fieldsUsed,
+                'linked prescription evidence',
+                'unavailable in checked patient-owned prescriptions',
+                ['prescription_id']
+            );
+        }
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'list eRx source', $this->erxSourceLabel($row['list_erx_source'] ?? null), ['erx_source']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'list eRx uploaded', $this->yesNoValue($row['list_erx_uploaded'] ?? null), ['erx_uploaded']);
 
         return [
             'source_id' => 'medication:' . $sourceTable . ':' . $recordId,
@@ -858,8 +1056,71 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'status' => $status,
             'display' => $this->joinDisplay($displayParts, 'Medication record'),
             'excerpt' => $this->filled($row['comments'] ?? null) ?: $this->joinDisplay($displayParts, 'Medication record'),
-            'fields_used' => ['title', 'activity', 'begdate', 'enddate', 'drug_dosage_instructions', 'usage_category_title'],
+            'fields_used' => $fieldsUsed === [] ? ['title'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_active_record',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function mapPrescriptionRecord(array $row): array
+    {
+        $displayParts = [];
+        $fieldsUsed = [];
+        $this->addPrescriptionDisplayParts($row, $displayParts, $fieldsUsed, true);
+
+        $recordId = (int) ($row['prescription_record_id'] ?? 0);
+        $patientId = (int) ($row['patient_id'] ?? ($row['prescription_patient_id'] ?? 0));
+
+        return [
+            'source_id' => 'medication:prescriptions:' . $recordId,
+            'source_type' => 'medication',
+            'data_class' => 'medications',
+            'table' => 'prescriptions',
+            'record_id' => (string) $recordId,
+            'record_uuid' => $this->uuidToString($row['prescription_uuid'] ?? null),
+            'patient_id' => $patientId,
+            'date' => $this->dateValue($row, [
+                'prescription_date_modified',
+                'prescription_date_added',
+                'prescription_datetime',
+                'prescription_start_date',
+                'prescription_txDate',
+            ]),
+            'status' => $this->prescriptionStatus($row),
+            'display' => $this->joinDisplay($displayParts, 'Prescription record'),
+            'excerpt' => $this->joinDisplay($displayParts, 'Prescription record'),
+            'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
+            'reliability' => 'structured_prescription_record',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function mapMedicationReviewRecord(array $row): array
+    {
+        $date = $this->dateValue($row, ['date']);
+        $display = $date === null
+            ? 'Medication list review marker'
+            : 'Medication list review marker: reviewed/touched on ' . $date;
+
+        return [
+            'source_id' => 'medication:lists_touch:' . (int) $row['patient_id'],
+            'source_type' => 'medication_review',
+            'data_class' => 'medications',
+            'table' => 'lists_touch',
+            'record_id' => (string) (int) $row['patient_id'],
+            'patient_id' => (int) $row['patient_id'],
+            'date' => $date,
+            'status' => 'reviewed',
+            'display' => $display,
+            'excerpt' => $display,
+            'fields_used' => ['pid', 'type', 'date'],
+            'reliability' => 'structured_medication_review_marker',
         ];
     }
 
@@ -1083,7 +1344,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             : null;
     }
 
-    private function fetchListSource(int $pid, int $recordId): ?array
+    private function fetchListSource(int $pid, int $recordId, string $sourceGroup): ?array
     {
         $row = sqlQuery(
             "SELECT
@@ -1106,13 +1367,23 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             return null;
         }
 
-        return ($row['type'] ?? '') === 'allergy'
-            ? $this->mapAllergyRecord($row)
-            : $this->mapMedicationRecord([
-                'list_id' => $row['id'],
-                'list_uuid' => $row['uuid'],
-                'patient_id' => $row['patient_id'],
-            ] + $row);
+        if (($row['type'] ?? '') === 'allergy' && $sourceGroup === 'allergy') {
+            return $this->mapAllergyRecord($row);
+        }
+
+        if (($row['type'] ?? '') !== 'medication' || $sourceGroup !== 'medication') {
+            return null;
+        }
+
+        return $this->mapMedicationRecord([
+            'list_id' => $row['id'],
+            'list_uuid' => $row['uuid'],
+            'patient_id' => $row['patient_id'],
+            'list_diagnosis' => $row['diagnosis'] ?? null,
+            'list_external_id' => $row['external_id'] ?? null,
+            'list_erx_source' => $row['erx_source'] ?? null,
+            'list_erx_uploaded' => $row['erx_uploaded'] ?? null,
+        ] + $row);
     }
 
     private function fetchMedicationIssueSource(int $pid, int $recordId): ?array
@@ -1125,25 +1396,69 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
                 l.date,
                 l.begdate,
                 l.enddate,
+                l.subtype,
                 l.title,
+                l.diagnosis AS list_diagnosis,
+                l.external_id AS list_external_id,
+                l.list_option_id,
+                l.erx_source AS list_erx_source,
+                l.erx_uploaded AS list_erx_uploaded,
                 l.activity,
                 l.comments,
                 l.modifydate,
                 lm.id AS medication_issue_id,
+                lm.list_id AS medication_list_id,
                 lm.drug_dosage_instructions,
+                lm.usage_category,
                 lm.usage_category_title,
+                lm.request_intent,
                 lm.request_intent_title,
+                lm.medication_adherence_information_source,
                 lm.medication_adherence,
                 lm.medication_adherence_date_asserted,
-                lm.prescription_id
+                lm.prescription_id AS linked_prescription_id,
+                lm.is_primary_record,
+                lm.reporting_source_record_id,
+                " . $this->prescriptionSelectColumns('p') . "
              FROM lists_medication lm
              INNER JOIN lists l ON l.id = lm.list_id
-             WHERE l.pid = ? AND lm.id = ?
+             LEFT JOIN prescriptions p
+                ON p.id = lm.prescription_id
+                    AND p.patient_id = ?
+             WHERE l.pid = ?
+                AND l.type = 'medication'
+                AND lm.id = ?
+             LIMIT 1",
+            [$pid, $pid, $recordId]
+        );
+
+        return is_array($row) && $row !== [] ? $this->mapMedicationRecord($row) : null;
+    }
+
+    private function fetchPrescriptionSource(int $pid, int $recordId): ?array
+    {
+        $row = sqlQuery(
+            "SELECT
+                p.patient_id AS patient_id,
+                " . $this->prescriptionSelectColumns('p') . "
+             FROM prescriptions p
+             WHERE p.patient_id = ?
+                AND p.id = ?
              LIMIT 1",
             [$pid, $recordId]
         );
 
-        return is_array($row) && $row !== [] ? $this->mapMedicationRecord($row) : null;
+        return is_array($row) && $row !== [] ? $this->mapPrescriptionRecord($row) : null;
+    }
+
+    private function fetchMedicationReviewSource(int $pid, int $recordId): ?array
+    {
+        if ($pid !== $recordId) {
+            return null;
+        }
+
+        $row = $this->fetchMedicationReviewRow($pid);
+        return $row !== null ? $this->mapMedicationReviewRecord($row) : null;
     }
 
     private function fetchEncounterSource(int $pid, int $recordId): ?array
@@ -1335,6 +1650,157 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         }
 
         return $this->filled($value);
+    }
+
+    private function codedOptionLabel(mixed $value, mixed $title): string
+    {
+        $value = $this->filled($value);
+        $title = $this->filled($title);
+        if ($value !== '' && $title !== '' && $value !== $title) {
+            return $title . ' (' . $value . ')';
+        }
+
+        return $title !== '' ? $title : $value;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param list<string> $displayParts
+     * @param list<string> $fieldsUsed
+     */
+    private function addPrescriptionDisplayParts(
+        array $row,
+        array &$displayParts,
+        array &$fieldsUsed,
+        bool $includeDrugName
+    ): void {
+        if ($includeDrugName) {
+            $this->addDisplayPart($displayParts, $fieldsUsed, 'prescription drug', $row['prescription_drug'] ?? null, ['drug']);
+        } else {
+            $this->addDisplayPart($displayParts, $fieldsUsed, 'linked prescription drug', $row['prescription_drug'] ?? null, ['drug']);
+        }
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'rxnorm', $row['prescription_rxnorm_drugcode'] ?? null, ['rxnorm_drugcode']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'prescription start date', $this->dateValue($row, ['prescription_start_date']), ['start_date']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'prescription end date', $this->dateValue($row, ['prescription_end_date']), ['end_date']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'filled date', $this->dateValue($row, ['prescription_filled_date']), ['filled_date']);
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'prescription dosage instructions',
+            $this->boundedText($row['prescription_drug_dosage_instructions'] ?? null, 220),
+            ['drug_dosage_instructions']
+        );
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'dosage', $row['prescription_dosage'] ?? null, ['dosage']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'quantity', $row['prescription_quantity'] ?? null, ['quantity']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'size', $row['prescription_size'] ?? null, ['size']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'unit', $row['prescription_unit'] ?? null, ['unit']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'route', $row['prescription_route'] ?? null, ['route']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'interval', $row['prescription_interval'] ?? null, ['interval']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'form', $row['prescription_form'] ?? null, ['form']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'substitute', $this->yesNoValue($row['prescription_substitute'] ?? null), ['substitute']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'refills', $row['prescription_refills'] ?? null, ['refills']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'per refill', $row['prescription_per_refill'] ?? null, ['per_refill']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'prn', $row['prescription_prn'] ?? null, ['prn']);
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'prescription usage category',
+            $this->codedOptionLabel($row['prescription_usage_category'] ?? null, $row['prescription_usage_category_title'] ?? null),
+            $this->filledAliasFields($row, [
+                'prescription_usage_category' => 'usage_category',
+                'prescription_usage_category_title' => 'usage_category_title',
+            ])
+        );
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'prescription request intent',
+            $this->codedOptionLabel($row['prescription_request_intent'] ?? null, $row['prescription_request_intent_title'] ?? null),
+            $this->filledAliasFields($row, [
+                'prescription_request_intent' => 'request_intent',
+                'prescription_request_intent_title' => 'request_intent_title',
+            ])
+        );
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'indication', $this->boundedText($row['prescription_indication'] ?? null, 180), ['indication']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'diagnosis', $this->boundedText($row['prescription_diagnosis'] ?? null, 180), ['diagnosis']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'prescription note', $this->boundedText($row['prescription_note'] ?? null, 180), ['note']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'prescription eRx source', $this->erxSourceLabel($row['prescription_erx_source'] ?? null), ['erx_source']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'prescription eRx uploaded', $this->yesNoValue($row['prescription_erx_uploaded'] ?? null), ['erx_uploaded']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'external prescription id', $row['prescription_external_id'] ?? null, ['external_id']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'prescribing provider id', $this->nonZeroValue($row['prescription_provider_id'] ?? null), ['provider_id']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'filled by id', $this->nonZeroValue($row['prescription_filled_by_id'] ?? null), ['filled_by_id']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'pharmacy id', $this->nonZeroValue($row['prescription_pharmacy_id'] ?? null), ['pharmacy_id']);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param array<string, string> $aliasesToFields
+     * @return list<string>
+     */
+    private function filledAliasFields(array $row, array $aliasesToFields): array
+    {
+        $fields = [];
+        foreach ($aliasesToFields as $alias => $field) {
+            if ($this->filled($row[$alias] ?? null) !== '') {
+                $fields[] = $field;
+            }
+        }
+
+        return $fields;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function medicationListStatus(array $row): string
+    {
+        return ((string) ($row['activity'] ?? '') === '1') ? 'active' : 'unknown';
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function prescriptionStatus(array $row): string
+    {
+        if ((string) ($row['prescription_active'] ?? '') === '0') {
+            return 'inactive';
+        }
+
+        $endDate = $this->dateValue($row, ['prescription_end_date']);
+        if ($endDate !== null && $this->dateIsPast($endDate)) {
+            return 'inactive';
+        }
+
+        return ((string) ($row['prescription_active'] ?? '') === '1') ? 'active' : 'unknown';
+    }
+
+    private function dateIsPast(string $date): bool
+    {
+        try {
+            return new DateTimeImmutable($date) < new DateTimeImmutable('today');
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function erxSourceLabel(mixed $value): string
+    {
+        return match ($this->filled($value)) {
+            '0' => 'OpenEMR',
+            '1' => 'external/eRx',
+            default => $this->filled($value),
+        };
+    }
+
+    private function boundedText(mixed $value, int $limit): string
+    {
+        $text = $this->filled($value);
+        if ($text === '' || strlen($text) <= $limit) {
+            return $text;
+        }
+
+        return rtrim(substr($text, 0, max(0, $limit - 3))) . '...';
     }
 
     private function yesNoValue(mixed $value): string

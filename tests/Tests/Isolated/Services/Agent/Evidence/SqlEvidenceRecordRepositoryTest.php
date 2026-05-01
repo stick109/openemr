@@ -49,6 +49,21 @@ namespace OpenEMR\Services\Agent\Evidence {
         public static array $employerRows = [];
 
         /**
+         * @var list<array<string, mixed>>
+         */
+        public static array $medicationRows = [];
+
+        /**
+         * @var list<array<string, mixed>>
+         */
+        public static array $prescriptionRows = [];
+
+        /**
+         * @var list<array<string, mixed>>
+         */
+        public static array $listsTouchRows = [];
+
+        /**
          * @var list<array{sql: string, params: array<int, mixed>}>
          */
         public static array $queries = [];
@@ -66,6 +81,9 @@ namespace OpenEMR\Services\Agent\Evidence {
             self::$addressRows = [];
             self::$telecomRows = [];
             self::$employerRows = [];
+            self::$medicationRows = [];
+            self::$prescriptionRows = [];
+            self::$listsTouchRows = [];
             self::$queries = [];
             self::$statements = [];
             self::$statementCount = 0;
@@ -91,6 +109,23 @@ namespace OpenEMR\Services\Agent\Evidence {
                 return self::firstOwnedRow(self::$employerRows, 'employer_data_id', $params);
             }
 
+            if (str_contains($sql, 'FROM lists_medication')) {
+                return self::firstOwnedRow(self::$medicationRows, 'medication_issue_id', $params);
+            }
+
+            if (str_contains($sql, 'FROM prescriptions p')) {
+                return self::firstOwnedRow(self::$prescriptionRows, 'prescription_record_id', $params);
+            }
+
+            if (str_contains($sql, 'FROM lists_touch')) {
+                $pid = (int) ($params[0] ?? 0);
+                foreach (self::$listsTouchRows as $row) {
+                    if ((int) ($row['patient_id'] ?? 0) === $pid && ($row['type'] ?? '') === 'medication') {
+                        return $row;
+                    }
+                }
+            }
+
             return false;
         }
 
@@ -105,6 +140,11 @@ namespace OpenEMR\Services\Agent\Evidence {
                 $rows = self::ownedRows(self::$telecomRows, (int) ($params[0] ?? 0), self::limitFromSql($sql));
             } elseif (str_contains($sql, 'FROM employer_data')) {
                 $rows = self::ownedRows(self::$employerRows, (int) ($params[0] ?? 0), self::limitFromSql($sql));
+            } elseif (str_contains($sql, 'FROM prescriptions p')) {
+                $rows = self::standalonePrescriptionRows((int) ($params[0] ?? 0), self::limitFromSql($sql));
+            } elseif (str_contains($sql, 'FROM lists l')) {
+                $pid = str_contains($sql, 'LEFT JOIN prescriptions p') ? (int) ($params[1] ?? 0) : (int) ($params[0] ?? 0);
+                $rows = self::ownedRows(self::$medicationRows, $pid, self::limitFromSql($sql));
             }
 
             $id = 'stmt-' . (++self::$statementCount);
@@ -130,7 +170,7 @@ namespace OpenEMR\Services\Agent\Evidence {
         private static function firstOwnedRow(array $rows, string $idField, array $params): array|false
         {
             $pid = (int) ($params[0] ?? 0);
-            $recordId = (int) ($params[1] ?? 0);
+            $recordId = (int) ($params === [] ? 0 : $params[array_key_last($params)]);
             foreach ($rows as $row) {
                 if ((int) ($row['patient_id'] ?? 0) === $pid && (int) ($row[$idField] ?? 0) === $recordId) {
                     return $row;
@@ -157,6 +197,37 @@ namespace OpenEMR\Services\Agent\Evidence {
         private static function limitFromSql(string $sql): int
         {
             return preg_match('/LIMIT\s+([0-9]+)/i', $sql, $matches) === 1 ? (int) $matches[1] : 100;
+        }
+
+        /**
+         * @return list<array<string, mixed>>
+         */
+        private static function standalonePrescriptionRows(int $pid, int $limit): array
+        {
+            $linkedPrescriptionIds = [];
+            foreach (self::$medicationRows as $row) {
+                if ((int) ($row['patient_id'] ?? 0) !== $pid) {
+                    continue;
+                }
+                $linkedPrescriptionId = (int) ($row['linked_prescription_id'] ?? 0);
+                if ($linkedPrescriptionId > 0) {
+                    $linkedPrescriptionIds[$linkedPrescriptionId] = true;
+                }
+            }
+
+            $rows = array_values(array_filter(
+                self::$prescriptionRows,
+                static function (array $row) use ($pid, $linkedPrescriptionIds): bool {
+                    $recordId = (int) ($row['prescription_record_id'] ?? 0);
+                    $endDate = (string) ($row['prescription_end_date'] ?? '');
+                    return (int) ($row['patient_id'] ?? 0) === $pid
+                        && (string) ($row['prescription_active'] ?? '') === '1'
+                        && ($endDate === '' || $endDate === '0000-00-00' || $endDate >= date('Y-m-d'))
+                        && !isset($linkedPrescriptionIds[$recordId]);
+                }
+            ));
+
+            return array_slice($rows, 0, $limit);
         }
     }
 }
@@ -355,6 +426,129 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $this->assertNull($repository->fetchSourceRecord(123, 'demographics:phone_numbers:602', new EvidenceCaps(10, 0, 0)));
         }
 
+        public function testCurrentMedicationsIncludeExpandedListMedicationAndLinkedPrescriptionFields(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$medicationRows = [
+                $this->medicationRow(77, 123, [
+                    'title' => 'Metformin',
+                    'drug_dosage_instructions' => 'Take 500 mg by mouth twice daily',
+                    'usage_category' => 'outpatient',
+                    'usage_category_title' => 'Outpatient medication',
+                    'request_intent' => 'order',
+                    'request_intent_title' => 'Order',
+                    'medication_adherence' => 'taking',
+                    'medication_adherence_information_source' => 'patient',
+                    'medication_adherence_date_asserted' => '2026-04-29 09:00:00',
+                    'is_primary_record' => 0,
+                    'reporting_source_record_id' => 321,
+                    'linked_prescription_id' => 9001,
+                    'prescription_record_id' => 9001,
+                    'prescription_drug' => 'Metformin 500 mg tablet',
+                    'prescription_rxnorm_drugcode' => '860975',
+                    'prescription_route' => 'oral',
+                    'prescription_refills' => 3,
+                    'prescription_erx_source' => 1,
+                ]),
+            ];
+
+            $records = (new SqlEvidenceRecordRepository())->fetchCurrentMedications(123, new EvidenceCaps(25, 0, 365));
+            $sql = implode("\n", array_column(SqlEvidenceRecordRepositorySqlFixture::$queries, 'sql'));
+
+            $this->assertCount(1, $records);
+            $this->assertSame('medication:lists_medication:77', $records[0]['source_id']);
+            $this->assertStringContainsString('medication: Metformin', $records[0]['display']);
+            $this->assertStringContainsString('usage category: Outpatient medication (outpatient)', $records[0]['display']);
+            $this->assertStringContainsString('request intent: Order (order)', $records[0]['display']);
+            $this->assertStringContainsString('adherence information source: patient', $records[0]['display']);
+            $this->assertStringContainsString('record type: reported/non-primary medication', $records[0]['display']);
+            $this->assertStringContainsString('linked prescription drug: Metformin 500 mg tablet', $records[0]['display']);
+            $this->assertStringContainsString('rxnorm: 860975', $records[0]['display']);
+            $this->assertStringContainsString('prescription eRx source: external/eRx', $records[0]['display']);
+            $this->assertContains('usage_category', $records[0]['fields_used']);
+            $this->assertContains('request_intent', $records[0]['fields_used']);
+            $this->assertContains('medication_adherence_information_source', $records[0]['fields_used']);
+            $this->assertContains('is_primary_record', $records[0]['fields_used']);
+            $this->assertContains('reporting_source_record_id', $records[0]['fields_used']);
+            $this->assertStringContainsString('lm.usage_category', $sql);
+            $this->assertStringContainsString('lm.medication_adherence_information_source', $sql);
+            $this->assertStringContainsString('p.patient_id = ?', $sql);
+            $this->assertStringNotContainsString('drug_info_erx', $sql);
+        }
+
+        public function testStandaloneCurrentPrescriptionsAreIncludedWithoutEndedOrLinkedDuplicates(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$medicationRows = [
+                $this->medicationRow(77, 123, [
+                    'linked_prescription_id' => 9001,
+                    'prescription_record_id' => 9001,
+                ]),
+            ];
+            SqlEvidenceRecordRepositorySqlFixture::$prescriptionRows = [
+                $this->prescriptionRow(9001, 123, ['prescription_drug' => 'Linked Metformin']),
+                $this->prescriptionRow(9002, 123, [
+                    'prescription_drug' => 'Atorvastatin',
+                    'prescription_drug_dosage_instructions' => 'Take 20 mg nightly',
+                    'prescription_end_date' => null,
+                ]),
+                $this->prescriptionRow(9003, 123, [
+                    'prescription_drug' => 'Ended Drug',
+                    'prescription_end_date' => '2020-01-01',
+                ]),
+                $this->prescriptionRow(9004, 999, ['prescription_drug' => 'Other Patient Drug']),
+            ];
+
+            $records = (new SqlEvidenceRecordRepository())->fetchCurrentMedications(123, new EvidenceCaps(25, 0, 365));
+            $sourceIds = array_column($records, 'source_id');
+
+            $this->assertContains('medication:lists_medication:77', $sourceIds);
+            $this->assertContains('medication:prescriptions:9002', $sourceIds);
+            $this->assertNotContains('medication:prescriptions:9001', $sourceIds);
+            $this->assertNotContains('medication:prescriptions:9003', $sourceIds);
+            $this->assertNotContains('medication:prescriptions:9004', $sourceIds);
+        }
+
+        public function testMedicationReviewMarkerIsIncludedWhenNoCurrentMedicationRecordsExist(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$listsTouchRows = [
+                [
+                    'patient_id' => 123,
+                    'type' => 'medication',
+                    'date' => '2026-04-30 11:22:33',
+                ],
+                [
+                    'patient_id' => 999,
+                    'type' => 'medication',
+                    'date' => '2026-04-30 11:22:33',
+                ],
+            ];
+
+            $repository = new SqlEvidenceRecordRepository();
+            $records = $repository->fetchCurrentMedications(123, new EvidenceCaps(25, 0, 365));
+            $review = $repository->fetchSourceRecord(123, 'medication:lists_touch:123', new EvidenceCaps(1, 0, 0));
+
+            $this->assertCount(1, $records);
+            $this->assertSame('medication:lists_touch:123', $records[0]['source_id']);
+            $this->assertSame('medication_review', $records[0]['source_type']);
+            $this->assertStringContainsString('reviewed/touched on 2026-04-30 11:22:33', $records[0]['display']);
+            $this->assertSame('medication:lists_touch:123', $review['source_id'] ?? null);
+            $this->assertNull($repository->fetchSourceRecord(999, 'medication:lists_touch:123', new EvidenceCaps(1, 0, 0)));
+        }
+
+        public function testPrescriptionSourceDrilldownRequiresCurrentPatientOwnership(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$prescriptionRows = [
+                $this->prescriptionRow(9002, 123, ['prescription_drug' => 'Atorvastatin']),
+            ];
+            $repository = new SqlEvidenceRecordRepository();
+
+            $source = $repository->fetchSourceRecord(123, 'medication:prescriptions:9002', new EvidenceCaps(1, 0, 0));
+
+            $this->assertSame('medication:prescriptions:9002', $source['source_id'] ?? null);
+            $this->assertStringContainsString('prescription drug: Atorvastatin', $source['display'] ?? '');
+            $this->assertNull($repository->fetchSourceRecord(999, 'medication:prescriptions:9002', new EvidenceCaps(1, 0, 0)));
+            $this->assertNull($repository->fetchSourceRecord(123, 'demographics:prescriptions:9002', new EvidenceCaps(1, 0, 0)));
+        }
+
         /**
          * @param array<string, mixed> $overrides
          * @return array<string, mixed>
@@ -501,6 +695,140 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
                 'occupation_title' => '',
                 'industry' => '',
                 'industry_title' => '',
+            ];
+        }
+
+        /**
+         * @param array<string, mixed> $overrides
+         * @return array<string, mixed>
+         */
+        private function medicationRow(int $id, int $pid, array $overrides = []): array
+        {
+            return $overrides + [
+                'list_id' => 700 + $id,
+                'list_uuid' => null,
+                'patient_id' => $pid,
+                'date' => '2026-04-20 10:00:00',
+                'begdate' => '2026-04-01 00:00:00',
+                'enddate' => null,
+                'subtype' => '',
+                'title' => 'Medication ' . $id,
+                'list_diagnosis' => '',
+                'list_external_id' => '',
+                'list_option_id' => '',
+                'list_erx_source' => '0',
+                'list_erx_uploaded' => '0',
+                'activity' => 1,
+                'comments' => '',
+                'modifydate' => '2026-04-28 10:00:00',
+                'medication_issue_id' => $id,
+                'medication_list_id' => 700 + $id,
+                'drug_dosage_instructions' => '',
+                'usage_category' => '',
+                'usage_category_title' => '',
+                'request_intent' => '',
+                'request_intent_title' => '',
+                'medication_adherence_information_source' => '',
+                'medication_adherence' => '',
+                'medication_adherence_date_asserted' => null,
+                'linked_prescription_id' => null,
+                'is_primary_record' => 1,
+                'reporting_source_record_id' => null,
+                'prescription_record_id' => null,
+                'prescription_uuid' => null,
+                'prescription_patient_id' => null,
+                'prescription_encounter' => null,
+                'prescription_provider_id' => null,
+                'prescription_filled_by_id' => null,
+                'prescription_pharmacy_id' => null,
+                'prescription_drug' => '',
+                'prescription_drug_id' => 0,
+                'prescription_rxnorm_drugcode' => '',
+                'prescription_medication' => null,
+                'prescription_date_added' => null,
+                'prescription_date_modified' => null,
+                'prescription_start_date' => null,
+                'prescription_end_date' => null,
+                'prescription_filled_date' => null,
+                'prescription_datetime' => null,
+                'prescription_active' => null,
+                'prescription_txDate' => null,
+                'prescription_drug_dosage_instructions' => '',
+                'prescription_dosage' => '',
+                'prescription_quantity' => '',
+                'prescription_size' => '',
+                'prescription_unit' => '',
+                'prescription_route' => '',
+                'prescription_interval' => '',
+                'prescription_form' => '',
+                'prescription_substitute' => '',
+                'prescription_refills' => '',
+                'prescription_per_refill' => '',
+                'prescription_prn' => '',
+                'prescription_note' => '',
+                'prescription_usage_category' => '',
+                'prescription_usage_category_title' => '',
+                'prescription_request_intent' => '',
+                'prescription_request_intent_title' => '',
+                'prescription_indication' => '',
+                'prescription_diagnosis' => '',
+                'prescription_erx_source' => '',
+                'prescription_erx_uploaded' => '',
+                'prescription_external_id' => '',
+                'prescription_guid' => '',
+            ];
+        }
+
+        /**
+         * @param array<string, mixed> $overrides
+         * @return array<string, mixed>
+         */
+        private function prescriptionRow(int $id, int $pid, array $overrides = []): array
+        {
+            return $overrides + [
+                'patient_id' => $pid,
+                'prescription_record_id' => $id,
+                'prescription_uuid' => null,
+                'prescription_patient_id' => $pid,
+                'prescription_encounter' => null,
+                'prescription_provider_id' => null,
+                'prescription_filled_by_id' => null,
+                'prescription_pharmacy_id' => null,
+                'prescription_drug' => 'Prescription ' . $id,
+                'prescription_drug_id' => 0,
+                'prescription_rxnorm_drugcode' => '',
+                'prescription_medication' => null,
+                'prescription_date_added' => '2026-04-01 00:00:00',
+                'prescription_date_modified' => '2026-04-29 00:00:00',
+                'prescription_start_date' => '2026-04-01',
+                'prescription_end_date' => null,
+                'prescription_filled_date' => null,
+                'prescription_datetime' => null,
+                'prescription_active' => 1,
+                'prescription_txDate' => '2026-04-01',
+                'prescription_drug_dosage_instructions' => '',
+                'prescription_dosage' => '',
+                'prescription_quantity' => '',
+                'prescription_size' => '',
+                'prescription_unit' => '',
+                'prescription_route' => '',
+                'prescription_interval' => '',
+                'prescription_form' => '',
+                'prescription_substitute' => '',
+                'prescription_refills' => '',
+                'prescription_per_refill' => '',
+                'prescription_prn' => '',
+                'prescription_note' => '',
+                'prescription_usage_category' => '',
+                'prescription_usage_category_title' => '',
+                'prescription_request_intent' => '',
+                'prescription_request_intent_title' => '',
+                'prescription_indication' => '',
+                'prescription_diagnosis' => '',
+                'prescription_erx_source' => '0',
+                'prescription_erx_uploaded' => '0',
+                'prescription_external_id' => '',
+                'prescription_guid' => '',
             ];
         }
     }

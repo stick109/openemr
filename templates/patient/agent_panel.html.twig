@@ -117,4 +117,4 @@
     <div class="agent-panel__output js-agent-output"></div>
 </div>
 
-<script src="{{ webroot|attr }}/interface/patient_file/summary/agent_panel.js?v={{ assetVersion|attr_url }}"></script>
+<script src="{{ webroot|attr }}/interface/patient_file/summary/agent_panel.js?v={{ agentPanelAssetVersion|default(assetVersion)|attr_url }}"></script>

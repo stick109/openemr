@@ -48,6 +48,8 @@ $displayIntents = array_values(array_filter(
 ));
 $sourceIntent = $agentCatalog->get(AgentIntentCatalog::SHOW_SOURCE);
 $agentSiteId = (string) ($session->get('site_id') ?? 'default');
+$agentPanelScriptPath = __DIR__ . '/agent_panel.js';
+$agentPanelAssetVersion = is_file($agentPanelScriptPath) ? (string) filemtime($agentPanelScriptPath) : '';
 ?>
 <!DOCTYPE html>
 <html>
@@ -75,6 +77,7 @@ $agentSiteId = (string) ($session->get('site_id') ?? 'default');
                 . rawurlencode($agentSiteId)
                 . '/api/agent/intent',
             'apiCsrfToken' => CsrfUtils::collectCsrfToken($session, 'api'),
+            'agentPanelAssetVersion' => $agentPanelAssetVersion,
         ]);
         ?>
     </div>

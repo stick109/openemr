@@ -96,6 +96,7 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString("'sourceIntent' => \$sourceIntent", $this->pageContent);
         $this->assertStringContainsString("CsrfUtils::collectCsrfToken(\$session, 'api')", $this->pageContent);
         $this->assertStringContainsString("/api/agent/intent", $this->pageContent);
+        $this->assertStringContainsString('$agentPanelAssetVersion', $this->pageContent);
         $this->assertStringContainsString('$list_id = "clinical_copilot";', $this->pageContent);
         $this->assertStringContainsString('displayHorizNavBarMenu()', $this->pageContent);
     }
@@ -112,7 +113,7 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString('data-prompt-text="{{ intent.prompt_text|attr }}"', $this->templateContent);
         $this->assertStringContainsString('data-api-url="{{ apiUrl|attr }}"', $this->templateContent);
         $this->assertStringContainsString('data-api-csrf-token="{{ apiCsrfToken|attr }}"', $this->templateContent);
-        $this->assertStringContainsString('/interface/patient_file/summary/agent_panel.js?v={{ assetVersion|attr_url }}', $this->templateContent);
+        $this->assertStringContainsString('/interface/patient_file/summary/agent_panel.js?v={{ agentPanelAssetVersion|default(assetVersion)|attr_url }}', $this->templateContent);
         $this->assertStringContainsString('APICSRFTOKEN: apiCsrfToken', $this->scriptContent);
         $this->assertStringContainsString("active_patient_context: 'server-session'", $this->scriptContent);
         $this->assertStringContainsString('fetch(apiUrl', $this->scriptContent);

@@ -132,6 +132,37 @@ $loadMedicationSql = 'dbclient=mysql; if command -v mariadb >/dev/null 2>&1; the
 $missingAllergySql = "SELECT COUNT(*) FROM patient_data p WHERE NOT EXISTS (SELECT 1 FROM lists l WHERE l.pid = p.pid AND l.type = 'allergy' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()));"
 $allergySummarySql = "SELECT p.pid, CONCAT(p.fname, ' ', p.lname) AS patient, COUNT(l.id) AS active_allergies FROM patient_data p LEFT JOIN lists l ON l.pid = p.pid AND l.type = 'allergy' AND l.activity = 1 AND (l.enddate IS NULL OR l.enddate >= CURDATE()) GROUP BY p.pid, p.fname, p.lname ORDER BY p.pid;"
 $loadAllergySql = 'dbclient=mysql; if command -v mariadb >/dev/null 2>&1; then dbclient=mariadb; fi; "$dbclient" -hmysql -uopenemr -popenemr openemr < /openemr/sql/demo_current_allergies.sql'
+$fillPatientContactSql = @'
+UPDATE patient_data
+SET
+    street = CASE WHEN TRIM(COALESCE(street, '')) = '' THEN CONCAT(1000 + pid, ' Demo Lane') ELSE street END,
+    city = CASE WHEN TRIM(COALESCE(city, '')) = '' THEN 'Demo City' ELSE city END,
+    state = CASE WHEN TRIM(COALESCE(state, '')) = '' THEN 'CA' ELSE state END,
+    postal_code = CASE WHEN TRIM(COALESCE(postal_code, '')) = '' THEN LPAD(90000 + MOD(pid, 1000), 5, '0') ELSE postal_code END,
+    country_code = CASE WHEN TRIM(COALESCE(country_code, '')) = '' THEN 'US' ELSE country_code END,
+    phone_home = CASE
+        WHEN TRIM(COALESCE(phone_home, '')) = ''
+          AND TRIM(COALESCE(phone_cell, '')) = ''
+          AND TRIM(COALESCE(phone_biz, '')) = ''
+          AND TRIM(COALESCE(phone_contact, '')) = ''
+        THEN CONCAT('(202) 555-01', LPAD(MOD(pid, 100), 2, '0'))
+        ELSE phone_home
+    END
+WHERE TRIM(COALESCE(street, '')) = ''
+   OR TRIM(COALESCE(city, '')) = ''
+   OR TRIM(COALESCE(state, '')) = ''
+   OR TRIM(COALESCE(postal_code, '')) = ''
+   OR TRIM(COALESCE(country_code, '')) = ''
+   OR (
+       TRIM(COALESCE(phone_home, '')) = ''
+       AND TRIM(COALESCE(phone_cell, '')) = ''
+       AND TRIM(COALESCE(phone_biz, '')) = ''
+       AND TRIM(COALESCE(phone_contact, '')) = ''
+   );
+'@
+$missingAddressSql = "SELECT COUNT(*) FROM patient_data p WHERE TRIM(COALESCE(p.street, '')) = '' OR TRIM(COALESCE(p.city, '')) = '' OR TRIM(COALESCE(p.state, '')) = '' OR TRIM(COALESCE(p.postal_code, '')) = '' OR TRIM(COALESCE(p.country_code, '')) = '';"
+$missingPhoneSql = "SELECT COUNT(*) FROM patient_data p WHERE TRIM(COALESCE(p.phone_home, '')) = '' AND TRIM(COALESCE(p.phone_cell, '')) = '' AND TRIM(COALESCE(p.phone_biz, '')) = '' AND TRIM(COALESCE(p.phone_contact, '')) = '';"
+$patientContactSummarySql = "SELECT p.pid, CONCAT(p.fname, ' ', p.lname) AS patient, CONCAT(p.street, ', ', p.city, ', ', p.state, ' ', p.postal_code, ', ', p.country_code) AS address, COALESCE(NULLIF(TRIM(p.phone_home), ''), NULLIF(TRIM(p.phone_cell), ''), NULLIF(TRIM(p.phone_biz), ''), NULLIF(TRIM(p.phone_contact), '')) AS phone FROM patient_data p ORDER BY p.pid;"
 $missingRecentEventSql = "SELECT COUNT(*) FROM patient_data p WHERE NOT EXISTS (SELECT 1 FROM form_encounter fe WHERE fe.pid = p.pid AND fe.date >= CURDATE() - INTERVAL 30 DAY);"
 $recentEventSummarySql = "SELECT p.pid, CONCAT(p.fname, ' ', p.lname) AS patient, COUNT(fe.id) AS recent_events FROM patient_data p LEFT JOIN form_encounter fe ON fe.pid = p.pid AND fe.date >= CURDATE() - INTERVAL 30 DAY GROUP BY p.pid, p.fname, p.lname ORDER BY p.pid;"
 $missingUserRecentEventSql = "SELECT COUNT(*) FROM users u WHERE u.active = 1 AND u.authorized = 1 AND NOT EXISTS (SELECT 1 FROM form_encounter fe WHERE fe.provider_id = u.id AND fe.date >= CURDATE() - INTERVAL 30 DAY);"
@@ -171,6 +202,9 @@ try {
     Write-Host "Adding demo recent events for patients and active users missing recent events..."
     Invoke-DockerCompose -ComposeArguments @("exec", "-T", "openemr", "sh", "-c", $loadRecentEventSql)
 
+    Write-Host "Adding demo addresses and phone numbers for patients missing contact details..."
+    Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $fillPatientContactSql)
+
     Write-Host "Verifying every patient has at least one active medication..."
     $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingMedicationSql)
     $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-medication"
@@ -190,6 +224,24 @@ try {
     }
 
     Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $allergySummarySql)
+
+    Write-Host "Verifying every patient has a complete address..."
+    $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingAddressSql)
+    $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-address"
+
+    if ($missingCount -ne 0) {
+        throw "Address verification failed: $missingCount patient(s) still lack complete address entries."
+    }
+
+    Write-Host "Verifying every patient has at least one phone number..."
+    $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingPhoneSql)
+    $missingCount = ConvertTo-VerifiedCount -Output $missingOutput -Description "missing-phone"
+
+    if ($missingCount -ne 0) {
+        throw "Phone verification failed: $missingCount patient(s) still lack phone number entries."
+    }
+
+    Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $patientContactSummarySql)
 
     Write-Host "Verifying every patient has at least one recent event..."
     $missingOutput = Invoke-DockerComposeCapture -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "--batch", "--skip-column-names", "-e", $missingRecentEventSql)
@@ -211,7 +263,7 @@ try {
 
     Invoke-DockerCompose -ComposeArguments @("exec", "-T", "mysql", "mariadb", "-uroot", "-proot", "openemr", "-e", $userRecentEventSummarySql)
 
-    Write-Host "Done. Demo data is loaded and every patient has at least one active medication, allergy, and recent event."
+    Write-Host "Done. Demo data is loaded and every patient has an address, a phone number, and at least one active medication, allergy, and recent event."
 }
 finally {
     Pop-Location

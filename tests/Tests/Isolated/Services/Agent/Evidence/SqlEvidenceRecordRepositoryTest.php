@@ -313,6 +313,33 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $this->assertStringNotContainsString('drivers_license', SqlEvidenceRecordRepositorySqlFixture::$queries[0]['sql']);
         }
 
+        public function testFetchBasicPatientDataShowsPrimaryProviderDetailsInsteadOfId(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$patientRows[123] = $this->patientRow([
+                'providerID' => 42,
+                'primary_provider_title' => 'Dr.',
+                'primary_provider_fname' => 'Alice',
+                'primary_provider_mname' => 'B',
+                'primary_provider_lname' => 'Nguyen',
+                'primary_provider_suffix' => 'MD',
+                'primary_provider_specialty' => 'Family Medicine',
+                'primary_provider_npi' => '1234567893',
+            ]);
+
+            $records = (new SqlEvidenceRecordRepository())->fetchBasicPatientData(123, new EvidenceCaps(10, 0, 0));
+
+            $this->assertStringContainsString('Primary provider: Dr. Alice B Nguyen MD', $records[0]['display']);
+            $this->assertStringContainsString('Primary provider specialty: Family Medicine', $records[0]['display']);
+            $this->assertStringContainsString('Primary provider NPI: 1234567893', $records[0]['display']);
+            $this->assertStringNotContainsString('Primary provider id', $records[0]['display']);
+            $this->assertContains('providerID', $records[0]['fields_used']);
+            $this->assertContains('primary_provider_fname', $records[0]['fields_used']);
+            $this->assertContains('primary_provider_specialty', $records[0]['fields_used']);
+            $this->assertContains('primary_provider_npi', $records[0]['fields_used']);
+            $this->assertStringContainsString('LEFT JOIN users primary_provider', SqlEvidenceRecordRepositorySqlFixture::$queries[0]['sql']);
+            $this->assertStringContainsString('primary_provider.fname AS primary_provider_fname', SqlEvidenceRecordRepositorySqlFixture::$queries[0]['sql']);
+        }
+
         public function testStructuredAddressAndTelecomRowsArePatientScopedAndDeduplicated(): void
         {
             SqlEvidenceRecordRepositorySqlFixture::$patientRows[123] = $this->patientRow([
@@ -733,6 +760,13 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
                 'regdate' => null,
                 'last_updated' => null,
                 'providerID' => null,
+                'primary_provider_title' => '',
+                'primary_provider_fname' => '',
+                'primary_provider_mname' => '',
+                'primary_provider_lname' => '',
+                'primary_provider_suffix' => '',
+                'primary_provider_specialty' => '',
+                'primary_provider_npi' => '',
                 'ref_providerID' => null,
                 'referrer' => '',
                 'referrerID' => '',

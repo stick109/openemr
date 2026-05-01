@@ -35,63 +35,72 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
 
         $row = sqlQuery(
             "SELECT
-                pid,
-                uuid,
-                title,
-                fname,
-                mname,
-                lname,
-                suffix,
-                preferred_name,
-                birth_fname,
-                birth_mname,
-                birth_lname,
-                DOB,
-                sex,
-                sex_identified,
-                gender_identity,
-                sexual_orientation,
-                pronoun,
-                status,
-                deceased_date,
-                deceased_reason,
-                language,
-                interpreter,
-                interpreter_needed,
-                race,
-                ethnicity,
-                ethnoracial,
-                religion,
-                nationality_country,
-                tribal_affiliations,
-                street,
-                street_line_2,
-                city,
-                state,
-                postal_code,
-                county,
-                country_code,
-                phone_home,
-                phone_biz,
-                phone_contact,
-                phone_cell,
-                email,
-                email_direct,
-                contact_relationship,
-                date,
-                regdate,
-                providerID,
-                ref_providerID,
-                referrer,
-                referrerID,
-                pharmacy_id,
-                allow_patient_portal,
-                care_team_provider,
-                care_team_facility,
-                care_team_status,
-                provider_since_date
-             FROM patient_data
-             WHERE pid = ?
+                pd.pid,
+                pd.uuid,
+                pd.title,
+                pd.fname,
+                pd.mname,
+                pd.lname,
+                pd.suffix,
+                pd.preferred_name,
+                pd.birth_fname,
+                pd.birth_mname,
+                pd.birth_lname,
+                pd.DOB,
+                pd.sex,
+                pd.sex_identified,
+                pd.gender_identity,
+                pd.sexual_orientation,
+                pd.pronoun,
+                pd.status,
+                pd.deceased_date,
+                pd.deceased_reason,
+                pd.language,
+                pd.interpreter,
+                pd.interpreter_needed,
+                pd.race,
+                pd.ethnicity,
+                pd.ethnoracial,
+                pd.religion,
+                pd.nationality_country,
+                pd.tribal_affiliations,
+                pd.street,
+                pd.street_line_2,
+                pd.city,
+                pd.state,
+                pd.postal_code,
+                pd.county,
+                pd.country_code,
+                pd.phone_home,
+                pd.phone_biz,
+                pd.phone_contact,
+                pd.phone_cell,
+                pd.email,
+                pd.email_direct,
+                pd.contact_relationship,
+                pd.date,
+                pd.regdate,
+                pd.providerID,
+                primary_provider.title AS primary_provider_title,
+                primary_provider.fname AS primary_provider_fname,
+                primary_provider.mname AS primary_provider_mname,
+                primary_provider.lname AS primary_provider_lname,
+                primary_provider.suffix AS primary_provider_suffix,
+                primary_provider.specialty AS primary_provider_specialty,
+                primary_provider.npi AS primary_provider_npi,
+                pd.ref_providerID,
+                pd.referrer,
+                pd.referrerID,
+                pd.pharmacy_id,
+                pd.allow_patient_portal,
+                pd.care_team_provider,
+                pd.care_team_facility,
+                pd.care_team_status,
+                pd.provider_since_date
+             FROM patient_data pd
+             LEFT JOIN users primary_provider
+                ON primary_provider.id = pd.providerID
+             WHERE pd.pid = ?
              LIMIT 1",
             [$pid]
         );
@@ -857,7 +866,33 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         $this->addDisplayPart($displayParts, $fieldsUsed, 'direct email', $row['email_direct'] ?? null, ['email_direct']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'contact relationship', $row['contact_relationship'] ?? null, ['contact_relationship']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'registration date', $this->dateValue($row, ['regdate']), ['regdate']);
-        $this->addDisplayPart($displayParts, $fieldsUsed, 'primary provider id', $this->nonZeroValue($row['providerID'] ?? null), ['providerID']);
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'primary provider',
+            $this->providerName($row, 'primary_provider'),
+            $this->providerFields($row, 'providerID', [
+                'primary_provider_title',
+                'primary_provider_fname',
+                'primary_provider_mname',
+                'primary_provider_lname',
+                'primary_provider_suffix',
+            ])
+        );
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'primary provider specialty',
+            $row['primary_provider_specialty'] ?? null,
+            $this->providerFields($row, 'providerID', ['primary_provider_specialty'])
+        );
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'primary provider NPI',
+            $row['primary_provider_npi'] ?? null,
+            $this->providerFields($row, 'providerID', ['primary_provider_npi'])
+        );
         $this->addDisplayPart($displayParts, $fieldsUsed, 'referring provider id', $this->nonZeroValue($row['ref_providerID'] ?? null), ['ref_providerID']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'referrer', $row['referrer'] ?? null, ['referrer']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'referrer id', $row['referrerID'] ?? null, ['referrerID']);
@@ -1713,6 +1748,31 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             $row['birth_mname'] ?? null,
             $row['birth_lname'] ?? null,
         ], ' ');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function providerName(array $row, string $prefix): string
+    {
+        return $this->formatAddressFromValues([
+            $row[$prefix . '_title'] ?? null,
+            $row[$prefix . '_fname'] ?? null,
+            $row[$prefix . '_mname'] ?? null,
+            $row[$prefix . '_lname'] ?? null,
+            $row[$prefix . '_suffix'] ?? null,
+        ], ' ');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param list<string> $detailFields
+     * @return list<string>
+     */
+    private function providerFields(array $row, string $relationshipField, array $detailFields): array
+    {
+        $fields = $this->filledFields($row, $detailFields);
+        return $fields === [] ? [] : array_merge([$relationshipField], $fields);
     }
 
     /**

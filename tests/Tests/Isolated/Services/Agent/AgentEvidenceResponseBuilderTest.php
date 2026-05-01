@@ -112,19 +112,58 @@ class AgentEvidenceResponseBuilderTest extends TestCase
         );
 
         $response = $builder->build(AgentIntentCatalog::ALLERGIES_TO_CONFIRM, $this->allergyAccessToken());
+        $claimTexts = array_column($response['answer']['answer_blocks'][0]['claims'], 'text');
         $claimText = implode(
             "\n",
-            array_column($response['answer']['answer_blocks'][0]['claims'], 'text')
+            $claimTexts
         );
 
         $this->assertSame('verified', $response['status']);
         $this->assertSame('deterministic_verified', $response['response_generation']);
         $this->assertSame('passed', $response['verification']['status']);
-        $this->assertCount(25, $response['answer']['answer_blocks'][0]['claims']);
-        $this->assertStringContainsString('allergen: Allergy 1', $claimText);
-        $this->assertStringContainsString('coded allergen: Penicillin (penicillin)', $claimText);
+        $this->assertCount(125, $response['answer']['answer_blocks'][0]['claims']);
+        $this->assertSame('allergen: Allergy 1', $claimTexts[0]);
+        $this->assertSame('reaction: Hives (hives)', $claimTexts[1]);
+        $this->assertSame('severity: Mild (mild)', $claimTexts[2]);
+        $this->assertSame('verification status: Confirmed (confirmed)', $claimTexts[3]);
+        $this->assertSame('current status: current', $claimTexts[4]);
+        $this->assertStringNotContainsString(';', $claimTexts[0]);
+        $this->assertStringNotContainsString('coded allergen', $claimText);
         $this->assertStringNotContainsString('external allergy id', $claimText);
         $this->assertLessThan(4000, strlen($claimText));
+    }
+
+    public function testSingleAllergyPropertiesAreRenderedAsSeparateClaims(): void
+    {
+        $builder = new AgentEvidenceResponseBuilder(
+            toolset: new AgentEvidenceToolset(
+                repository: new AgentEvidenceResponseBuilderExpandedAllergyRepository(recordCount: 1),
+                logger: new NullLogger(),
+                requestIdFactory: static fn (): string => 'request-single-allergy'
+            ),
+            anonymizer: new Anonymizer(logger: new NullLogger()),
+            llmOrchestrator: new AgentLlmOrchestrator(
+                provider: new DisabledAgentLlmProvider(),
+                logger: new NullLogger()
+            ),
+            logger: new NullLogger()
+        );
+
+        $response = $builder->build(AgentIntentCatalog::ALLERGIES_TO_CONFIRM, $this->allergyAccessToken());
+        $claimTexts = array_column($response['answer']['answer_blocks'][0]['claims'], 'text');
+
+        $this->assertSame('verified', $response['status']);
+        $this->assertSame([
+            'allergen: Allergy 1',
+            'coded allergen: Penicillin (penicillin)',
+            'reaction: Hives (hives)',
+            'severity: Mild (mild)',
+            'verification status: Confirmed (confirmed)',
+            'current status: current',
+        ], $claimTexts);
+        foreach ($claimTexts as $claimText) {
+            $this->assertStringNotContainsString(';', $claimText);
+        }
     }
 
     private function accessToken(): AgentAccessToken
@@ -262,6 +301,10 @@ final class AgentEvidenceResponseBuilderAllergyReviewRepository implements Evide
 
 final class AgentEvidenceResponseBuilderExpandedAllergyRepository implements EvidenceRecordRepositoryInterface
 {
+    public function __construct(private readonly int $recordCount = 25)
+    {
+    }
+
     public function fetchBasicPatientData(int $pid, EvidenceCaps $caps): array
     {
         return [];
@@ -275,7 +318,7 @@ final class AgentEvidenceResponseBuilderExpandedAllergyRepository implements Evi
     public function fetchAllergiesToConfirm(int $pid, EvidenceCaps $caps): array
     {
         $records = [];
-        for ($index = 1; $index <= 25; $index++) {
+        for ($index = 1; $index <= $this->recordCount; $index++) {
             $records[] = [
                 'source_id' => 'allergy:lists:' . $index,
                 'source_type' => 'allergy',

@@ -262,7 +262,7 @@ final class AgentEvidenceResponseBuilder
                 continue;
             }
 
-            foreach ($this->claimTexts((string) $intent['intent_id'], $source) as $claimText) {
+            foreach ($this->claimTexts((string) $intent['intent_id'], $source, count($sources)) as $claimText) {
                 $claims[] = [
                     'text' => $claimText,
                     'citation_ids' => [(string) ($source['source_id'] ?? '')],
@@ -371,8 +371,12 @@ final class AgentEvidenceResponseBuilder
      * @param array<string, mixed> $source
      * @return list<string>
      */
-    private function claimTexts(string $intentId, array $source): array
+    private function claimTexts(string $intentId, array $source, int $sourceCount = 0): array
     {
+        if ($intentId === AgentIntentCatalog::ALLERGIES_TO_CONFIRM) {
+            return $this->allergyClaimTexts($source, $sourceCount);
+        }
+
         $text = $this->claimText($intentId, $source);
         if ($intentId !== AgentIntentCatalog::BASIC_PATIENT_DATA) {
             return [$text];
@@ -395,10 +399,6 @@ final class AgentEvidenceResponseBuilder
 
         if ($intentId === AgentIntentCatalog::CURRENT_MEDICATIONS) {
             return $this->currentMedicationClaimText($source, $display);
-        }
-
-        if ($intentId === AgentIntentCatalog::ALLERGIES_TO_CONFIRM) {
-            return $this->allergyClaimText($source, $display);
         }
 
         if ($intentId === AgentIntentCatalog::SHOW_SOURCE) {
@@ -478,11 +478,13 @@ final class AgentEvidenceResponseBuilder
 
     /**
      * @param array<string, mixed> $source
+     * @return list<string>
      */
-    private function allergyClaimText(array $source, string $display): string
+    private function allergyClaimTexts(array $source, int $sourceCount): array
     {
+        $display = trim((string) ($source['display'] ?? 'Source record'));
         if ((string) ($source['source_type'] ?? '') === 'allergy_review') {
-            return $this->truncateClaimText($display, 140);
+            return [$this->truncateClaimText($display, 140)];
         }
 
         $segments = array_values(array_filter(
@@ -492,16 +494,14 @@ final class AgentEvidenceResponseBuilder
 
         $preferredPrefixes = [
             'allergen:',
-            'coded allergen:',
             'reaction:',
             'severity:',
             'verification status:',
             'current status:',
-            'begin date:',
-            'subtype:',
-            'diagnosis:',
-            'allergy eRx source:',
         ];
+        if ($sourceCount <= 10) {
+            array_splice($preferredPrefixes, 1, 0, ['coded allergen:']);
+        }
 
         $selected = [];
         foreach ($preferredPrefixes as $prefix) {
@@ -517,7 +517,10 @@ final class AgentEvidenceResponseBuilder
             $selected = $segments === [] ? [$display] : [reset($segments)];
         }
 
-        return $this->truncateClaimText($this->joinClaimSegments($selected), 140);
+        return array_values(array_map(
+            fn (string $segment): string => $this->truncateClaimText($segment, 140),
+            array_unique($selected)
+        ));
     }
 
     /**

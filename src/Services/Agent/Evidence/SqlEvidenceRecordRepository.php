@@ -1214,7 +1214,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
 
         $this->addDisplayPart($displayParts, $fieldsUsed, 'allergen', $row['title'] ?? null, ['title']);
         $codedAllergenLabel = $this->filled($row['coded_allergen_title'] ?? null) !== ''
-            ? $this->codedOptionLabel($row['list_option_id'] ?? null, $row['coded_allergen_title'] ?? null)
+            ? $this->codedOptionLabel($row['list_option_id'] ?? null, $row['coded_allergen_title'] ?? null, true)
             : '';
         $this->addDisplayPart(
             $displayParts,
@@ -1228,14 +1228,14 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             $displayParts,
             $fieldsUsed,
             'reaction',
-            $this->codedOptionLabel($row['reaction'] ?? null, $row['reaction_title'] ?? null),
+            $this->codedOptionLabel($row['reaction'] ?? null, $row['reaction_title'] ?? null, true),
             $this->filledFields($row, ['reaction', 'reaction_title'])
         );
         $this->addDisplayPart(
             $displayParts,
             $fieldsUsed,
             'severity',
-            $this->codedOptionLabel($row['severity_al'] ?? null, $row['severity_title'] ?? null),
+            $this->codedOptionLabel($row['severity_al'] ?? null, $row['severity_title'] ?? null, true),
             $this->filledFields($row, ['severity_al', 'severity_title'])
         );
         $this->addDisplayPart($displayParts, $fieldsUsed, 'severity codes', $row['severity_codes'] ?? null, ['severity_codes']);
@@ -1243,7 +1243,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             $displayParts,
             $fieldsUsed,
             'verification status',
-            $this->codedOptionLabel($row['verification'] ?? null, $row['verification_title'] ?? null),
+            $this->codedOptionLabel($row['verification'] ?? null, $row['verification_title'] ?? null, true),
             $this->filledFields($row, ['verification', 'verification_title'])
         );
         $this->addDisplayPart($displayParts, $fieldsUsed, 'current status', ((string) ($row['activity'] ?? '') === '1') ? 'current' : '', ['activity']);
@@ -1256,6 +1256,9 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         $this->addDisplayPart($displayParts, $fieldsUsed, 'external allergy id', $row['external_allergyid'] ?? null, ['external_allergyid']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'external list id', $row['list_external_id'] ?? null, ['external_id']);
 
+        $display = $this->displayWithCapitalizedProperties($this->joinDisplay($displayParts, 'Allergy record'));
+        $excerpt = $this->boundedText($row['comments'] ?? null, 280) ?: $display;
+
         return [
             'source_id' => 'allergy:lists:' . (int) $row['id'],
             'source_type' => 'allergy',
@@ -1266,8 +1269,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'patient_id' => (int) $row['patient_id'],
             'date' => $this->dateValue($row, ['modifydate', 'date', 'begdate']),
             'status' => $status,
-            'display' => $this->joinDisplay($displayParts, 'Allergy record'),
-            'excerpt' => $this->boundedText($row['comments'] ?? null, 280) ?: $this->joinDisplay($displayParts, 'Allergy record'),
+            'display' => $display,
+            'excerpt' => $excerpt,
             'fields_used' => $fieldsUsed === [] ? ['title'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_active_record',
         ];
@@ -1794,15 +1797,29 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         return $this->filled($value);
     }
 
-    private function codedOptionLabel(mixed $value, mixed $title): string
+    private function codedOptionLabel(mixed $value, mixed $title, bool $hideMatchingCode = false): string
     {
         $value = $this->filled($value);
         $title = $this->filled($title);
-        if ($value !== '' && $title !== '' && $value !== $title) {
+        if (
+            $value !== ''
+            && $title !== ''
+            && (
+                $hideMatchingCode
+                    ? $this->normalizedOptionText($value) !== $this->normalizedOptionText($title)
+                    : $value !== $title
+            )
+        ) {
             return $title . ' (' . $value . ')';
         }
 
         return $title !== '' ? $title : $value;
+    }
+
+    private function normalizedOptionText(string $value): string
+    {
+        $normalized = strtolower(str_replace(['_', '-'], ' ', $value));
+        return trim((string) preg_replace('/\s+/', ' ', $normalized));
     }
 
     /**

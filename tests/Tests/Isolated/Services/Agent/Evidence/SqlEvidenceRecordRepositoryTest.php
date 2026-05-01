@@ -593,20 +593,20 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $this->assertCount(1, $records);
             $this->assertSame('allergy:lists:88', $records[0]['source_id']);
             $this->assertSame('allergies', $records[0]['data_class']);
-            $this->assertStringContainsString('allergen: Penicillin allergy', $records[0]['display']);
-            $this->assertStringContainsString('coded allergen: Penicillin (penicillin)', $records[0]['display']);
-            $this->assertStringContainsString('coded allergen codes: RxNorm:7980', $records[0]['display']);
-            $this->assertStringContainsString('reaction: Hives (hives)', $records[0]['display']);
-            $this->assertStringContainsString('severity: Mild (mild)', $records[0]['display']);
-            $this->assertStringContainsString('severity codes: SNOMED-CT:255604002', $records[0]['display']);
-            $this->assertStringContainsString('verification status: Confirmed (confirmed)', $records[0]['display']);
-            $this->assertStringContainsString('current status: current', $records[0]['display']);
-            $this->assertStringContainsString('subtype: drug', $records[0]['display']);
-            $this->assertStringContainsString('diagnosis: Z88.0', $records[0]['display']);
-            $this->assertStringContainsString('allergy eRx source: external/eRx', $records[0]['display']);
-            $this->assertStringContainsString('allergy eRx uploaded: yes', $records[0]['display']);
-            $this->assertStringContainsString('external allergy id: 55501', $records[0]['display']);
-            $this->assertStringContainsString('external list id: ext-allergy-88', $records[0]['display']);
+            $this->assertStringContainsString('Allergen: Penicillin allergy', $records[0]['display']);
+            $this->assertStringContainsString('Coded allergen: Penicillin', $records[0]['display']);
+            $this->assertStringContainsString('Coded allergen codes: RxNorm:7980', $records[0]['display']);
+            $this->assertStringContainsString('Reaction: Hives', $records[0]['display']);
+            $this->assertStringContainsString('Severity: Mild', $records[0]['display']);
+            $this->assertStringContainsString('Severity codes: SNOMED-CT:255604002', $records[0]['display']);
+            $this->assertStringContainsString('Verification status: Confirmed', $records[0]['display']);
+            $this->assertStringContainsString('Current status: current', $records[0]['display']);
+            $this->assertStringContainsString('Subtype: drug', $records[0]['display']);
+            $this->assertStringContainsString('Diagnosis: Z88.0', $records[0]['display']);
+            $this->assertStringContainsString('Allergy eRx source: external/eRx', $records[0]['display']);
+            $this->assertStringContainsString('Allergy eRx uploaded: yes', $records[0]['display']);
+            $this->assertStringContainsString('External allergy id: 55501', $records[0]['display']);
+            $this->assertStringContainsString('External list id: ext-allergy-88', $records[0]['display']);
             $this->assertContains('list_option_id', $records[0]['fields_used']);
             $this->assertContains('external_allergyid', $records[0]['fields_used']);
             $this->assertContains('external_id', $records[0]['fields_used']);
@@ -672,8 +672,8 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $source = $repository->fetchSourceRecord(123, 'allergy:lists:88', new EvidenceCaps(1, 0, 0));
 
             $this->assertSame('allergy:lists:88', $source['source_id'] ?? null);
-            $this->assertStringContainsString('coded allergen: Sulfa (sulfa)', $source['display'] ?? '');
-            $this->assertStringContainsString('severity: Severe (severe)', $source['display'] ?? '');
+            $this->assertStringContainsString('Coded allergen: Sulfa', $source['display'] ?? '');
+            $this->assertStringContainsString('Severity: Severe', $source['display'] ?? '');
             $this->assertNull($repository->fetchSourceRecord(999, 'allergy:lists:88', new EvidenceCaps(1, 0, 0)));
             $this->assertNull($repository->fetchSourceRecord(123, 'medication:lists:88', new EvidenceCaps(1, 0, 0)));
         }

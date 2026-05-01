@@ -149,14 +149,16 @@ class AgentEvidenceResponseBuilderTest extends TestCase
         $this->assertSame('verified', $response['status']);
         $this->assertSame('deterministic_verified', $response['response_generation']);
         $this->assertSame('passed', $response['verification']['status']);
-        $this->assertCount(125, $response['answer']['answer_blocks'][0]['claims']);
-        $this->assertSame('allergen: Allergy 1', $claimTexts[0]);
-        $this->assertSame('reaction: Hives (hives)', $claimTexts[1]);
-        $this->assertSame('severity: Mild (mild)', $claimTexts[2]);
-        $this->assertSame('verification status: Confirmed (confirmed)', $claimTexts[3]);
-        $this->assertSame('current status: current', $claimTexts[4]);
+        $this->assertCount(100, $response['answer']['answer_blocks'][0]['claims']);
+        $this->assertSame('Allergen: Allergy 1', $claimTexts[0]);
+        $this->assertSame('Reaction: Hives', $claimTexts[1]);
+        $this->assertSame('Severity: Mild', $claimTexts[2]);
+        $this->assertSame('Verification status: Confirmed', $claimTexts[3]);
         $this->assertStringNotContainsString(';', $claimTexts[0]);
         $this->assertStringNotContainsString('coded allergen', $claimText);
+        $this->assertStringNotContainsString('Coded allergen', $claimText);
+        $this->assertStringNotContainsString('current status', $claimText);
+        $this->assertStringNotContainsString('Current status', $claimText);
         $this->assertStringNotContainsString('external allergy id', $claimText);
         $this->assertLessThan(4000, strlen($claimText));
     }
@@ -182,12 +184,11 @@ class AgentEvidenceResponseBuilderTest extends TestCase
 
         $this->assertSame('verified', $response['status']);
         $this->assertSame([
-            'allergen: Allergy 1',
-            'coded allergen: Penicillin (penicillin)',
-            'reaction: Hives (hives)',
-            'severity: Mild (mild)',
-            'verification status: Confirmed (confirmed)',
-            'current status: current',
+            'Allergen: Allergy 1',
+            'Coded allergen: Penicillin',
+            'Reaction: Hives',
+            'Severity: Mild',
+            'Verification status: Confirmed',
         ], $claimTexts);
         foreach ($claimTexts as $claimText) {
             $this->assertStringNotContainsString(';', $claimText);
@@ -417,10 +418,10 @@ final class AgentEvidenceResponseBuilderExpandedAllergyRepository implements Evi
                 'date' => '2026-04-20',
                 'status' => 'Confirmed',
                 'display' => 'allergen: Allergy ' . $index
-                    . '; coded allergen: Penicillin (penicillin)'
-                    . '; reaction: Hives (hives)'
-                    . '; severity: Mild (mild)'
-                    . '; verification status: Confirmed (confirmed)'
+                    . '; coded allergen: Penicillin'
+                    . '; reaction: Hives'
+                    . '; severity: Mild'
+                    . '; verification status: Confirmed'
                     . '; current status: current'
                     . '; begin date: 2026-04-01 00:00:00'
                     . '; subtype: drug'

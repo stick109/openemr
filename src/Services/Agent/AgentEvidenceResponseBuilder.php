@@ -514,7 +514,6 @@ final class AgentEvidenceResponseBuilder
             'reaction:',
             'severity:',
             'verification status:',
-            'current status:',
         ];
         if ($sourceCount <= 10) {
             array_splice($preferredPrefixes, 1, 0, ['coded allergen:']);
@@ -535,7 +534,7 @@ final class AgentEvidenceResponseBuilder
         }
 
         return array_values(array_map(
-            fn (string $segment): string => $this->truncateClaimText($segment, 140),
+            fn (string $segment): string => $this->truncateClaimText($this->capitalizedPropertyClaimText($segment), 140),
             array_unique($selected)
         ));
     }

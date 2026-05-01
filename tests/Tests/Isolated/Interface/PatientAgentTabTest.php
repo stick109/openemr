@@ -136,6 +136,7 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString("panel.setAttribute('aria-busy', loading ? 'true' : 'false')", $this->scriptContent);
         $this->assertStringContainsString('function appendCitationLinks', $this->scriptContent);
         $this->assertStringContainsString('function appendCitationText', $this->scriptContent);
+        $this->assertStringContainsString('function citationKey', $this->scriptContent);
         $this->assertStringContainsString('function appendClaimText', $this->scriptContent);
         $this->assertStringContainsString('function shouldShowBlockHeading', $this->scriptContent);
         $this->assertStringContainsString("heading !== '' && heading !== label", $this->scriptContent);
@@ -144,6 +145,8 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString("appendClaimText(item, claim.text || '')", $this->scriptContent);
         $this->assertStringContainsString("sourceLink.textContent = citationIds.length === 1", $this->scriptContent);
         $this->assertStringContainsString("sourceLink.dataset.sourceId = citationId", $this->scriptContent);
+        $this->assertStringContainsString("var previousCitationKey = ''", $this->scriptContent);
+        $this->assertStringContainsString('claimCitationKey !== previousCitationKey', $this->scriptContent);
         $this->assertStringContainsString("data.intent_id === 'show_source' ? appendCitationText : appendCitationLinks", $this->scriptContent);
         $this->assertStringContainsString('sourcePrompt: panel.dataset.sourcePromptText', $this->scriptContent);
         $this->assertStringContainsString("promptPreviewNode.value = intentId === 'show_source' && sourceId", $this->scriptContent);

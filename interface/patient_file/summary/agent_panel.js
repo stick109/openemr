@@ -110,6 +110,14 @@
             parent.appendChild(citationContainer);
         }
 
+        function citationKey(citationIds) {
+            if (!Array.isArray(citationIds) || citationIds.length === 0) {
+                return '';
+            }
+
+            return citationIds.map(String).join('|');
+        }
+
         function shouldShowCertainty(certainty) {
             return certainty && certainty !== 'active' && certainty !== 'source_record' && certainty !== 'supported';
         }
@@ -184,13 +192,23 @@
                 var claims = Array.isArray(block.claims) ? block.claims : [];
                 var list = document.createElement('ul');
                 list.className = 'agent-panel__claim-list';
+                var previousCitationKey = '';
                 claims.forEach(function (claim) {
                     var item = document.createElement('li');
                     appendClaimText(item, claim.text || '');
                     if (shouldShowCertainty(claim.certainty)) {
                         appendTextElement(item, 'span', 'text-muted ml-1', '(' + claim.certainty + ')');
                     }
-                    citationRenderer(item, claim.citation_ids);
+                    var claimCitationIds = Array.isArray(claim.citation_ids) ? claim.citation_ids : [];
+                    var claimCitationKey = citationKey(claimCitationIds);
+                    if (
+                        citationRenderer !== appendCitationLinks
+                        || claimCitationKey === ''
+                        || claimCitationKey !== previousCitationKey
+                    ) {
+                        citationRenderer(item, claimCitationIds);
+                    }
+                    previousCitationKey = claimCitationKey;
                     list.appendChild(item);
                 });
                 outputNode.appendChild(list);

@@ -11,6 +11,7 @@
  */
 
 require_once("../globals.php");
+require_once("$srcdir/global_functions.inc.php");
 
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Session\SessionWrapperFactory;

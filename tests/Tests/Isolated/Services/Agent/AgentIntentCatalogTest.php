@@ -64,7 +64,7 @@ class AgentIntentCatalogTest extends TestCase
             $this->assertGreaterThanOrEqual(0, $intent['lookback_days']);
         }
 
-        $this->assertSame(11, $catalog->get(AgentIntentCatalog::BASIC_PATIENT_DATA)['max_records'] ?? null);
+        $this->assertSame(10, $catalog->get(AgentIntentCatalog::BASIC_PATIENT_DATA)['max_records'] ?? null);
         $this->assertSame(25, $catalog->get(AgentIntentCatalog::CURRENT_MEDICATIONS)['max_records'] ?? null);
         $this->assertSame(30, $catalog->get(AgentIntentCatalog::RECENT_EVENTS)['max_records'] ?? null);
         $this->assertSame(1, $catalog->get(AgentIntentCatalog::SHOW_SOURCE)['max_records'] ?? null);

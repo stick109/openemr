@@ -56,6 +56,11 @@ namespace OpenEMR\Services\Agent\Evidence {
         /**
          * @var list<array<string, mixed>>
          */
+        public static array $allergyRows = [];
+
+        /**
+         * @var list<array<string, mixed>>
+         */
         public static array $prescriptionRows = [];
 
         /**
@@ -82,6 +87,7 @@ namespace OpenEMR\Services\Agent\Evidence {
             self::$telecomRows = [];
             self::$employerRows = [];
             self::$medicationRows = [];
+            self::$allergyRows = [];
             self::$prescriptionRows = [];
             self::$listsTouchRows = [];
             self::$queries = [];
@@ -119,11 +125,16 @@ namespace OpenEMR\Services\Agent\Evidence {
 
             if (str_contains($sql, 'FROM lists_touch')) {
                 $pid = (int) ($params[0] ?? 0);
+                $type = str_contains($sql, "type = 'allergy'") ? 'allergy' : 'medication';
                 foreach (self::$listsTouchRows as $row) {
-                    if ((int) ($row['patient_id'] ?? 0) === $pid && ($row['type'] ?? '') === 'medication') {
+                    if ((int) ($row['patient_id'] ?? 0) === $pid && ($row['type'] ?? '') === $type) {
                         return $row;
                     }
                 }
+            }
+
+            if (str_contains($sql, 'FROM lists l')) {
+                return self::firstOwnedRow(array_merge(self::$allergyRows, self::$medicationRows), 'id', $params);
             }
 
             return false;
@@ -144,7 +155,8 @@ namespace OpenEMR\Services\Agent\Evidence {
                 $rows = self::standalonePrescriptionRows((int) ($params[0] ?? 0), self::limitFromSql($sql));
             } elseif (str_contains($sql, 'FROM lists l')) {
                 $pid = str_contains($sql, 'LEFT JOIN prescriptions p') ? (int) ($params[1] ?? 0) : (int) ($params[0] ?? 0);
-                $rows = self::ownedRows(self::$medicationRows, $pid, self::limitFromSql($sql));
+                $sourceRows = str_contains($sql, "l.type = 'allergy'") ? self::$allergyRows : self::$medicationRows;
+                $rows = self::ownedRows($sourceRows, $pid, self::limitFromSql($sql));
             }
 
             $id = 'stmt-' . (++self::$statementCount);
@@ -549,6 +561,123 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $this->assertNull($repository->fetchSourceRecord(123, 'demographics:prescriptions:9002', new EvidenceCaps(1, 0, 0)));
         }
 
+        public function testAllergiesToConfirmIncludesExpandedListFieldsAndSafeCodedLookups(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$allergyRows = [
+                $this->allergyRow(88, 123, [
+                    'title' => 'Penicillin allergy',
+                    'list_option_id' => 'penicillin',
+                    'coded_allergen_title' => 'Penicillin',
+                    'coded_allergen_codes' => 'RxNorm:7980',
+                    'reaction' => 'hives',
+                    'reaction_title' => 'Hives',
+                    'severity_al' => 'mild',
+                    'severity_title' => 'Mild',
+                    'severity_codes' => 'SNOMED-CT:255604002',
+                    'verification' => 'confirmed',
+                    'verification_title' => 'Confirmed',
+                    'external_allergyid' => 55501,
+                    'list_external_id' => 'ext-allergy-88',
+                    'list_erx_source' => '1',
+                    'list_erx_uploaded' => '1',
+                    'subtype' => 'drug',
+                    'list_diagnosis' => 'Z88.0',
+                    'comments' => str_repeat('Comment ', 80),
+                ]),
+                $this->allergyRow(89, 999, ['title' => 'Other patient allergy']),
+            ];
+
+            $records = (new SqlEvidenceRecordRepository())->fetchAllergiesToConfirm(123, new EvidenceCaps(25, 0, 365));
+            $sql = implode("\n", array_column(SqlEvidenceRecordRepositorySqlFixture::$queries, 'sql'));
+
+            $this->assertCount(1, $records);
+            $this->assertSame('allergy:lists:88', $records[0]['source_id']);
+            $this->assertSame('allergies', $records[0]['data_class']);
+            $this->assertStringContainsString('allergen: Penicillin allergy', $records[0]['display']);
+            $this->assertStringContainsString('coded allergen: Penicillin (penicillin)', $records[0]['display']);
+            $this->assertStringContainsString('coded allergen codes: RxNorm:7980', $records[0]['display']);
+            $this->assertStringContainsString('reaction: Hives (hives)', $records[0]['display']);
+            $this->assertStringContainsString('severity: Mild (mild)', $records[0]['display']);
+            $this->assertStringContainsString('severity codes: SNOMED-CT:255604002', $records[0]['display']);
+            $this->assertStringContainsString('verification status: Confirmed (confirmed)', $records[0]['display']);
+            $this->assertStringContainsString('current status: current', $records[0]['display']);
+            $this->assertStringContainsString('subtype: drug', $records[0]['display']);
+            $this->assertStringContainsString('diagnosis: Z88.0', $records[0]['display']);
+            $this->assertStringContainsString('allergy eRx source: external/eRx', $records[0]['display']);
+            $this->assertStringContainsString('allergy eRx uploaded: yes', $records[0]['display']);
+            $this->assertStringContainsString('external allergy id: 55501', $records[0]['display']);
+            $this->assertStringContainsString('external list id: ext-allergy-88', $records[0]['display']);
+            $this->assertContains('list_option_id', $records[0]['fields_used']);
+            $this->assertContains('external_allergyid', $records[0]['fields_used']);
+            $this->assertContains('external_id', $records[0]['fields_used']);
+            $this->assertContains('erx_source', $records[0]['fields_used']);
+            $this->assertContains('erx_uploaded', $records[0]['fields_used']);
+            $this->assertContains('subtype', $records[0]['fields_used']);
+            $this->assertContains('diagnosis', $records[0]['fields_used']);
+            $this->assertLessThanOrEqual(280, strlen($records[0]['excerpt']));
+            $this->assertStringContainsString("coded_allergen.list_id = 'allergy_issue_list'", $sql);
+            $this->assertStringContainsString("severity.list_id = 'severity_ccda'", $sql);
+            $this->assertStringNotContainsString('prescriptions', $sql);
+        }
+
+        public function testAllergyReviewMarkerIsIncludedWhenNoCurrentAllergyRecordsExist(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$listsTouchRows = [
+                [
+                    'patient_id' => 123,
+                    'type' => 'allergy',
+                    'date' => '2026-04-30 11:22:33',
+                ],
+                [
+                    'patient_id' => 999,
+                    'type' => 'allergy',
+                    'date' => '2026-04-30 11:22:33',
+                ],
+                [
+                    'patient_id' => 123,
+                    'type' => 'medical_problem',
+                    'date' => '2026-04-29 10:00:00',
+                ],
+            ];
+
+            $repository = new SqlEvidenceRecordRepository();
+            $records = $repository->fetchAllergiesToConfirm(123, new EvidenceCaps(25, 0, 365));
+            $review = $repository->fetchSourceRecord(123, 'allergy:lists_touch:123', new EvidenceCaps(1, 0, 0));
+            $sql = implode("\n", array_column(SqlEvidenceRecordRepositorySqlFixture::$queries, 'sql'));
+
+            $this->assertCount(1, $records);
+            $this->assertSame('allergy:lists_touch:123', $records[0]['source_id']);
+            $this->assertSame('allergy_review', $records[0]['source_type']);
+            $this->assertSame('allergies', $records[0]['data_class']);
+            $this->assertStringContainsString('reviewed/touched on 2026-04-30 11:22:33', $records[0]['display']);
+            $this->assertStringContainsString('ORDER BY date DESC', $sql);
+            $this->assertSame('allergy:lists_touch:123', $review['source_id'] ?? null);
+            $this->assertNull($repository->fetchSourceRecord(999, 'allergy:lists_touch:123', new EvidenceCaps(1, 0, 0)));
+            $this->assertNull($repository->fetchSourceRecord(123, 'medication:lists_touch:123', new EvidenceCaps(1, 0, 0)));
+        }
+
+        public function testAllergySourceDrilldownRequiresCurrentPatientOwnership(): void
+        {
+            SqlEvidenceRecordRepositorySqlFixture::$allergyRows = [
+                $this->allergyRow(88, 123, [
+                    'title' => 'Sulfa allergy',
+                    'list_option_id' => 'sulfa',
+                    'coded_allergen_title' => 'Sulfa',
+                    'severity_al' => 'severe',
+                    'severity_title' => 'Severe',
+                ]),
+            ];
+            $repository = new SqlEvidenceRecordRepository();
+
+            $source = $repository->fetchSourceRecord(123, 'allergy:lists:88', new EvidenceCaps(1, 0, 0));
+
+            $this->assertSame('allergy:lists:88', $source['source_id'] ?? null);
+            $this->assertStringContainsString('coded allergen: Sulfa (sulfa)', $source['display'] ?? '');
+            $this->assertStringContainsString('severity: Severe (severe)', $source['display'] ?? '');
+            $this->assertNull($repository->fetchSourceRecord(999, 'allergy:lists:88', new EvidenceCaps(1, 0, 0)));
+            $this->assertNull($repository->fetchSourceRecord(123, 'medication:lists:88', new EvidenceCaps(1, 0, 0)));
+        }
+
         /**
          * @param array<string, mixed> $overrides
          * @return array<string, mixed>
@@ -776,6 +905,48 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
                 'prescription_erx_uploaded' => '',
                 'prescription_external_id' => '',
                 'prescription_guid' => '',
+            ];
+        }
+
+        /**
+         * @param array<string, mixed> $overrides
+         * @return array<string, mixed>
+         */
+        private function allergyRow(int $id, int $pid, array $overrides = []): array
+        {
+            return $overrides + [
+                'id' => $id,
+                'uuid' => null,
+                'patient_id' => $pid,
+                'pid' => $pid,
+                'type' => 'allergy',
+                'date' => '2026-04-20 10:00:00',
+                'begdate' => '2026-04-01 00:00:00',
+                'enddate' => null,
+                'title' => 'Allergy ' . $id,
+                'list_option_id' => '',
+                'coded_allergen_title' => '',
+                'coded_allergen_codes' => '',
+                'external_allergyid' => null,
+                'list_external_id' => '',
+                'external_id' => '',
+                'list_erx_source' => '0',
+                'erx_source' => '0',
+                'list_erx_uploaded' => '0',
+                'erx_uploaded' => '0',
+                'subtype' => '',
+                'list_diagnosis' => '',
+                'diagnosis' => '',
+                'activity' => 1,
+                'comments' => '',
+                'reaction' => '',
+                'reaction_title' => '',
+                'verification' => '',
+                'verification_title' => '',
+                'severity_al' => '',
+                'severity_title' => '',
+                'severity_codes' => '',
+                'modifydate' => '2026-04-28 10:00:00',
             ];
         }
 

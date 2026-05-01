@@ -71,7 +71,7 @@ Status values: `Done`, `Pending`.
 | ---- | ------- | --------- | -------------------- |
 | P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned structured contact addresses, structured telecom values, and latest displayable employer data. | Implemented with bounded child sources and `max_records = 10`. Public patient id and last-updated timestamp are excluded. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
 | P7.2 | Done    | Expand the `current_medications` evidence packet to include the must-have medication sources: additional `lists_medication` fields, patient-owned `prescriptions`, and the `lists_touch` medication-list review marker. | Implemented with patient-scoped linked-prescription enrichment, standalone current prescription sources, and drilldownable medication review markers. Optional/should sources remain out of scope (`drugs`, `list_options`, `users`, `pharmacies`, `issue_encounter`, `form_encounter`, `drug_sales`, `drug_inventory`). |
-| P7.3 | Pending | Plan the `allergies_to_confirm` evidence expansion to include the must-have allergy sources: allergy-list review marker, additional `lists` allergy fields, coded allergen lookup, and severity lookup when severity is coded. | Planning-only item. Keep scope limited to allergy evidence in `lists`, `lists_touch`, and bounded `list_options` lookups. Do not implement code until this plan is reviewed. |
+| P7.3 | Done | Expand the `allergies_to_confirm` evidence packet to include the must-have allergy sources: allergy-list review marker, additional `lists` allergy fields, coded allergen lookup, and severity lookup when severity is coded. | Implemented with patient-owned active allergy rows, `lists_touch` review markers when no current allergy rows are found, and list-ID-restricted `list_options` enrichment for `allergy_issue_list` and `severity_ccda`. |
 
 ### P7.1 Detailed Plan: Expand `basic_patient_data`
 
@@ -771,6 +771,16 @@ The answer should also be explicit about missing or uncertain data:
 Expand the `allergies_to_confirm` evidence packet so it can represent active allergy/intolerance records more completely while keeping the intent narrowly focused on confirming allergy evidence. The expanded packet should add list-review context, coded allergen details, external/eRx provenance, allergy subtype/diagnosis metadata, and human-readable severity labels when `severity_al` is coded.
 
 The answer should remain an allergy confirmation summary. It should not become a medication interaction checker, clinical decision rule workflow, allergy assessment workflow, or free-form chart search.
+
+#### Implementation Status
+
+- Implemented in [SqlEvidenceRecordRepository.php](src\Services\Agent\Evidence\SqlEvidenceRecordRepository.php), [AgentEvidenceResponseBuilder.php](src\Services\Agent\AgentEvidenceResponseBuilder.php), [SqlEvidenceRecordRepositoryTest.php](tests\Tests\Isolated\Services\Agent\Evidence\SqlEvidenceRecordRepositoryTest.php), and [AgentEvidenceResponseBuilderTest.php](tests\Tests\Isolated\Services\Agent\AgentEvidenceResponseBuilderTest.php).
+- The active allergy query now selects the additional `lists` fields: `list_option_id`, `external_allergyid`, `external_id`, `erx_source`, `erx_uploaded`, `subtype`, and `diagnosis`.
+- Coded allergen labels and codes are resolved only through `list_options.list_id = 'allergy_issue_list'`.
+- Severity labels and codes are resolved only through `list_options.list_id = 'severity_ccda'`.
+- `lists_touch` allergy review markers are emitted as `allergy:lists_touch:{pid}` only when no current allergy rows are found, preserving the existing 25-record cap for active allergy rows.
+- Source drilldown supports enriched `allergy:lists:{id}` records and patient-owned `allergy:lists_touch:{pid}` review markers.
+- Allergy comments and diagnosis text are bounded before display/excerpt output.
 
 #### Non-Goals
 

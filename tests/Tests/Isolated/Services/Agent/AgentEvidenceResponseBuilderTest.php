@@ -93,6 +93,38 @@ class AgentEvidenceResponseBuilderTest extends TestCase
         $this->assertStringContainsString('Allergy list review marker: reviewed/touched on 2026-04-30 11:22:33', $claimText);
     }
 
+    public function testAllergyDeterministicAnswerStaysVerifiedWithExpandedEvidence(): void
+    {
+        $builder = new AgentEvidenceResponseBuilder(
+            toolset: new AgentEvidenceToolset(
+                repository: new AgentEvidenceResponseBuilderExpandedAllergyRepository(),
+                logger: new NullLogger(),
+                requestIdFactory: static fn (): string => 'request-expanded-allergies'
+            ),
+            anonymizer: new Anonymizer(logger: new NullLogger()),
+            llmOrchestrator: new AgentLlmOrchestrator(
+                provider: new DisabledAgentLlmProvider(),
+                logger: new NullLogger()
+            ),
+            logger: new NullLogger()
+        );
+
+        $response = $builder->build(AgentIntentCatalog::ALLERGIES_TO_CONFIRM, $this->allergyAccessToken());
+        $claimText = implode(
+            "\n",
+            array_column($response['answer']['answer_blocks'][0]['claims'], 'text')
+        );
+
+        $this->assertSame('verified', $response['status']);
+        $this->assertSame('deterministic_verified', $response['response_generation']);
+        $this->assertSame('passed', $response['verification']['status']);
+        $this->assertCount(25, $response['answer']['answer_blocks'][0]['claims']);
+        $this->assertStringContainsString('allergen: Allergy 1', $claimText);
+        $this->assertStringContainsString('coded allergen: Penicillin (penicillin)', $claimText);
+        $this->assertStringNotContainsString('external allergy id', $claimText);
+        $this->assertLessThan(4000, strlen($claimText));
+    }
+
     private function accessToken(): AgentAccessToken
     {
         return new AgentAccessToken(
@@ -208,6 +240,68 @@ final class AgentEvidenceResponseBuilderAllergyReviewRepository implements Evide
                 'reliability' => 'structured_allergy_review_marker',
             ],
         ];
+    }
+
+    public function fetchRecentEvents(int $pid, EvidenceCaps $caps): array
+    {
+        return [];
+    }
+
+    public function fetchChangedSinceLastVisit(int $pid, EvidenceCaps $caps, array $grantedDataClasses): array
+    {
+        return [];
+    }
+
+    public function fetchSourceRecord(int $pid, string $sourceId, EvidenceCaps $caps): ?array
+    {
+        return null;
+    }
+}
+
+final class AgentEvidenceResponseBuilderExpandedAllergyRepository implements EvidenceRecordRepositoryInterface
+{
+    public function fetchBasicPatientData(int $pid, EvidenceCaps $caps): array
+    {
+        return [];
+    }
+
+    public function fetchCurrentMedications(int $pid, EvidenceCaps $caps): array
+    {
+        return [];
+    }
+
+    public function fetchAllergiesToConfirm(int $pid, EvidenceCaps $caps): array
+    {
+        $records = [];
+        for ($index = 1; $index <= 25; $index++) {
+            $records[] = [
+                'source_id' => 'allergy:lists:' . $index,
+                'source_type' => 'allergy',
+                'data_class' => 'allergies',
+                'table' => 'lists',
+                'record_id' => (string) $index,
+                'patient_id' => 123,
+                'date' => '2026-04-20',
+                'status' => 'Confirmed',
+                'display' => 'allergen: Allergy ' . $index
+                    . '; coded allergen: Penicillin (penicillin)'
+                    . '; reaction: Hives (hives)'
+                    . '; severity: Mild (mild)'
+                    . '; verification status: Confirmed (confirmed)'
+                    . '; current status: current'
+                    . '; begin date: 2026-04-01 00:00:00'
+                    . '; subtype: drug'
+                    . '; diagnosis: Z88.0'
+                    . '; allergy eRx source: external/eRx'
+                    . '; external allergy id: EXT-' . $index
+                    . '; external list id: LIST-' . $index
+                    . '; comments: Long allergy comment that should remain available in source evidence but should not make the deterministic answer exceed the verifier text limit.',
+                'fields_used' => ['title', 'list_option_id', 'reaction', 'severity_al', 'verification'],
+                'reliability' => 'structured_active_record',
+            ];
+        }
+
+        return $records;
     }
 
     public function fetchRecentEvents(int $pid, EvidenceCaps $caps): array

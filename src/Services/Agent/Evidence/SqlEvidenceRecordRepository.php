@@ -251,6 +251,13 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
                 l.begdate,
                 l.enddate,
                 l.title,
+                l.list_option_id,
+                l.external_allergyid,
+                l.external_id AS list_external_id,
+                l.erx_source AS list_erx_source,
+                l.erx_uploaded AS list_erx_uploaded,
+                l.subtype,
+                l.diagnosis AS list_diagnosis,
                 l.activity,
                 l.comments,
                 l.reaction,
@@ -258,10 +265,20 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
                 l.severity_al,
                 l.modifydate,
                 reaction.title AS reaction_title,
+                coded_allergen.title AS coded_allergen_title,
+                coded_allergen.codes AS coded_allergen_codes,
+                severity.title AS severity_title,
+                severity.codes AS severity_codes,
                 verification.title AS verification_title
              FROM lists l
              LEFT JOIN list_options reaction
                 ON reaction.option_id = l.reaction AND reaction.list_id = 'reaction'
+             LEFT JOIN list_options coded_allergen
+                ON coded_allergen.option_id = l.list_option_id
+                    AND coded_allergen.list_id = 'allergy_issue_list'
+             LEFT JOIN list_options severity
+                ON severity.option_id = l.severity_al
+                    AND severity.list_id = 'severity_ccda'
              LEFT JOIN list_options verification
                 ON verification.option_id = l.verification
                     AND verification.list_id = 'allergyintolerance-verification'
@@ -273,7 +290,15 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             [$pid]
         );
 
-        return array_map(fn (array $row): array => $this->mapAllergyRecord($row), $rows);
+        $records = array_map(fn (array $row): array => $this->mapAllergyRecord($row), $rows);
+        if ($records === []) {
+            $reviewRow = $this->fetchAllergyReviewRow($pid);
+            if ($reviewRow !== null) {
+                $records[] = $this->mapAllergyReviewRecord($reviewRow);
+            }
+        }
+
+        return array_slice($records, 0, $limit);
     }
 
     /**
@@ -469,7 +494,11 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'lists' => $this->fetchListSource($pid, $recordId, $sourceGroup),
             'lists_medication' => $sourceGroup === 'medication' ? $this->fetchMedicationIssueSource($pid, $recordId) : null,
             'prescriptions' => $sourceGroup === 'medication' ? $this->fetchPrescriptionSource($pid, $recordId) : null,
-            'lists_touch' => $sourceGroup === 'medication' ? $this->fetchMedicationReviewSource($pid, $recordId) : null,
+            'lists_touch' => match ($sourceGroup) {
+                'medication' => $this->fetchMedicationReviewSource($pid, $recordId),
+                'allergy' => $this->fetchAllergyReviewSource($pid, $recordId),
+                default => null,
+            },
             'form_encounter' => $this->fetchEncounterSource($pid, $recordId),
             'documents' => $this->fetchDocumentSource($pid, $recordId),
             default => null,
@@ -541,6 +570,27 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
              FROM lists_touch
              WHERE pid = ?
                 AND type = 'medication'
+             LIMIT 1",
+            [$pid]
+        );
+
+        return is_array($row) && $row !== [] ? $row : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function fetchAllergyReviewRow(int $pid): ?array
+    {
+        $row = sqlQuery(
+            "SELECT
+                pid AS patient_id,
+                type,
+                date
+             FROM lists_touch
+             WHERE pid = ?
+                AND type = 'allergy'
+             ORDER BY date DESC
              LIMIT 1",
             [$pid]
         );
@@ -1128,15 +1178,83 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
      * @param array<string, mixed> $row
      * @return array<string, mixed>
      */
+    private function mapAllergyReviewRecord(array $row): array
+    {
+        $date = $this->dateValue($row, ['date']);
+        $display = $date === null
+            ? 'Allergy list review marker'
+            : 'Allergy list review marker: reviewed/touched on ' . $date;
+
+        return [
+            'source_id' => 'allergy:lists_touch:' . (int) $row['patient_id'],
+            'source_type' => 'allergy_review',
+            'data_class' => 'allergies',
+            'table' => 'lists_touch',
+            'record_id' => (string) (int) $row['patient_id'],
+            'patient_id' => (int) $row['patient_id'],
+            'date' => $date,
+            'status' => 'reviewed',
+            'display' => $display,
+            'excerpt' => $display,
+            'fields_used' => ['pid', 'type', 'date'],
+            'reliability' => 'structured_allergy_review_marker',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
     private function mapAllergyRecord(array $row): array
     {
         $status = $this->filled($row['verification_title'] ?? null)
             ?: (((string) ($row['activity'] ?? '') === '1') ? 'active' : 'unknown');
-        $displayParts = [
-            $this->filled($row['title'] ?? null),
-            $this->filled($row['reaction_title'] ?? null) !== '' ? 'reaction ' . $this->filled($row['reaction_title']) : '',
-            $this->filled($row['severity_al'] ?? null) !== '' ? 'severity ' . $this->filled($row['severity_al']) : '',
-        ];
+        $displayParts = [];
+        $fieldsUsed = [];
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'allergen', $row['title'] ?? null, ['title']);
+        $codedAllergenLabel = $this->filled($row['coded_allergen_title'] ?? null) !== ''
+            ? $this->codedOptionLabel($row['list_option_id'] ?? null, $row['coded_allergen_title'] ?? null)
+            : '';
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'coded allergen',
+            $codedAllergenLabel,
+            $this->filledFields($row, ['list_option_id', 'coded_allergen_title'])
+        );
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'coded allergen codes', $row['coded_allergen_codes'] ?? null, ['coded_allergen_codes']);
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'reaction',
+            $this->codedOptionLabel($row['reaction'] ?? null, $row['reaction_title'] ?? null),
+            $this->filledFields($row, ['reaction', 'reaction_title'])
+        );
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'severity',
+            $this->codedOptionLabel($row['severity_al'] ?? null, $row['severity_title'] ?? null),
+            $this->filledFields($row, ['severity_al', 'severity_title'])
+        );
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'severity codes', $row['severity_codes'] ?? null, ['severity_codes']);
+        $this->addDisplayPart(
+            $displayParts,
+            $fieldsUsed,
+            'verification status',
+            $this->codedOptionLabel($row['verification'] ?? null, $row['verification_title'] ?? null),
+            $this->filledFields($row, ['verification', 'verification_title'])
+        );
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'current status', ((string) ($row['activity'] ?? '') === '1') ? 'current' : '', ['activity']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'begin date', $this->dateValue($row, ['begdate']), ['begdate']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'end date', $this->dateValue($row, ['enddate']), ['enddate']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'subtype', $row['subtype'] ?? null, ['subtype']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'diagnosis', $this->boundedText($row['list_diagnosis'] ?? null, 180), ['diagnosis']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'allergy eRx source', $this->erxSourceLabel($row['list_erx_source'] ?? null), ['erx_source']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'allergy eRx uploaded', $this->yesNoValue($row['list_erx_uploaded'] ?? null), ['erx_uploaded']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'external allergy id', $row['external_allergyid'] ?? null, ['external_allergyid']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'external list id', $row['list_external_id'] ?? null, ['external_id']);
 
         return [
             'source_id' => 'allergy:lists:' . (int) $row['id'],
@@ -1149,8 +1267,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'date' => $this->dateValue($row, ['modifydate', 'date', 'begdate']),
             'status' => $status,
             'display' => $this->joinDisplay($displayParts, 'Allergy record'),
-            'excerpt' => $this->filled($row['comments'] ?? null) ?: $this->joinDisplay($displayParts, 'Allergy record'),
-            'fields_used' => ['title', 'activity', 'reaction', 'verification', 'severity_al'],
+            'excerpt' => $this->boundedText($row['comments'] ?? null, 280) ?: $this->joinDisplay($displayParts, 'Allergy record'),
+            'fields_used' => $fieldsUsed === [] ? ['title'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_active_record',
         ];
     }
@@ -1350,11 +1468,25 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             "SELECT
                 l.*,
                 l.pid AS patient_id,
+                l.external_id AS list_external_id,
+                l.erx_source AS list_erx_source,
+                l.erx_uploaded AS list_erx_uploaded,
+                l.diagnosis AS list_diagnosis,
                 reaction.title AS reaction_title,
+                coded_allergen.title AS coded_allergen_title,
+                coded_allergen.codes AS coded_allergen_codes,
+                severity.title AS severity_title,
+                severity.codes AS severity_codes,
                 verification.title AS verification_title
              FROM lists l
              LEFT JOIN list_options reaction
                 ON reaction.option_id = l.reaction AND reaction.list_id = 'reaction'
+             LEFT JOIN list_options coded_allergen
+                ON coded_allergen.option_id = l.list_option_id
+                    AND coded_allergen.list_id = 'allergy_issue_list'
+             LEFT JOIN list_options severity
+                ON severity.option_id = l.severity_al
+                    AND severity.list_id = 'severity_ccda'
              LEFT JOIN list_options verification
                 ON verification.option_id = l.verification
                     AND verification.list_id = 'allergyintolerance-verification'
@@ -1459,6 +1591,16 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
 
         $row = $this->fetchMedicationReviewRow($pid);
         return $row !== null ? $this->mapMedicationReviewRecord($row) : null;
+    }
+
+    private function fetchAllergyReviewSource(int $pid, int $recordId): ?array
+    {
+        if ($pid !== $recordId) {
+            return null;
+        }
+
+        $row = $this->fetchAllergyReviewRow($pid);
+        return $row !== null ? $this->mapAllergyReviewRecord($row) : null;
     }
 
     private function fetchEncounterSource(int $pid, int $recordId): ?array

@@ -292,6 +292,27 @@ final class AgentEvidenceResponseBuilder
             }
         }
 
+        if ((string) ($intent['intent_id'] ?? '') === AgentIntentCatalog::ALLERGIES_TO_CONFIRM) {
+            $hasAllergyRecord = false;
+            $hasReviewMarker = false;
+            foreach ($sources as $source) {
+                if (!is_array($source)) {
+                    continue;
+                }
+                $sourceType = (string) ($source['source_type'] ?? '');
+                $hasAllergyRecord = $hasAllergyRecord || $sourceType === 'allergy';
+                $hasReviewMarker = $hasReviewMarker || $sourceType === 'allergy_review';
+            }
+
+            if (!$hasAllergyRecord && $hasReviewMarker) {
+                array_unshift($claims, [
+                    'text' => 'Current allergy records were not found in checked evidence.',
+                    'citation_ids' => [],
+                    'certainty' => 'not_found',
+                ]);
+            }
+        }
+
         $missingOrUncertain = [];
         if ($claims === []) {
             $claims[] = [
@@ -376,6 +397,10 @@ final class AgentEvidenceResponseBuilder
             return $this->currentMedicationClaimText($source, $display);
         }
 
+        if ($intentId === AgentIntentCatalog::ALLERGIES_TO_CONFIRM) {
+            return $this->allergyClaimText($source, $display);
+        }
+
         if ($intentId === AgentIntentCatalog::SHOW_SOURCE) {
             $date = trim((string) ($source['date'] ?? ''));
             $status = trim((string) ($source['status'] ?? 'unknown'));
@@ -423,6 +448,50 @@ final class AgentEvidenceResponseBuilder
             'usage category:',
             'adherence value:',
             'record type:',
+        ];
+
+        $selected = [];
+        foreach ($preferredPrefixes as $prefix) {
+            foreach ($segments as $segment) {
+                if (stripos($segment, $prefix) === 0) {
+                    $selected[] = $segment;
+                    break;
+                }
+            }
+        }
+
+        if ($selected === []) {
+            $selected = $segments === [] ? [$display] : [reset($segments)];
+        }
+
+        return $this->truncateClaimText($this->joinClaimSegments($selected), 140);
+    }
+
+    /**
+     * @param array<string, mixed> $source
+     */
+    private function allergyClaimText(array $source, string $display): string
+    {
+        if ((string) ($source['source_type'] ?? '') === 'allergy_review') {
+            return $this->truncateClaimText($display, 140);
+        }
+
+        $segments = array_values(array_filter(
+            array_map('trim', explode(';', $display)),
+            static fn (string $segment): bool => $segment !== ''
+        ));
+
+        $preferredPrefixes = [
+            'allergen:',
+            'coded allergen:',
+            'reaction:',
+            'severity:',
+            'verification status:',
+            'current status:',
+            'begin date:',
+            'subtype:',
+            'diagnosis:',
+            'allergy eRx source:',
         ];
 
         $selected = [];

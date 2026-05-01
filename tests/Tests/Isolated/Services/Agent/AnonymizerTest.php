@@ -39,12 +39,14 @@ class AnonymizerTest extends TestCase
                     'record_id' => '123',
                     'patient_name' => 'Jane Doe',
                     'patient_uuid' => '6f9462d8-3a8a-4b76-a048-c58d9be42fbb',
+                    'pubpid' => 'ZX-9912',
+                    'dob' => '1974-04-15',
                     'address' => '123 Main St Apt 4',
                     'phone_home' => '(555) 123-4567',
                     'email' => 'jane.doe@example.test',
                     'ssn' => '123-45-6789',
                     'insurance_id' => 'ABC123456',
-                    'display' => 'Patient Jane Doe lives at 123 Main St Apt 4; SSN 123-45-6789; phone (555) 123-4567; email jane.doe@example.test; insurance ID ABC123456; MRN ZX-9912.',
+                    'display' => 'name: Jane Doe; preferred name: Janie; date of birth: 1974-04-15; address: 123 Main St Apt 4; SSN 123-45-6789; phone (555) 123-4567; email jane.doe@example.test; insurance ID ABC123456; public patient id: ZX-9912.',
                     'excerpt' => 'Jane Doe reported public ID P1234 during intake.',
                 ],
             ],
@@ -56,6 +58,7 @@ class AnonymizerTest extends TestCase
         $this->assertSame('demographics:patient_data:123', $anonymized['sources'][0]['source_id']);
         $this->assertStringNotContainsString('Jane Doe', $encoded);
         $this->assertStringNotContainsString('123 Main St', $encoded);
+        $this->assertStringNotContainsString('1974-04-15', $encoded);
         $this->assertStringNotContainsString('123-45-6789', $encoded);
         $this->assertStringNotContainsString('(555) 123-4567', $encoded);
         $this->assertStringNotContainsString('jane.doe@example.test', $encoded);
@@ -63,15 +66,16 @@ class AnonymizerTest extends TestCase
         $this->assertStringNotContainsString('ZX-9912', $encoded);
         $this->assertStringContainsString('[PATIENT_NAME]', $encoded);
         $this->assertStringContainsString('[PATIENT_ADDRESS_1]', $encoded);
+        $this->assertStringContainsString('[PATIENT_DOB_1]', $encoded);
         $this->assertStringContainsString('[PATIENT_SSN]', $encoded);
         $this->assertStringContainsString('[PATIENT_PHONE_1]', $encoded);
         $this->assertStringContainsString('[PATIENT_EMAIL_1]', $encoded);
         $this->assertStringContainsString('[INSURANCE_ID_1]', $encoded);
         $this->assertStringContainsString('[REDACTED_IDENTIFIER_1]', $encoded);
-        $this->assertGreaterThanOrEqual(7, $anonymizer->placeholderCount($this->accessToken('token-a')));
+        $this->assertGreaterThanOrEqual(8, $anonymizer->placeholderCount($this->accessToken('token-a')));
         $this->assertSame('evidence_packet', $anonymizer->getLastMetrics()['mode']);
         $this->assertSame('request-123', $anonymizer->getLastMetrics()['request_id']);
-        $this->assertGreaterThanOrEqual(7, $anonymizer->getLastMetrics()['replacement_count']);
+        $this->assertGreaterThanOrEqual(8, $anonymizer->getLastMetrics()['replacement_count']);
         $this->assertArrayHasKey('patient_name', $anonymizer->getLastMetrics()['category_counts']);
     }
 

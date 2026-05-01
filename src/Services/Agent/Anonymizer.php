@@ -245,6 +245,12 @@ final class Anonymizer
         ) ?? $text;
 
         $text = preg_replace_callback(
+            '/\b((?:DOB|date of birth|birth date)\s*[:#]?\s*)(\d{4}-\d{2}-\d{2}|\d{1,2}[\/.-]\d{1,2}[\/.-]\d{2,4})\b/i',
+            fn (array $matches): string => $matches[1] . $this->placeholderFor($accessToken, 'dob', $matches[2]),
+            $text
+        ) ?? $text;
+
+        $text = preg_replace_callback(
             '/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i',
             fn (array $matches): string => $this->placeholderFor($accessToken, 'email', $matches[0]),
             $text
@@ -275,8 +281,14 @@ final class Anonymizer
         ) ?? $text;
 
         $text = preg_replace_callback(
-            '/\b((?:MRN|medical record(?: number)?|patient id|public id|pubpid|chart(?: number)?|account(?: number)?)\s*[:#]?\s*)([A-Z0-9][A-Z0-9._-]{3,})\b/i',
+            '/\b((?:MRN|medical record(?: number)?|patient id|public patient id|public id|pubpid|chart(?: number)?|account(?: number)?)\s*[:#]?\s*)([A-Z0-9][A-Z0-9._-]{3,})\b/i',
             fn (array $matches): string => $matches[1] . $this->placeholderFor($accessToken, 'identifier', $matches[2]),
+            $text
+        ) ?? $text;
+
+        $text = preg_replace_callback(
+            '/\b((?:patient name|preferred name|birth name|name)\s*[:#]?\s*)([A-Z][A-Za-z\'-]+(?:\s+[A-Z][A-Za-z\'-]+){0,3})\b/',
+            fn (array $matches): string => $matches[1] . $this->placeholderFor($accessToken, 'patient_name', $matches[2]),
             $text
         ) ?? $text;
 
@@ -335,11 +347,27 @@ final class Anonymizer
         }
 
         if (
-            in_array($fieldName, ['patient_name', 'full_name', 'first_name', 'last_name', 'fname', 'lname', 'mname'], true)
+            in_array($fieldName, [
+                'patient_name',
+                'full_name',
+                'first_name',
+                'last_name',
+                'fname',
+                'lname',
+                'mname',
+                'preferred_name',
+                'birth_fname',
+                'birth_lname',
+                'birth_mname',
+            ], true)
             || str_contains($fieldName, 'subscriber_name')
             || str_contains($fieldName, 'guardian_name')
         ) {
             return 'patient_name';
+        }
+
+        if (in_array($fieldName, ['dob', 'date_of_birth', 'birth_date'], true)) {
+            return 'dob';
         }
 
         if (
@@ -378,6 +406,7 @@ final class Anonymizer
     {
         return match ($category) {
             'patient_name' => $counter === 1 ? '[PATIENT_NAME]' : '[PATIENT_NAME_' . $counter . ']',
+            'dob' => '[PATIENT_DOB_' . $counter . ']',
             'ssn' => $counter === 1 ? '[PATIENT_SSN]' : '[PATIENT_SSN_' . $counter . ']',
             'address' => '[PATIENT_ADDRESS_' . $counter . ']',
             'phone' => '[PATIENT_PHONE_' . $counter . ']',

@@ -69,7 +69,7 @@ Status values: `Done`, `Pending`.
 
 | ID   | Status  | Work Item                                                                                              | Dependencies / Notes                                                       |
 | ---- | ------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| P7.1 | Pending | Plan the `basic_patient_data` evidence expansion to include the must-have demographic/contact sources: richer `patient_data` fields, structured `addresses`, and structured `phone_numbers`. | Planning-only item. Do not broaden this intent into clinical history, medications, allergies, labs, documents, billing, insurance, portal activity, employer data, care teams, or preferences. Implementation should happen only after this plan is reviewed. |
+| P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned structured contact addresses, and patient-owned structured telecom values. | Implemented with bounded child sources and `max_records = 10`. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
 
 ### P7.1 Detailed Plan: Expand `basic_patient_data`
 
@@ -87,6 +87,17 @@ Status values: `Done`, `Pending`.
 #### Goal
 
 Expand the `basic_patient_data` evidence packet so the button answers the natural user expectation for "basic patient data": identity, demographic descriptors, structured address, and structured phone/contact details. The answer should remain a concise administrative/demographic snapshot, not a clinical-summary intent.
+
+#### Implementation Status
+
+- Implemented in [SqlEvidenceRecordRepository.php](src\Services\Agent\Evidence\SqlEvidenceRecordRepository.php), [AgentIntentCatalog.php](src\Services\Agent\AgentIntentCatalog.php), [AgentEvidenceResponseBuilder.php](src\Services\Agent\AgentEvidenceResponseBuilder.php), [EvidencePacketNormalizer.php](src\Services\Agent\Evidence\EvidencePacketNormalizer.php), and [Anonymizer.php](src\Services\Agent\Anonymizer.php).
+- The primary patient source now uses the curated `patient_data` projection and continues to emit `demographics:patient_data:{pid}`.
+- Structured addresses are emitted only through the patient-owned `contact` -> `contact_address` -> `addresses` pattern and are capped at 3 child sources.
+- Structured phone, SMS, fax, and email values are emitted only through the patient-owned `contact` -> `contact_telecom` pattern and are capped at 5 child sources.
+- Direct `phone_numbers.foreign_id` reads were not implemented because `phone_numbers` is generic and does not provide a safe patient ownership discriminator by itself.
+- Source drilldown now supports the emitted `patient_data`, `addresses`, and `contact_telecom` source ids with current-patient ownership checks.
+- Missing address and phone responses now explicitly say the values were not found in checked evidence instead of implying a global absence.
+- Focused isolated tests cover richer patient data output, privacy exclusions, ownership checks, deduplication, caps, source drilldown, catalog caps, and anonymizer coverage.
 
 #### Non-Goals
 

@@ -18,13 +18,78 @@ use Throwable;
 
 final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInterface
 {
+    private const BASIC_PATIENT_ADDRESS_LIMIT = 3;
+    private const BASIC_PATIENT_TELECOM_LIMIT = 5;
+
     /**
      * @return list<array<string, mixed>>
      */
     public function fetchBasicPatientData(int $pid, EvidenceCaps $caps): array
     {
+        $limit = $caps->clampRecords();
+        if ($limit <= 0) {
+            return [];
+        }
+
         $row = sqlQuery(
-            "SELECT pid, uuid, DOB, sex, status, date
+            "SELECT
+                pid,
+                uuid,
+                pubpid,
+                title,
+                fname,
+                mname,
+                lname,
+                suffix,
+                preferred_name,
+                birth_fname,
+                birth_mname,
+                birth_lname,
+                DOB,
+                sex,
+                sex_identified,
+                gender_identity,
+                sexual_orientation,
+                pronoun,
+                status,
+                deceased_date,
+                deceased_reason,
+                language,
+                interpreter,
+                interpreter_needed,
+                race,
+                ethnicity,
+                ethnoracial,
+                religion,
+                nationality_country,
+                tribal_affiliations,
+                street,
+                street_line_2,
+                city,
+                state,
+                postal_code,
+                county,
+                country_code,
+                phone_home,
+                phone_biz,
+                phone_contact,
+                phone_cell,
+                email,
+                email_direct,
+                contact_relationship,
+                date,
+                regdate,
+                last_updated,
+                providerID,
+                ref_providerID,
+                referrer,
+                referrerID,
+                pharmacy_id,
+                allow_patient_portal,
+                care_team_provider,
+                care_team_facility,
+                care_team_status,
+                provider_since_date
              FROM patient_data
              WHERE pid = ?
              LIMIT 1",
@@ -35,7 +100,43 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             return [];
         }
 
-        return [$this->mapPatientRecord($row)];
+        $records = [$this->mapPatientRecord($row)];
+        $remaining = $limit - 1;
+        if ($remaining <= 0) {
+            return $records;
+        }
+
+        $patientAddressKey = $this->addressKeyFromPatientRow($row);
+        $addressLimit = min(self::BASIC_PATIENT_ADDRESS_LIMIT, $remaining);
+        foreach ($this->fetchPatientContactAddressRows($pid, $addressLimit) as $addressRow) {
+            $addressKey = $this->addressKeyFromAddressRow($addressRow);
+            if ($addressKey === '' || ($patientAddressKey !== '' && $addressKey === $patientAddressKey)) {
+                continue;
+            }
+
+            $records[] = $this->mapAddressRecord($addressRow);
+            $remaining--;
+            if ($remaining <= 0) {
+                return $records;
+            }
+        }
+
+        $patientContactKeys = $this->contactKeysFromPatientRow($row);
+        $telecomLimit = min(self::BASIC_PATIENT_TELECOM_LIMIT, $remaining);
+        foreach ($this->fetchPatientContactTelecomRows($pid, $telecomLimit) as $telecomRow) {
+            $contactKey = $this->contactKeyFromTelecomRow($telecomRow);
+            if ($contactKey === '' || isset($patientContactKeys[$contactKey])) {
+                continue;
+            }
+
+            $records[] = $this->mapTelecomRecord($telecomRow);
+            $remaining--;
+            if ($remaining <= 0) {
+                break;
+            }
+        }
+
+        return $records;
     }
 
     /**
@@ -310,6 +411,8 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
 
         return match ($table) {
             'patient_data' => $this->fetchPatientSource($pid, $recordId),
+            'addresses' => $this->fetchAddressSource($pid, $recordId),
+            'contact_telecom' => $this->fetchContactTelecomSource($pid, $recordId),
             'lists' => $this->fetchListSource($pid, $recordId),
             'lists_medication' => $this->fetchMedicationIssueSource($pid, $recordId),
             'form_encounter' => $this->fetchEncounterSource($pid, $recordId),
@@ -338,6 +441,99 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         return $rows;
     }
 
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fetchPatientContactAddressRows(int $pid, int $limit): array
+    {
+        if ($limit <= 0) {
+            return [];
+        }
+
+        return $this->fetchRows(
+            "SELECT
+                a.id AS address_id,
+                a.line1,
+                a.line2,
+                a.city,
+                a.state,
+                a.zip,
+                a.plus_four,
+                a.country,
+                a.district,
+                c.foreign_id AS patient_id,
+                ca.id AS contact_address_id,
+                ca.priority,
+                ca.`type` AS address_type,
+                address_type.title AS address_type_title,
+                ca.`use` AS address_use,
+                address_use.title AS address_use_title,
+                ca.status AS address_status,
+                ca.is_primary,
+                ca.period_start,
+                ca.period_end,
+                ca.created_date
+             FROM contact c
+             INNER JOIN contact_address ca ON ca.contact_id = c.id
+             INNER JOIN addresses a ON a.id = ca.address_id
+             LEFT JOIN list_options address_type
+                ON address_type.list_id = 'address-types'
+                    AND address_type.option_id = ca.`type`
+             LEFT JOIN list_options address_use
+                ON address_use.list_id = 'address-uses'
+                    AND address_use.option_id = ca.`use`
+             WHERE c.foreign_table_name = 'patient_data'
+                AND c.foreign_id = ?
+                AND ca.status = 'A'
+             ORDER BY ca.is_primary DESC, COALESCE(ca.priority, 999999) ASC, ca.id ASC
+             LIMIT " . $limit,
+            [$pid]
+        );
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function fetchPatientContactTelecomRows(int $pid, int $limit): array
+    {
+        if ($limit <= 0) {
+            return [];
+        }
+
+        return $this->fetchRows(
+            "SELECT
+                ct.id AS contact_telecom_id,
+                ct.contact_id,
+                c.foreign_id AS patient_id,
+                ct.rank,
+                ct.system,
+                telecom_system.title AS telecom_system_title,
+                ct.`use` AS telecom_use,
+                telecom_use.title AS telecom_use_title,
+                ct.value,
+                ct.status AS telecom_status,
+                ct.is_primary,
+                ct.period_start,
+                ct.period_end,
+                ct.created_date
+             FROM contact c
+             INNER JOIN contact_telecom ct ON ct.contact_id = c.id
+             LEFT JOIN list_options telecom_system
+                ON telecom_system.list_id = 'telecom_systems'
+                    AND telecom_system.option_id = ct.system
+             LEFT JOIN list_options telecom_use
+                ON telecom_use.list_id = 'telecom_uses'
+                    AND telecom_use.option_id = ct.`use`
+             WHERE c.foreign_table_name = 'patient_data'
+                AND c.foreign_id = ?
+                AND ct.status = 'A'
+                AND ct.system IN ('phone', 'sms', 'fax', 'email')
+             ORDER BY ct.is_primary DESC, COALESCE(ct.rank, 999999) ASC, ct.id ASC
+             LIMIT " . $limit,
+            [$pid]
+        );
+    }
+
     private function changedSinceBaseline(int $pid, EvidenceCaps $caps): string
     {
         $row = sqlQuery(
@@ -364,11 +560,70 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
      */
     private function mapPatientRecord(array $row): array
     {
-        $displayParts = [
-            $this->filled($row['sex'] ?? null) !== '' ? 'sex: ' . $this->filled($row['sex']) : '',
-            $this->ageFromDob($row['DOB'] ?? null),
-            $this->filled($row['status'] ?? null) !== '' ? 'status: ' . $this->filled($row['status']) : '',
-        ];
+        $displayParts = [];
+        $fieldsUsed = [];
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'name', $this->personName($row), $this->filledFields($row, [
+            'title',
+            'fname',
+            'mname',
+            'lname',
+            'suffix',
+        ]));
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'preferred name', $row['preferred_name'] ?? null, ['preferred_name']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'birth name', $this->birthName($row), $this->filledFields($row, [
+            'birth_fname',
+            'birth_mname',
+            'birth_lname',
+        ]));
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'public patient id', $row['pubpid'] ?? null, ['pubpid']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'date of birth', $this->dateValue($row, ['DOB']), ['DOB']);
+        $this->addRawDisplayPart($displayParts, $fieldsUsed, $this->ageFromDob($row['DOB'] ?? null), ['DOB']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'sex at birth', $row['sex'] ?? null, ['sex']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'current sex', $row['sex_identified'] ?? null, ['sex_identified']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'gender identity', $row['gender_identity'] ?? null, ['gender_identity']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'sexual orientation', $row['sexual_orientation'] ?? null, ['sexual_orientation']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'pronoun', $row['pronoun'] ?? null, ['pronoun']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'status', $row['status'] ?? null, ['status']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'deceased date', $this->dateValue($row, ['deceased_date']), ['deceased_date']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'deceased reason', $row['deceased_reason'] ?? null, ['deceased_reason']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'language', $row['language'] ?? null, ['language']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'interpreter needed', $row['interpreter_needed'] ?? null, ['interpreter_needed']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'interpreter', $row['interpreter'] ?? null, ['interpreter']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'race', $row['race'] ?? null, ['race']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'ethnicity', $row['ethnicity'] ?? null, ['ethnicity']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'ethnoracial', $row['ethnoracial'] ?? null, ['ethnoracial']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'religion', $row['religion'] ?? null, ['religion']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'nationality country', $row['nationality_country'] ?? null, ['nationality_country']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'tribal affiliations', $row['tribal_affiliations'] ?? null, ['tribal_affiliations']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'address', $this->formatPatientAddress($row), $this->filledFields($row, [
+            'street',
+            'street_line_2',
+            'city',
+            'state',
+            'postal_code',
+            'county',
+            'country_code',
+        ]));
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'home phone', $this->formatPhoneValue($row['phone_home'] ?? null), ['phone_home']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'work phone', $this->formatPhoneValue($row['phone_biz'] ?? null), ['phone_biz']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'alternate phone', $this->formatPhoneValue($row['phone_contact'] ?? null), ['phone_contact']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'mobile phone', $this->formatPhoneValue($row['phone_cell'] ?? null), ['phone_cell']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'email', $row['email'] ?? null, ['email']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'direct email', $row['email_direct'] ?? null, ['email_direct']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'contact relationship', $row['contact_relationship'] ?? null, ['contact_relationship']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'registration date', $this->dateValue($row, ['regdate']), ['regdate']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'last updated', $this->dateValue($row, ['last_updated']), ['last_updated']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'primary provider id', $this->nonZeroValue($row['providerID'] ?? null), ['providerID']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'referring provider id', $this->nonZeroValue($row['ref_providerID'] ?? null), ['ref_providerID']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'referrer', $row['referrer'] ?? null, ['referrer']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'referrer id', $row['referrerID'] ?? null, ['referrerID']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'pharmacy id', $this->nonZeroValue($row['pharmacy_id'] ?? null), ['pharmacy_id']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'patient portal allowed', $row['allow_patient_portal'] ?? null, ['allow_patient_portal']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'care team provider', $row['care_team_provider'] ?? null, ['care_team_provider']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'care team facility', $row['care_team_facility'] ?? null, ['care_team_facility']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'care team status', $row['care_team_status'] ?? null, ['care_team_status']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'provider since', $this->dateValue($row, ['provider_since_date']), ['provider_since_date']);
 
         return [
             'source_id' => 'demographics:patient_data:' . (int) $row['pid'],
@@ -383,8 +638,96 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'status' => 'available',
             'display' => $this->joinDisplay($displayParts, 'Patient demographic record'),
             'excerpt' => $this->joinDisplay($displayParts, 'Patient demographic record'),
-            'fields_used' => ['DOB', 'sex', 'status'],
+            'fields_used' => $fieldsUsed === [] ? ['pid'] : array_values(array_unique($fieldsUsed)),
             'reliability' => 'structured_patient_record',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function mapAddressRecord(array $row): array
+    {
+        $displayParts = [];
+        $fieldsUsed = [];
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'structured address', $this->formatAddressFromValues([
+            $row['line1'] ?? null,
+            $row['line2'] ?? null,
+            $this->localityLine($row['city'] ?? null, $row['state'] ?? null, $this->formatPostalCode($row['zip'] ?? null, $row['plus_four'] ?? null)),
+            $row['district'] ?? null,
+            $row['country'] ?? null,
+        ]), $this->filledFields($row, [
+            'line1',
+            'line2',
+            'city',
+            'state',
+            'zip',
+            'plus_four',
+            'district',
+            'country',
+        ]));
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'address use', $this->optionLabel($row['address_use'] ?? null, $row['address_use_title'] ?? null), ['use']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'address type', $this->optionLabel($row['address_type'] ?? null, $row['address_type_title'] ?? null), ['type']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'primary address', $this->yesNoValue($row['is_primary'] ?? null), ['is_primary']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'address period start', $this->dateValue($row, ['period_start']), ['period_start']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'address period end', $this->dateValue($row, ['period_end']), ['period_end']);
+
+        return [
+            'source_id' => 'demographics:addresses:' . (int) $row['address_id'],
+            'source_type' => 'address',
+            'data_class' => 'demographics',
+            'table' => 'addresses',
+            'record_id' => (string) (int) $row['address_id'],
+            'patient_id' => (int) $row['patient_id'],
+            'date' => $this->dateValue($row, ['period_start', 'created_date']),
+            'status' => 'available',
+            'display' => $this->joinDisplay($displayParts, 'Structured patient address'),
+            'excerpt' => $this->joinDisplay($displayParts, 'Structured patient address'),
+            'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
+            'reliability' => 'structured_patient_address',
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, mixed>
+     */
+    private function mapTelecomRecord(array $row): array
+    {
+        $displayParts = [];
+        $fieldsUsed = [];
+        $system = strtolower($this->filled($row['system'] ?? null));
+        $systemLabel = $this->optionLabel($row['system'] ?? null, $row['telecom_system_title'] ?? null);
+        $useLabel = $this->optionLabel($row['telecom_use'] ?? null, $row['telecom_use_title'] ?? null);
+        $value = $system === 'phone' || $system === 'sms' || $system === 'fax'
+            ? $this->formatPhoneValue($row['value'] ?? null)
+            : $this->filled($row['value'] ?? null);
+
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'structured contact', $this->formatAddressFromValues([
+            $systemLabel,
+            $useLabel,
+            $value,
+        ]), $this->filledFields($row, ['system', 'telecom_use', 'value']));
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'primary contact', $this->yesNoValue($row['is_primary'] ?? null), ['is_primary']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'contact rank', $row['rank'] ?? null, ['rank']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'contact period start', $this->dateValue($row, ['period_start']), ['period_start']);
+        $this->addDisplayPart($displayParts, $fieldsUsed, 'contact period end', $this->dateValue($row, ['period_end']), ['period_end']);
+
+        return [
+            'source_id' => 'demographics:contact_telecom:' . (int) $row['contact_telecom_id'],
+            'source_type' => 'telecom',
+            'data_class' => 'demographics',
+            'table' => 'contact_telecom',
+            'record_id' => (string) (int) $row['contact_telecom_id'],
+            'patient_id' => (int) $row['patient_id'],
+            'date' => $this->dateValue($row, ['period_start', 'created_date']),
+            'status' => 'available',
+            'display' => $this->joinDisplay($displayParts, 'Structured patient contact'),
+            'excerpt' => $this->joinDisplay($displayParts, 'Structured patient contact'),
+            'fields_used' => $fieldsUsed === [] ? ['id'] : array_values(array_unique($fieldsUsed)),
+            'reliability' => 'structured_patient_contact',
         ];
     }
 
@@ -519,6 +862,89 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         return $records[0] ?? null;
     }
 
+    private function fetchAddressSource(int $pid, int $recordId): ?array
+    {
+        $row = sqlQuery(
+            "SELECT
+                a.id AS address_id,
+                a.line1,
+                a.line2,
+                a.city,
+                a.state,
+                a.zip,
+                a.plus_four,
+                a.country,
+                a.district,
+                c.foreign_id AS patient_id,
+                ca.id AS contact_address_id,
+                ca.priority,
+                ca.`type` AS address_type,
+                address_type.title AS address_type_title,
+                ca.`use` AS address_use,
+                address_use.title AS address_use_title,
+                ca.status AS address_status,
+                ca.is_primary,
+                ca.period_start,
+                ca.period_end,
+                ca.created_date
+             FROM contact c
+             INNER JOIN contact_address ca ON ca.contact_id = c.id
+             INNER JOIN addresses a ON a.id = ca.address_id
+             LEFT JOIN list_options address_type
+                ON address_type.list_id = 'address-types'
+                    AND address_type.option_id = ca.`type`
+             LEFT JOIN list_options address_use
+                ON address_use.list_id = 'address-uses'
+                    AND address_use.option_id = ca.`use`
+             WHERE c.foreign_table_name = 'patient_data'
+                AND c.foreign_id = ?
+                AND a.id = ?
+                AND ca.status = 'A'
+             LIMIT 1",
+            [$pid, $recordId]
+        );
+
+        return is_array($row) && $row !== [] ? $this->mapAddressRecord($row) : null;
+    }
+
+    private function fetchContactTelecomSource(int $pid, int $recordId): ?array
+    {
+        $row = sqlQuery(
+            "SELECT
+                ct.id AS contact_telecom_id,
+                ct.contact_id,
+                c.foreign_id AS patient_id,
+                ct.rank,
+                ct.system,
+                telecom_system.title AS telecom_system_title,
+                ct.`use` AS telecom_use,
+                telecom_use.title AS telecom_use_title,
+                ct.value,
+                ct.status AS telecom_status,
+                ct.is_primary,
+                ct.period_start,
+                ct.period_end,
+                ct.created_date
+             FROM contact c
+             INNER JOIN contact_telecom ct ON ct.contact_id = c.id
+             LEFT JOIN list_options telecom_system
+                ON telecom_system.list_id = 'telecom_systems'
+                    AND telecom_system.option_id = ct.system
+             LEFT JOIN list_options telecom_use
+                ON telecom_use.list_id = 'telecom_uses'
+                    AND telecom_use.option_id = ct.`use`
+             WHERE c.foreign_table_name = 'patient_data'
+                AND c.foreign_id = ?
+                AND ct.id = ?
+                AND ct.status = 'A'
+                AND ct.system IN ('phone', 'sms', 'fax', 'email')
+             LIMIT 1",
+            [$pid, $recordId]
+        );
+
+        return is_array($row) && $row !== [] ? $this->mapTelecomRecord($row) : null;
+    }
+
     private function fetchListSource(int $pid, int $recordId): ?array
     {
         $row = sqlQuery(
@@ -606,6 +1032,282 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         );
 
         return is_array($row) && $row !== [] ? $this->mapDocumentRecord($row) : null;
+    }
+
+    /**
+     * @param list<string> $parts
+     * @param list<string> $fieldsUsed
+     * @param list<string> $fields
+     */
+    private function addDisplayPart(array &$parts, array &$fieldsUsed, string $label, mixed $value, array $fields): void
+    {
+        $filled = $this->filled($value);
+        if ($filled === '') {
+            return;
+        }
+
+        $parts[] = $label . ': ' . $filled;
+        foreach ($fields as $field) {
+            if ($field !== '') {
+                $fieldsUsed[] = $field;
+            }
+        }
+    }
+
+    /**
+     * @param list<string> $parts
+     * @param list<string> $fieldsUsed
+     * @param list<string> $fields
+     */
+    private function addRawDisplayPart(array &$parts, array &$fieldsUsed, string $value, array $fields): void
+    {
+        $filled = $this->filled($value);
+        if ($filled === '') {
+            return;
+        }
+
+        $parts[] = $filled;
+        foreach ($fields as $field) {
+            if ($field !== '') {
+                $fieldsUsed[] = $field;
+            }
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @param list<string> $fields
+     * @return list<string>
+     */
+    private function filledFields(array $row, array $fields): array
+    {
+        $filled = [];
+        foreach ($fields as $field) {
+            if ($this->filled($row[$field] ?? null) !== '') {
+                $filled[] = $field;
+            }
+        }
+
+        return $filled;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function personName(array $row): string
+    {
+        return $this->formatAddressFromValues([
+            $row['title'] ?? null,
+            $row['fname'] ?? null,
+            $row['mname'] ?? null,
+            $row['lname'] ?? null,
+            $row['suffix'] ?? null,
+        ], ' ');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function birthName(array $row): string
+    {
+        return $this->formatAddressFromValues([
+            $row['birth_fname'] ?? null,
+            $row['birth_mname'] ?? null,
+            $row['birth_lname'] ?? null,
+        ], ' ');
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function formatPatientAddress(array $row): string
+    {
+        return $this->formatAddressFromValues([
+            $row['street'] ?? null,
+            $row['street_line_2'] ?? null,
+            $this->localityLine($row['city'] ?? null, $row['state'] ?? null, $row['postal_code'] ?? null),
+            $row['county'] ?? null,
+            $row['country_code'] ?? null,
+        ]);
+    }
+
+    /**
+     * @param list<mixed> $values
+     */
+    private function formatAddressFromValues(array $values, string $separator = ', '): string
+    {
+        $parts = [];
+        foreach ($values as $value) {
+            $filled = $this->filled($value);
+            if ($filled !== '') {
+                $parts[] = $filled;
+            }
+        }
+
+        return implode($separator, array_unique($parts));
+    }
+
+    private function localityLine(mixed $city, mixed $state, mixed $postalCode): string
+    {
+        return $this->formatAddressFromValues([$city, $state, $postalCode], ' ');
+    }
+
+    private function formatPostalCode(mixed $zip, mixed $plusFour): string
+    {
+        $zip = $this->filled($zip);
+        $plusFour = $this->filled($plusFour);
+        if ($zip === '' || $plusFour === '' || str_contains($zip, $plusFour)) {
+            return $zip;
+        }
+
+        return $zip . '-' . $plusFour;
+    }
+
+    private function optionLabel(mixed $value, mixed $title): string
+    {
+        $title = $this->filled($title);
+        if ($title !== '') {
+            return $title;
+        }
+
+        return $this->filled($value);
+    }
+
+    private function yesNoValue(mixed $value): string
+    {
+        return match (strtoupper($this->filled($value))) {
+            'Y', 'YES', '1', 'TRUE' => 'yes',
+            'N', 'NO', '0', 'FALSE' => 'no',
+            default => '',
+        };
+    }
+
+    private function nonZeroValue(mixed $value): string
+    {
+        $filled = $this->filled($value);
+        return $filled === '0' ? '' : $filled;
+    }
+
+    private function formatPhoneValue(mixed $value): string
+    {
+        $phone = $this->filled($value);
+        if ($phone === '') {
+            return '';
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+        if (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+            $digits = substr($digits, 1);
+        }
+
+        if (strlen($digits) === 10) {
+            return '(' . substr($digits, 0, 3) . ') ' . substr($digits, 3, 3) . '-' . substr($digits, 6);
+        }
+
+        return $phone;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function addressKeyFromPatientRow(array $row): string
+    {
+        return $this->addressKey([
+            $row['street'] ?? null,
+            $row['street_line_2'] ?? null,
+            $row['city'] ?? null,
+            $row['state'] ?? null,
+            $row['postal_code'] ?? null,
+            $row['county'] ?? null,
+            $row['country_code'] ?? null,
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function addressKeyFromAddressRow(array $row): string
+    {
+        return $this->addressKey([
+            $row['line1'] ?? null,
+            $row['line2'] ?? null,
+            $row['city'] ?? null,
+            $row['state'] ?? null,
+            $this->formatPostalCode($row['zip'] ?? null, $row['plus_four'] ?? null),
+            $row['district'] ?? null,
+            $row['country'] ?? null,
+        ]);
+    }
+
+    /**
+     * @param list<mixed> $values
+     */
+    private function addressKey(array $values): string
+    {
+        $parts = [];
+        foreach ($values as $value) {
+            $filled = strtolower($this->filled($value));
+            if ($filled !== '') {
+                $parts[] = preg_replace('/[^a-z0-9]+/', '', $filled) ?? '';
+            }
+        }
+
+        return implode('|', array_filter($parts, static fn (string $part): bool => $part !== ''));
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     * @return array<string, bool>
+     */
+    private function contactKeysFromPatientRow(array $row): array
+    {
+        $keys = [];
+        foreach (['phone_home', 'phone_biz', 'phone_contact', 'phone_cell'] as $field) {
+            $key = $this->contactKey('phone', $row[$field] ?? null);
+            if ($key !== '') {
+                $keys[$key] = true;
+            }
+        }
+
+        foreach (['email', 'email_direct'] as $field) {
+            $key = $this->contactKey('email', $row[$field] ?? null);
+            if ($key !== '') {
+                $keys[$key] = true;
+            }
+        }
+
+        return $keys;
+    }
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    private function contactKeyFromTelecomRow(array $row): string
+    {
+        return $this->contactKey($row['system'] ?? null, $row['value'] ?? null);
+    }
+
+    private function contactKey(mixed $system, mixed $value): string
+    {
+        $value = $this->filled($value);
+        if ($value === '') {
+            return '';
+        }
+
+        $system = strtolower($this->filled($system));
+        if ($system === 'email') {
+            return 'email:' . strtolower($value);
+        }
+
+        if ($system === 'phone' || $system === 'sms' || $system === 'fax') {
+            $digits = preg_replace('/\D+/', '', $value) ?? '';
+            if (strlen($digits) === 11 && str_starts_with($digits, '1')) {
+                $digits = substr($digits, 1);
+            }
+            return $digits === '' ? '' : 'phone:' . $digits;
+        }
+
+        return $system . ':' . strtolower($value);
     }
 
     private function uuidToString(mixed $uuid): ?string

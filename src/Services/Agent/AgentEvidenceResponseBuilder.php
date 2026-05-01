@@ -284,6 +284,10 @@ final class AgentEvidenceResponseBuilder
             ];
         }
 
+        if ((string) ($intent['intent_id'] ?? '') === AgentIntentCatalog::BASIC_PATIENT_DATA && $sources !== []) {
+            $this->addBasicPatientDataMissingness($claims, $missingOrUncertain);
+        }
+
         return [
             'answer_blocks' => [
                 [
@@ -293,6 +297,32 @@ final class AgentEvidenceResponseBuilder
             ],
             'missing_or_uncertain' => $missingOrUncertain,
         ];
+    }
+
+    /**
+     * @param list<array{text: string, citation_ids: list<string>, certainty: string}> $claims
+     * @param list<array{text: string, citation_ids: list<string>}> $missingOrUncertain
+     */
+    private function addBasicPatientDataMissingness(array $claims, array &$missingOrUncertain): void
+    {
+        $claimText = strtolower(implode(' ', array_map(
+            static fn (array $claim): string => (string) ($claim['text'] ?? ''),
+            $claims
+        )));
+
+        if (!preg_match('/\b(address|street|postal|zip)\b/', $claimText)) {
+            $missingOrUncertain[] = [
+                'text' => 'Address was not found in checked evidence from patient_data or structured contact address records.',
+                'citation_ids' => [],
+            ];
+        }
+
+        if (!preg_match('/\b(phone|mobile|telecom)\b/', $claimText)) {
+            $missingOrUncertain[] = [
+                'text' => 'Phone was not found in checked evidence from patient_data or structured contact telecom records.',
+                'citation_ids' => [],
+            ];
+        }
     }
 
     /**

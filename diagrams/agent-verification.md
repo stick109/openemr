@@ -7,6 +7,13 @@ turns a candidate answer plus the evidence packet into an
 The verifier is the gate that decides whether the orchestrator returns the
 LLM answer, falls back to the deterministic answer, or refuses entirely.
 
+## What Gets Verified
+
+- **Shape & length** — answer matches the structured schema and stays under the 90-second workflow length cap.
+- **Source grounding** — every claim cites a real packet source, the source belongs to the current patient, and the claim text is supported by what the source actually says.
+- **Content safety** — no clinical advice, missingness uses safe phrasing, and tool failures are surfaced rather than hidden.
+- **Certainty discipline** — uncited claims must declare an appropriate uncertainty; `conflicting` claims become warnings.
+
 ## Component Diagram
 
 ![Agent verification|697](agent-verification.svg)

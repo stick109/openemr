@@ -59,4 +59,21 @@ class AgentLlmConfigTest extends TestCase
         $this->assertTrue($config->isConfigured());
         $this->assertSame('server-side-secret', $config->getApiKey());
     }
+
+    public function testLeadingBomIsRemovedFromEnvironmentValues(): void
+    {
+        $bom = "\u{FEFF}";
+        $config = AgentLlmConfig::fromEnvironment(new OEEnvBag([
+            'OPENEMR_AGENT_LLM_PROVIDER' => $bom . 'openai',
+            'OPENEMR_AGENT_LLM_MODEL' => $bom . 'gpt-test',
+            'OPENAI_API_KEY' => $bom . 'server-side-secret',
+            'OPENEMR_AGENT_LLM_TIMEOUT_SECONDS' => $bom . '10',
+        ]));
+
+        $this->assertTrue($config->isConfigured());
+        $this->assertSame('openai', $config->getProvider());
+        $this->assertSame('gpt-test', $config->getModel());
+        $this->assertSame('server-side-secret', $config->getApiKey());
+        $this->assertSame(10, $config->getTimeoutSeconds());
+    }
 }

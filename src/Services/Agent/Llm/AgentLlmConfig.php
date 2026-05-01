@@ -32,16 +32,16 @@ final class AgentLlmConfig
     public static function fromEnvironment(?OEEnvBag $env = null): self
     {
         $env ??= OEEnvBag::getInstance();
-        $provider = strtolower(trim($env->getString('OPENEMR_AGENT_LLM_PROVIDER', self::PROVIDER_DISABLED)));
-        $model = trim($env->getString('OPENEMR_AGENT_LLM_MODEL', ''));
-        $baseUri = trim($env->getString('OPENEMR_AGENT_LLM_BASE_URI', 'https://api.openai.com/v1/'));
+        $provider = strtolower(self::getString($env, 'OPENEMR_AGENT_LLM_PROVIDER', self::PROVIDER_DISABLED));
+        $model = self::getString($env, 'OPENEMR_AGENT_LLM_MODEL');
+        $baseUri = self::getString($env, 'OPENEMR_AGENT_LLM_BASE_URI', 'https://api.openai.com/v1/');
         $timeoutSeconds = self::getOptionalPositiveInt($env, 'OPENEMR_AGENT_LLM_TIMEOUT_SECONDS', 20);
 
         $apiKey = '';
         if ($provider === self::PROVIDER_OPENAI) {
-            $apiKey = trim($env->getString('OPENAI_API_KEY', ''));
+            $apiKey = self::getString($env, 'OPENAI_API_KEY');
             if ($apiKey === '') {
-                $apiKey = trim($env->getString('OPENEMR_AGENT_LLM_API_KEY', ''));
+                $apiKey = self::getString($env, 'OPENEMR_AGENT_LLM_API_KEY');
             }
         }
 
@@ -54,9 +54,17 @@ final class AgentLlmConfig
         );
     }
 
+    private static function getString(OEEnvBag $env, string $name, string $default = ''): string
+    {
+        $value = $env->getString($name, $default);
+        $value = preg_replace('/^(?:\x{FEFF})+/u', '', $value) ?? $value;
+
+        return trim($value);
+    }
+
     private static function getOptionalPositiveInt(OEEnvBag $env, string $name, int $default): int
     {
-        $value = trim($env->getString($name, ''));
+        $value = self::getString($env, $name);
         if ($value === '') {
             return $default;
         }

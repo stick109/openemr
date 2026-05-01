@@ -25,7 +25,10 @@ final class AgentLlmConfig
         #[SensitiveParameter] private readonly string $apiKey = '',
         private readonly string $model = '',
         private readonly string $baseUri = 'https://api.openai.com/v1/',
-        private readonly int $timeoutSeconds = 20
+        private readonly int $timeoutSeconds = 20,
+        private readonly bool $externalCallsEnabled = false,
+        private readonly float $inputCostPer1MTokens = 0.0,
+        private readonly float $outputCostPer1MTokens = 0.0
     ) {
     }
 
@@ -36,6 +39,9 @@ final class AgentLlmConfig
         $model = self::getString($env, 'OPENEMR_AGENT_LLM_MODEL');
         $baseUri = self::getString($env, 'OPENEMR_AGENT_LLM_BASE_URI', 'https://api.openai.com/v1/');
         $timeoutSeconds = self::getOptionalPositiveInt($env, 'OPENEMR_AGENT_LLM_TIMEOUT_SECONDS', 20);
+        $externalCallsEnabled = self::getOptionalBool($env, 'OPENEMR_AGENT_LLM_EXTERNAL_CALLS_ENABLED', false);
+        $inputCostPer1MTokens = self::getOptionalNonNegativeFloat($env, 'OPENEMR_AGENT_LLM_INPUT_COST_PER_1M_TOKENS', 0.0);
+        $outputCostPer1MTokens = self::getOptionalNonNegativeFloat($env, 'OPENEMR_AGENT_LLM_OUTPUT_COST_PER_1M_TOKENS', 0.0);
 
         $apiKey = '';
         if ($provider === self::PROVIDER_OPENAI) {
@@ -50,7 +56,10 @@ final class AgentLlmConfig
             apiKey: $apiKey,
             model: $model,
             baseUri: $baseUri !== '' ? $baseUri : 'https://api.openai.com/v1/',
-            timeoutSeconds: $timeoutSeconds
+            timeoutSeconds: $timeoutSeconds,
+            externalCallsEnabled: $externalCallsEnabled,
+            inputCostPer1MTokens: $inputCostPer1MTokens,
+            outputCostPer1MTokens: $outputCostPer1MTokens
         );
     }
 
@@ -75,6 +84,39 @@ final class AgentLlmConfig
         }
 
         return max(1, (int) $validated);
+    }
+
+    private static function getOptionalBool(OEEnvBag $env, string $name, bool $default): bool
+    {
+        $value = strtolower(self::getString($env, $name));
+        if ($value === '') {
+            return $default;
+        }
+
+        if (in_array($value, ['1', 'true', 'yes', 'on'], true)) {
+            return true;
+        }
+
+        if (in_array($value, ['0', 'false', 'no', 'off'], true)) {
+            return false;
+        }
+
+        return $default;
+    }
+
+    private static function getOptionalNonNegativeFloat(OEEnvBag $env, string $name, float $default): float
+    {
+        $value = self::getString($env, $name);
+        if ($value === '') {
+            return $default;
+        }
+
+        $validated = filter_var($value, FILTER_VALIDATE_FLOAT);
+        if ($validated === false) {
+            return $default;
+        }
+
+        return max(0.0, (float) $validated);
     }
 
     public function getProvider(): string
@@ -102,9 +144,25 @@ final class AgentLlmConfig
         return $this->timeoutSeconds;
     }
 
+    public function externalCallsEnabled(): bool
+    {
+        return $this->externalCallsEnabled;
+    }
+
+    public function getInputCostPer1MTokens(): float
+    {
+        return $this->inputCostPer1MTokens;
+    }
+
+    public function getOutputCostPer1MTokens(): float
+    {
+        return $this->outputCostPer1MTokens;
+    }
+
     public function isConfigured(): bool
     {
         return $this->provider === self::PROVIDER_OPENAI
+            && $this->externalCallsEnabled
             && $this->apiKey !== ''
             && $this->model !== '';
     }
@@ -117,6 +175,10 @@ final class AgentLlmConfig
 
         if ($this->provider !== self::PROVIDER_OPENAI) {
             return 'unsupported_provider';
+        }
+
+        if (!$this->externalCallsEnabled) {
+            return 'external_calls_disabled';
         }
 
         if ($this->apiKey === '') {

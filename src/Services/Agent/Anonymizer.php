@@ -62,6 +62,32 @@ final class Anonymizer
     ];
 
     /**
+     * @var array{
+     *     mode: string,
+     *     status: string,
+     *     request_id: string,
+     *     placeholder_count: int,
+     *     replacement_count: int,
+     *     category_counts: array<string, int>,
+     *     latency_ms: int
+     * }
+     */
+    private array $lastMetrics = [
+        'mode' => '',
+        'status' => 'not_run',
+        'request_id' => '',
+        'placeholder_count' => 0,
+        'replacement_count' => 0,
+        'category_counts' => [],
+        'latency_ms' => 0,
+    ];
+
+    /**
+     * @var array{replacement_count: int, category_counts: array<string, int>}|null
+     */
+    private ?array $activeMetrics = null;
+
+    /**
      * @var array<string, array{
      *     token_issued_at: int,
      *     expires_at: int,
@@ -99,33 +125,61 @@ final class Anonymizer
      */
     public function anonymizeEvidencePacket(AgentAccessToken $accessToken, array $packet): array
     {
+        $startedAt = hrtime(true);
+        $this->startMetrics();
         try {
             $anonymized = $this->anonymizeValue($accessToken, $packet, '');
             $result = is_array($anonymized) ? $anonymized : [];
-            $this->logger->debug('agent.anonymizer.completed', [
+            $this->finishMetrics($accessToken, 'evidence_packet', 'completed', $startedAt, $packet);
+            $this->logger->debug('agent.anonymizer.finished', [
                 'mode' => 'evidence_packet',
-                'placeholder_count' => $this->placeholderCount($accessToken),
+                'metrics' => $this->lastMetrics,
             ]);
             return $result;
         } catch (Throwable $exception) {
+            $this->finishMetrics($accessToken, 'evidence_packet', 'failed', $startedAt, $packet);
             $this->reportFailure($accessToken, 'evidence_packet', $exception);
             throw $exception;
+        } finally {
+            $this->activeMetrics = null;
         }
     }
 
     public function anonymizePayload(AgentAccessToken $accessToken, mixed $payload): mixed
     {
+        $startedAt = hrtime(true);
+        $this->startMetrics();
         try {
             $result = $this->anonymizeValue($accessToken, $payload, '');
-            $this->logger->debug('agent.anonymizer.completed', [
+            $this->finishMetrics($accessToken, 'payload', 'completed', $startedAt, $payload);
+            $this->logger->debug('agent.anonymizer.finished', [
                 'mode' => 'payload',
-                'placeholder_count' => $this->placeholderCount($accessToken),
+                'metrics' => $this->lastMetrics,
             ]);
             return $result;
         } catch (Throwable $exception) {
+            $this->finishMetrics($accessToken, 'payload', 'failed', $startedAt, $payload);
             $this->reportFailure($accessToken, 'payload', $exception);
             throw $exception;
+        } finally {
+            $this->activeMetrics = null;
         }
+    }
+
+    /**
+     * @return array{
+     *     mode: string,
+     *     status: string,
+     *     request_id: string,
+     *     placeholder_count: int,
+     *     replacement_count: int,
+     *     category_counts: array<string, int>,
+     *     latency_ms: int
+     * }
+     */
+    public function getLastMetrics(): array
+    {
+        return $this->lastMetrics;
     }
 
     public function placeholderCount(AgentAccessToken $accessToken): int
@@ -307,6 +361,7 @@ final class Anonymizer
             return '';
         }
 
+        $this->recordReplacement($category);
         $scope =& $this->scopeFor($accessToken);
         if (isset($scope['map'][$category][$normalizedValue])) {
             return $scope['map'][$category][$normalizedValue];
@@ -399,5 +454,60 @@ final class Anonymizer
                 'error_class' => $auditException::class,
             ]);
         }
+    }
+
+    private function startMetrics(): void
+    {
+        $this->activeMetrics = [
+            'replacement_count' => 0,
+            'category_counts' => [],
+        ];
+    }
+
+    private function recordReplacement(string $category): void
+    {
+        if ($this->activeMetrics === null) {
+            return;
+        }
+
+        $this->activeMetrics['replacement_count']++;
+        $this->activeMetrics['category_counts'][$category] = ($this->activeMetrics['category_counts'][$category] ?? 0) + 1;
+    }
+
+    private function finishMetrics(
+        AgentAccessToken $accessToken,
+        string $mode,
+        string $status,
+        int $startedAt,
+        mixed $payload
+    ): void {
+        $categoryCounts = $this->activeMetrics['category_counts'] ?? [];
+        ksort($categoryCounts);
+        $this->lastMetrics = [
+            'mode' => $mode,
+            'status' => $status,
+            'request_id' => $this->requestIdFromPayload($payload),
+            'placeholder_count' => $this->placeholderCount($accessToken),
+            'replacement_count' => $this->activeMetrics['replacement_count'] ?? 0,
+            'category_counts' => $categoryCounts,
+            'latency_ms' => (int) round((hrtime(true) - $startedAt) / 1000000),
+        ];
+    }
+
+    private function requestIdFromPayload(mixed $payload): string
+    {
+        if (!is_array($payload)) {
+            return '';
+        }
+
+        if (is_string($payload['request_id'] ?? null)) {
+            return $payload['request_id'];
+        }
+
+        if (is_array($payload['evidence_packet'] ?? null) && is_string($payload['evidence_packet']['request_id'] ?? null)) {
+            return $payload['evidence_packet']['request_id'];
+        }
+
+        return '';
     }
 }

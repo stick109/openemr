@@ -25,6 +25,7 @@ class AgentLlmConfigTest extends TestCase
     {
         $config = AgentLlmConfig::fromEnvironment(new OEEnvBag([
             'OPENEMR_AGENT_LLM_PROVIDER' => 'openai',
+            'OPENEMR_AGENT_LLM_EXTERNAL_CALLS_ENABLED' => 'true',
             'OPENEMR_AGENT_LLM_MODEL' => 'gpt-test',
             'OPENAI_API_KEY' => 'server-side-secret',
             'OPENEMR_AGENT_LLM_TIMEOUT_SECONDS' => '',
@@ -38,6 +39,7 @@ class AgentLlmConfigTest extends TestCase
     {
         $config = AgentLlmConfig::fromEnvironment(new OEEnvBag([
             'OPENEMR_AGENT_LLM_PROVIDER' => 'openai',
+            'OPENEMR_AGENT_LLM_EXTERNAL_CALLS_ENABLED' => 'true',
             'OPENEMR_AGENT_LLM_MODEL' => 'gpt-test',
             'OPENAI_API_KEY' => 'server-side-secret',
             'OPENEMR_AGENT_LLM_TIMEOUT_SECONDS' => 'not-a-number',
@@ -51,6 +53,7 @@ class AgentLlmConfigTest extends TestCase
     {
         $config = AgentLlmConfig::fromEnvironment(new OEEnvBag([
             'OPENEMR_AGENT_LLM_PROVIDER' => 'openai',
+            'OPENEMR_AGENT_LLM_EXTERNAL_CALLS_ENABLED' => 'true',
             'OPENEMR_AGENT_LLM_MODEL' => 'gpt-test',
             'OPENAI_API_KEY' => '',
             'OPENEMR_AGENT_LLM_API_KEY' => 'server-side-secret',
@@ -65,6 +68,7 @@ class AgentLlmConfigTest extends TestCase
         $bom = "\u{FEFF}";
         $config = AgentLlmConfig::fromEnvironment(new OEEnvBag([
             'OPENEMR_AGENT_LLM_PROVIDER' => $bom . 'openai',
+            'OPENEMR_AGENT_LLM_EXTERNAL_CALLS_ENABLED' => $bom . 'true',
             'OPENEMR_AGENT_LLM_MODEL' => $bom . 'gpt-test',
             'OPENAI_API_KEY' => $bom . 'server-side-secret',
             'OPENEMR_AGENT_LLM_TIMEOUT_SECONDS' => $bom . '10',
@@ -75,5 +79,34 @@ class AgentLlmConfigTest extends TestCase
         $this->assertSame('gpt-test', $config->getModel());
         $this->assertSame('server-side-secret', $config->getApiKey());
         $this->assertSame(10, $config->getTimeoutSeconds());
+    }
+
+    public function testExternalCallsKillSwitchDisablesConfiguredProvider(): void
+    {
+        $config = AgentLlmConfig::fromEnvironment(new OEEnvBag([
+            'OPENEMR_AGENT_LLM_PROVIDER' => 'openai',
+            'OPENEMR_AGENT_LLM_EXTERNAL_CALLS_ENABLED' => 'false',
+            'OPENEMR_AGENT_LLM_MODEL' => 'gpt-test',
+            'OPENAI_API_KEY' => 'server-side-secret',
+        ]));
+
+        $this->assertFalse($config->isConfigured());
+        $this->assertSame('external_calls_disabled', $config->getConfigurationIssue());
+    }
+
+    public function testReadsConfiguredTokenCostRates(): void
+    {
+        $config = AgentLlmConfig::fromEnvironment(new OEEnvBag([
+            'OPENEMR_AGENT_LLM_PROVIDER' => 'openai',
+            'OPENEMR_AGENT_LLM_EXTERNAL_CALLS_ENABLED' => 'true',
+            'OPENEMR_AGENT_LLM_MODEL' => 'gpt-test',
+            'OPENAI_API_KEY' => 'server-side-secret',
+            'OPENEMR_AGENT_LLM_INPUT_COST_PER_1M_TOKENS' => '2.50',
+            'OPENEMR_AGENT_LLM_OUTPUT_COST_PER_1M_TOKENS' => '10',
+        ]));
+
+        $this->assertTrue($config->isConfigured());
+        $this->assertSame(2.5, $config->getInputCostPer1MTokens());
+        $this->assertSame(10.0, $config->getOutputCostPer1MTokens());
     }
 }

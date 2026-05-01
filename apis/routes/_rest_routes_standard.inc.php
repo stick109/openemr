@@ -50,6 +50,8 @@ use OpenEMR\Services\Search\SearchQueryConfig;
 
 return [
     "POST /api/agent/intent" => function (HttpRestRequest $request) {
+        $request->attributes->set('skipResponseLogging', true);
+        $request->attributes->set('agentRouteRawResponseLoggingDisabled', true);
         RestConfig::request_authorization_check($request, "patients", "demo");
         return (new AgentIntentRestController())->postIntent($request);
     },

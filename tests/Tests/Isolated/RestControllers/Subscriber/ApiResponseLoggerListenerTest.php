@@ -203,4 +203,43 @@ class ApiResponseLoggerListenerTest extends TestCase
         $apiResponseLoggerListener->setEventAuditLogger($auditLogger);
         $apiResponseLoggerListener->onRequestTerminated($terminatedEvent);
     }
+
+    public function testAgentRouteDoesNotLogRawResponseWhenSkipAttributeIsMissing(): void
+    {
+        $globalsBag = new OEGlobalsBag([
+            'api_log_option' => 2,
+        ]);
+        $kernel = $this->createMock(OEHttpKernel::class);
+        $kernel->method('getGlobalsBag')
+            ->willReturn($globalsBag);
+        $request = HttpRestRequest::create('/api/agent/intent');
+        $mockSessionFactory = new MockFileSessionStorageFactory();
+        $session = new Session($mockSessionFactory->createStorage(null));
+        $session->set('authUser', 'test_user');
+        $session->set('authUserID', 1);
+        $session->set('authProvider', 'Default');
+        $session->set('pid', 123);
+        $request->setSession($session);
+        $request->setResource('agent/intent');
+
+        $response = new JsonResponse([
+            'data' => [
+                'evidence_packet' => [
+                    'sources' => [
+                        [
+                            'display' => 'Patient Jane Doe',
+                        ],
+                    ],
+                ],
+            ],
+        ], Response::HTTP_OK);
+        $terminatedEvent = new TerminateEvent($kernel, $request, $response);
+        $auditLogger = $this->createMock(EventAuditLogger::class);
+        $auditLogger->expects($this->never())->method('recordLogItem');
+
+        $apiResponseLoggerListener = new ApiResponseLoggerListener();
+        $apiResponseLoggerListener->setSystemLogger($this->createMock(LoggerInterface::class));
+        $apiResponseLoggerListener->setEventAuditLogger($auditLogger);
+        $apiResponseLoggerListener->onRequestTerminated($terminatedEvent);
+    }
 }

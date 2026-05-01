@@ -17,6 +17,7 @@ use OpenEMR\Services\Agent\Llm\AgentAnswerSchema;
 use OpenEMR\Services\Agent\Llm\AgentLlmProviderFactory;
 use OpenEMR\Services\Agent\Llm\AgentLlmProviderInterface;
 use OpenEMR\Services\Agent\Llm\AgentLlmRequest;
+use OpenEMR\Services\Agent\Llm\AgentLlmUsage;
 use OpenEMR\Services\Agent\Verification\AgentAnswerVerifier;
 use OpenEMR\Services\Agent\Verification\AgentVerificationResult;
 use Psr\Log\LoggerInterface;
@@ -60,16 +61,22 @@ final class AgentLlmOrchestrator
                     jsonSchema: $this->answerSchema->jsonSchema()
                 );
                 $this->logLlmRequest($intent, $accessToken, $packet, $request);
+                $startedAt = hrtime(true);
                 $llmResponse = $this->provider->complete($request);
                 $answer = $this->answerSchema->normalize($llmResponse->getAnswer());
                 $verification = $this->verifier->verify($answer, $accessToken, $packet);
+                $this->logVerificationFinished($intent, $packet, $verification, 'llm_structured');
 
                 $llmMetadata = $llmResponse->toMetadata();
+                $llmMetadata['latency_ms'] = (int) round((hrtime(true) - $startedAt) / 1000000);
                 $this->logger->info('agent.llm.finished', [
                     'request_id' => (string) ($packet['request_id'] ?? ''),
                     'intent_id' => (string) ($intent['intent_id'] ?? ''),
                     'provider' => (string) ($llmMetadata['provider'] ?? ''),
                     'model' => (string) ($llmMetadata['model'] ?? ''),
+                    'latency_ms' => $llmMetadata['latency_ms'],
+                    'token_counters' => $llmMetadata['token_counters'] ?? AgentLlmUsage::emptyTokenCounters(),
+                    'cost_counters' => $llmMetadata['cost_counters'] ?? AgentLlmUsage::emptyCostCounters(),
                     'verification_status' => $verification->passed() ? 'passed' : 'failed',
                     'llm_response' => $this->anonymizedLlmResponse($accessToken, $answer),
                 ]);
@@ -99,6 +106,7 @@ final class AgentLlmOrchestrator
         }
 
         $verification = $this->verifier->verify($deterministicAnswer, $accessToken, $packet);
+        $this->logVerificationFinished($intent, $packet, $verification, 'deterministic');
         if (!$verification->passed()) {
             $this->logger->error('agent.verification.deterministic_fallback_failed', [
                 'request_id' => (string) ($packet['request_id'] ?? ''),
@@ -138,6 +146,8 @@ final class AgentLlmOrchestrator
             'used' => false,
             'configuration_issue' => $this->provider->getConfigurationIssue(),
             'usage' => [],
+            'token_counters' => AgentLlmUsage::emptyTokenCounters(),
+            'cost_counters' => AgentLlmUsage::emptyCostCounters(),
         ];
     }
 
@@ -326,6 +336,28 @@ final class AgentLlmOrchestrator
             'provider' => $this->provider->getProviderName(),
             'error_count' => count($verification->errors()),
             'verification_errors' => $verification->errors(),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $intent
+     * @param array<string, mixed> $packet
+     */
+    private function logVerificationFinished(
+        array $intent,
+        array $packet,
+        AgentVerificationResult $verification,
+        string $answerSource
+    ): void {
+        $result = $verification->toArray();
+        $this->logger->info('agent.verification.finished', [
+            'request_id' => (string) ($packet['request_id'] ?? ''),
+            'intent_id' => (string) ($intent['intent_id'] ?? ''),
+            'answer_source' => $answerSource,
+            'status' => $result['status'],
+            'error_count' => count($result['errors']),
+            'warning_count' => count($result['warnings']),
+            'unsupported_claim_count' => $result['unsupported_claim_count'],
         ]);
     }
 

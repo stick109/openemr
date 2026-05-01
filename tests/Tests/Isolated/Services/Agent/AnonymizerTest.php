@@ -69,6 +69,10 @@ class AnonymizerTest extends TestCase
         $this->assertStringContainsString('[INSURANCE_ID_1]', $encoded);
         $this->assertStringContainsString('[REDACTED_IDENTIFIER_1]', $encoded);
         $this->assertGreaterThanOrEqual(7, $anonymizer->placeholderCount($this->accessToken('token-a')));
+        $this->assertSame('evidence_packet', $anonymizer->getLastMetrics()['mode']);
+        $this->assertSame('request-123', $anonymizer->getLastMetrics()['request_id']);
+        $this->assertGreaterThanOrEqual(7, $anonymizer->getLastMetrics()['replacement_count']);
+        $this->assertArrayHasKey('patient_name', $anonymizer->getLastMetrics()['category_counts']);
     }
 
     public function testPlaceholdersAreStableWithinTokenAndResetAcrossTokens(): void

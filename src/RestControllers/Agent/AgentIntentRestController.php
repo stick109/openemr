@@ -25,6 +25,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class AgentIntentRestController
 {
+    private const REQUEST_ID_HEADER = 'X-OpenEMR-Agent-Request-Id';
     private const SERVER_PATIENT_CONTEXT = 'server-session';
 
     private const ALLOWED_PAYLOAD_FIELDS = [
@@ -47,25 +48,35 @@ final class AgentIntentRestController
         'user_text',
     ];
 
+    /**
+     * @var callable(): string
+     */
+    private $requestIdFactory;
+
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
         private readonly AgentAccessBroker $accessBroker = new AgentAccessBroker(),
         private readonly AgentEvidenceResponseBuilder $responseBuilder = new AgentEvidenceResponseBuilder(),
-        private readonly LoggerInterface $logger = new SystemLogger()
+        private readonly LoggerInterface $logger = new SystemLogger(),
+        ?callable $requestIdFactory = null
     ) {
+        $this->requestIdFactory = $requestIdFactory ?? static fn (): string => bin2hex(random_bytes(16));
     }
 
     public function postIntent(HttpRestRequest $request): JsonResponse
     {
+        $requestId = $this->ensureRequestId($request);
         $request->attributes->set('skipResponseLogging', true);
+        $request->attributes->set('agentRouteRawResponseLoggingDisabled', true);
 
         $decodeResult = $this->decodePayload($request);
         if (isset($decodeResult['errors'])) {
             $this->logger->warning('agent.intent.invalid_payload', [
+                'request_id' => $requestId,
                 'stage' => 'decode',
                 'fields' => array_keys($decodeResult['errors']),
             ]);
-            return $this->badRequest($decodeResult['errors']);
+            return $this->badRequest($decodeResult['errors'], $requestId);
         }
 
         return $this->handlePayload($decodeResult['payload'], $request);
@@ -76,9 +87,13 @@ final class AgentIntentRestController
      */
     public function handlePayload(array $payload, HttpRestRequest $request): JsonResponse
     {
+        $requestId = $this->ensureRequestId($request);
         $intentIdInput = is_string($payload['intent_id'] ?? null) ? $payload['intent_id'] : null;
         $conversationId = is_string($payload['conversation_id'] ?? null) ? $payload['conversation_id'] : null;
+        $request->attributes->set('skipResponseLogging', true);
+        $request->attributes->set('agentRouteRawResponseLoggingDisabled', true);
         $this->logger->info('agent.intent.received', [
+            'request_id' => $requestId,
             'intent_id' => $intentIdInput,
             'conversation_id' => $conversationId,
             'has_source_id' => isset($payload['source_id']),
@@ -88,71 +103,91 @@ final class AgentIntentRestController
         $validationErrors = $this->validatePayload($payload);
         if ($validationErrors !== []) {
             $this->logger->warning('agent.intent.invalid_payload', [
+                'request_id' => $requestId,
                 'stage' => 'validate',
                 'intent_id' => $intentIdInput,
                 'fields' => array_keys($validationErrors),
             ]);
-            return $this->badRequest($validationErrors);
+            return $this->badRequest($validationErrors, $requestId);
         }
 
         $intent = $this->intentCatalog->get($payload['intent_id']);
         if ($intent === null) {
             $this->logger->warning('agent.intent.invalid_payload', [
+                'request_id' => $requestId,
                 'stage' => 'catalog',
                 'intent_id' => $intentIdInput,
                 'fields' => ['intent_id'],
             ]);
-            return $this->badRequest(['intent_id' => ['Unknown agent intent_id.']]);
+            return $this->badRequest(['intent_id' => ['Unknown agent intent_id.']], $requestId);
         }
 
         $accessDecision = $this->accessBroker->authorize($request, $intent['intent_id'], $payload);
         if (!$accessDecision->isAllowed()) {
             $this->logger->warning('agent.intent.access_denied', [
+                'request_id' => $requestId,
                 'intent_id' => $intent['intent_id'],
                 'reason_code' => $accessDecision->getReasonCode(),
             ]);
-            return $this->accessDenied($accessDecision);
+            return $this->accessDenied($accessDecision, $requestId);
         }
 
         $accessToken = $accessDecision->getAccessToken();
         if ($accessToken === null) {
             $this->logger->error('agent.intent.evidence_denied', [
+                'request_id' => $requestId,
                 'intent_id' => $intent['intent_id'],
                 'reason' => 'missing_access_token',
             ]);
-            return $this->evidenceDenied('Agent access token was not available.');
+            return $this->evidenceDenied('Agent access token was not available.', $requestId);
         }
 
         try {
             $agentResponse = $this->responseBuilder->build(
                 $intent['intent_id'],
                 $accessToken,
-                $this->sourceIdFromPayload($payload)
+                $this->sourceIdFromPayload($payload),
+                $requestId
             );
             $request->attributes->set('agentAnonymizedPayloadLog', $this->responseBuilder->getLastLogPayload());
         } catch (AgentEvidenceAccessException $exception) {
             $this->logger->warning('agent.intent.evidence_denied', [
+                'request_id' => $requestId,
                 'intent_id' => $intent['intent_id'],
                 'reason_code' => $exception->getReasonCode(),
             ]);
-            return $this->evidenceDenied($exception->getPublicMessage());
+            return $this->evidenceDenied($exception->getPublicMessage(), $requestId);
         }
 
+        $claimCount = $this->countClaims($agentResponse);
+        $citationCount = is_array($agentResponse['citations'] ?? null) ? count($agentResponse['citations']) : 0;
         $this->logger->info('agent.intent.completed', [
+            'request_id' => $requestId,
             'intent_id' => $intent['intent_id'],
             'status' => is_string($agentResponse['status'] ?? null) ? $agentResponse['status'] : 'unknown',
-            'citation_count' => is_array($agentResponse['citations'] ?? null) ? count($agentResponse['citations']) : 0,
-            'claim_count' => $this->countClaims($agentResponse),
+            'citation_count' => $citationCount,
+            'claim_count' => $claimCount,
+        ]);
+        $this->logger->info('agent.response.rendered', [
+            'request_id' => $requestId,
+            'intent_id' => $intent['intent_id'],
+            'answer_block_count' => $this->countAnswerBlocks($agentResponse),
+            'citation_count' => $citationCount,
         ]);
 
-        return new JsonResponse([
+        return $this->jsonResponse([
             'validationErrors' => [],
             'internalErrors' => [],
             'data' => array_merge([
                 'intent_id' => $intent['intent_id'],
                 'button_label' => $intent['button_label'],
+                'trace' => [
+                    'request_id' => $requestId,
+                    'conversation_id' => $conversationId,
+                    'response_payload_logging' => 'anonymized_or_disabled',
+                ],
             ], $agentResponse),
-        ], Response::HTTP_OK);
+        ], Response::HTTP_OK, $requestId);
     }
 
     /**
@@ -171,6 +206,15 @@ final class AgentIntentRestController
             }
         }
         return $total;
+    }
+
+    /**
+     * @param array<string, mixed> $agentResponse
+     */
+    private function countAnswerBlocks(array $agentResponse): int
+    {
+        $blocks = $agentResponse['answer']['answer_blocks'] ?? null;
+        return is_array($blocks) ? count($blocks) : 0;
     }
 
     /**
@@ -270,34 +314,67 @@ final class AgentIntentRestController
     /**
      * @param array<string, list<string>> $validationErrors
      */
-    private function badRequest(array $validationErrors): JsonResponse
+    private function badRequest(array $validationErrors, string $requestId): JsonResponse
     {
-        return new JsonResponse([
+        return $this->jsonResponse([
             'validationErrors' => $validationErrors,
             'internalErrors' => [],
             'data' => [],
-        ], Response::HTTP_BAD_REQUEST);
+        ], Response::HTTP_BAD_REQUEST, $requestId);
     }
 
-    private function accessDenied(AgentAccessDecision $accessDecision): JsonResponse
+    private function accessDenied(AgentAccessDecision $accessDecision, string $requestId): JsonResponse
     {
-        return new JsonResponse([
+        return $this->jsonResponse([
             'validationErrors' => [],
             'internalErrors' => [
                 'access' => [$accessDecision->getPublicMessage()],
             ],
             'data' => [],
-        ], Response::HTTP_FORBIDDEN);
+        ], Response::HTTP_FORBIDDEN, $requestId);
     }
 
-    private function evidenceDenied(string $publicMessage): JsonResponse
+    private function evidenceDenied(string $publicMessage, string $requestId): JsonResponse
     {
-        return new JsonResponse([
+        return $this->jsonResponse([
             'validationErrors' => [],
             'internalErrors' => [
                 'access' => [$publicMessage],
             ],
             'data' => [],
-        ], Response::HTTP_FORBIDDEN);
+        ], Response::HTTP_FORBIDDEN, $requestId);
+    }
+
+    private function ensureRequestId(HttpRestRequest $request): string
+    {
+        $existing = $request->attributes->get('agentRequestId');
+        if (is_string($existing) && $this->isSafeRequestId($existing)) {
+            return $existing;
+        }
+
+        $requestId = ($this->requestIdFactory)();
+        if (!is_string($requestId) || !$this->isSafeRequestId($requestId)) {
+            $requestId = bin2hex(random_bytes(16));
+        }
+
+        $request->attributes->set('agentRequestId', $requestId);
+
+        return $requestId;
+    }
+
+    private function isSafeRequestId(string $requestId): bool
+    {
+        return preg_match('/\A[A-Za-z0-9._:-]{8,128}\z/', $requestId) === 1;
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     */
+    private function jsonResponse(array $payload, int $statusCode, string $requestId): JsonResponse
+    {
+        $response = new JsonResponse($payload, $statusCode);
+        $response->headers->set(self::REQUEST_ID_HEADER, $requestId);
+
+        return $response;
     }
 }

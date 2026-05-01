@@ -74,7 +74,8 @@ class AgentIntentRestControllerTest extends TestCase
                 logger: new NullLogger()
             ),
             responseBuilder: $responseBuilder,
-            logger: new NullLogger()
+            logger: new NullLogger(),
+            requestIdFactory: static fn (): string => 'agent-test-request'
         );
     }
 
@@ -90,9 +91,12 @@ class AgentIntentRestControllerTest extends TestCase
         $body = $this->decodeJsonBody($response);
 
         $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertSame('agent-test-request', $response->headers->get('X-OpenEMR-Agent-Request-Id'));
         $this->assertSame([], $body['validationErrors']);
         $this->assertSame('current_medications', $body['data']['intent_id']);
         $this->assertSame('Current medications', $body['data']['button_label']);
+        $this->assertSame('agent-test-request', $body['data']['trace']['request_id']);
+        $this->assertSame('session-local-id', $body['data']['trace']['conversation_id']);
         $this->assertSame('verified', $body['data']['status']);
         $this->assertSame('deterministic_verified', $body['data']['response_generation']);
         $this->assertSame('Current medications', $body['data']['answer']['answer_blocks'][0]['heading']);
@@ -133,10 +137,14 @@ class AgentIntentRestControllerTest extends TestCase
         );
         $this->assertIsArray($anonymizedPayload);
         $this->assertSame('agent.log.v1', $anonymizedPayload['payload_version']);
+        $this->assertSame('agent-test-request', $anonymizedPayload['request_id']);
         $this->assertSame('basic_patient_data', $anonymizedPayload['intent_id']);
         $this->assertSame('agent-test-request', $anonymizedPayload['evidence_packet']['request_id']);
         $this->assertSame('demographics:patient_data:123', $anonymizedPayload['evidence_packet']['sources'][0]['source_id']);
         $this->assertStringNotContainsString('P123', $anonymizedPayload['evidence_packet']['sources'][0]['display']);
+        $this->assertSame('anonymized', $anonymizedPayload['redaction']['status']);
+        $this->assertIsInt($anonymizedPayload['redaction']['replacement_count']);
+        $this->assertIsArray($anonymizedPayload['redaction']['category_counts']);
         $this->assertArrayNotHasKey('placeholder_map', $anonymizedPayload);
     }
 

@@ -40,6 +40,8 @@ class AgentIntentRouteTest extends TestCase
     {
         $this->assertStringContainsString('use OpenEMR\RestControllers\Agent\AgentIntentRestController;', $this->routeContent);
         $this->assertStringContainsString('"POST /api/agent/intent"', $this->routeContent);
+        $this->assertStringContainsString('$request->attributes->set(\'skipResponseLogging\', true);', $this->routeContent);
+        $this->assertStringContainsString('$request->attributes->set(\'agentRouteRawResponseLoggingDisabled\', true);', $this->routeContent);
         $this->assertStringContainsString('RestConfig::request_authorization_check($request, "patients", "demo")', $this->routeContent);
         $this->assertStringContainsString('(new AgentIntentRestController())->postIntent($request)', $this->routeContent);
     }

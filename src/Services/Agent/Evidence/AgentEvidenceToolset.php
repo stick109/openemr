@@ -82,14 +82,15 @@ final class AgentEvidenceToolset
         string $intentId,
         AgentAccessToken $accessToken,
         array $intent,
-        ?string $sourceId = null
+        ?string $sourceId = null,
+        ?string $requestId = null
     ): array {
         if (!$this->supportsIntent($intentId)) {
             throw new AgentEvidenceAccessException('unsupported_tool', 'Evidence retrieval is not available for this intent.');
         }
 
         $this->toolRuns = [];
-        $requestId = $this->newRequestId();
+        $requestId = $this->newRequestId($requestId);
         $caps = EvidenceCaps::fromIntent($intent);
         $rawRecords = $this->readRecords($requestId, $intentId, $accessToken, $caps, $sourceId);
         $sources = $this->normalizer->normalize($accessToken, $rawRecords);
@@ -249,8 +250,12 @@ final class AgentEvidenceToolset
         return array_values(array_unique($checked));
     }
 
-    private function newRequestId(): string
+    private function newRequestId(?string $requestId = null): string
     {
+        if (is_string($requestId) && preg_match('/\A[A-Za-z0-9._:-]{8,128}\z/', $requestId) === 1) {
+            return $requestId;
+        }
+
         $requestId = ($this->requestIdFactory)();
         return is_string($requestId) && $requestId !== '' ? $requestId : bin2hex(random_bytes(8));
     }

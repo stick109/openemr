@@ -81,12 +81,21 @@ final class OpenAiResponsesAgentLlmProvider implements AgentLlmProviderInterface
                 throw new AgentLlmProviderException('OpenAI structured output was not a JSON object.');
             }
 
+            $usage = is_array($payload['usage'] ?? null) ? $payload['usage'] : [];
+            $tokenCounters = AgentLlmUsage::tokenCounters($usage);
+
             return new AgentLlmResponse(
                 answer: $answer,
                 providerName: $this->getProviderName(),
                 modelName: is_string($payload['model'] ?? null) ? $payload['model'] : $this->config->getModel(),
-                usage: is_array($payload['usage'] ?? null) ? $payload['usage'] : [],
-                providerResponseId: is_string($payload['id'] ?? null) ? $payload['id'] : null
+                usage: $usage,
+                providerResponseId: is_string($payload['id'] ?? null) ? $payload['id'] : null,
+                tokenCounters: $tokenCounters,
+                costCounters: AgentLlmUsage::costCounters(
+                    $tokenCounters,
+                    $this->config->getInputCostPer1MTokens(),
+                    $this->config->getOutputCostPer1MTokens()
+                )
             );
         } catch (GuzzleException | JsonException $exception) {
             throw new AgentLlmProviderException('OpenAI LLM request failed.', $exception);

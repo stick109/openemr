@@ -58,9 +58,9 @@ Status values: `Done`, `Pending`.
 
 | ID   | Status  | Work Item                                                                                              | Dependencies / Notes                                                       |
 | ---- | ------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| P6.1 | Pending | Add request-level tracing metadata.                                                                    | Depends on P1.2 and should expand as later components are added.           |
-| P6.2 | Pending | Disable or redact raw API response logging for agent routes.                                           | Depends on P1.2 and must be in place before PHI-bearing responses.         |
-| P6.3 | Pending | Add anonymizer metrics and ensure optional payload logs use anonymized output only.                     | Depends on P4.4.                                                           |
-| P6.4 | Pending | Add cost and token counters.                                                                           | Depends on P5.1.                                                           |
-| P6.5 | Pending | Build eval fixtures for missing, stale, conflicting, duplicate, unauthorized, and prompt-injection cases. | Depends on P2, P3, P4, and P5 behavior becoming testable.                  |
-| P6.6 | Pending | Add a deployment kill switch for external model calls.                                                  | Depends on P5.1 and should be available before enabling external providers. |
+| P6.1 | Done    | Add request-level tracing metadata.                                                                    | Depends on P1.2 and should expand as later components are added.           |
+| P6.2 | Done    | Disable or redact raw API response logging for agent routes.                                           | Depends on P1.2 and must be in place before PHI-bearing responses.         |
+| P6.3 | Done    | Add anonymizer metrics and ensure optional payload logs use anonymized output only.                     | Depends on P4.4.                                                           |
+| P6.4 | Done    | Add cost and token counters.                                                                           | Depends on P5.1.                                                           |
+| P6.5 | Done    | Build eval fixtures for missing, stale, conflicting, duplicate, unauthorized, and prompt-injection cases. | Depends on P2, P3, P4, and P5 behavior becoming testable.                  |
+| P6.6 | Done    | Add a deployment kill switch for external model calls.                                                  | Depends on P5.1 and should be available before enabling external providers. |

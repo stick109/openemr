@@ -62,7 +62,10 @@ class OpenAiResponsesAgentLlmProviderTest extends TestCase
                 provider: AgentLlmConfig::PROVIDER_OPENAI,
                 apiKey: 'server-side-secret',
                 model: 'gpt-test',
-                baseUri: 'https://api.openai.test/v1/'
+                baseUri: 'https://api.openai.test/v1/',
+                externalCallsEnabled: true,
+                inputCostPer1MTokens: 2.50,
+                outputCostPer1MTokens: 10.00
             ),
             $client
         );
@@ -81,6 +84,11 @@ class OpenAiResponsesAgentLlmProviderTest extends TestCase
         $this->assertSame('openai', $response->toMetadata()['provider']);
         $this->assertSame('gpt-test', $response->toMetadata()['model']);
         $this->assertSame(18, $response->toMetadata()['usage']['total_tokens']);
+        $this->assertSame(10, $response->toMetadata()['token_counters']['input_tokens']);
+        $this->assertSame(8, $response->toMetadata()['token_counters']['output_tokens']);
+        $this->assertSame(18, $response->toMetadata()['token_counters']['total_tokens']);
+        $this->assertTrue($response->toMetadata()['cost_counters']['rates_configured']);
+        $this->assertSame(0.000105, $response->toMetadata()['cost_counters']['total_cost_usd']);
         $this->assertCount(1, $history);
         $this->assertSame('Bearer server-side-secret', $history[0]['request']->getHeaderLine('Authorization'));
         $requestBody = json_decode((string) $history[0]['request']->getBody(), true, flags: JSON_THROW_ON_ERROR);

@@ -17,13 +17,17 @@ final class AgentLlmResponse
     /**
      * @param array<string, mixed> $answer
      * @param array<string, mixed> $usage
+     * @param array{input_tokens: int, output_tokens: int, total_tokens: int}|null $tokenCounters
+     * @param array<string, mixed>|null $costCounters
      */
     public function __construct(
         private readonly array $answer,
         private readonly string $providerName,
         private readonly string $modelName,
         private readonly array $usage,
-        private readonly ?string $providerResponseId = null
+        private readonly ?string $providerResponseId = null,
+        private readonly ?array $tokenCounters = null,
+        private readonly ?array $costCounters = null
     ) {
     }
 
@@ -47,6 +51,8 @@ final class AgentLlmResponse
             'used' => true,
             'provider_response_id' => $this->providerResponseId,
             'usage' => $this->usage,
+            'token_counters' => $this->tokenCounters ?? AgentLlmUsage::tokenCounters($this->usage),
+            'cost_counters' => $this->costCounters ?? AgentLlmUsage::emptyCostCounters(),
         ];
     }
 }

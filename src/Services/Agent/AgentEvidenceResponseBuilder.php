@@ -43,10 +43,15 @@ final class AgentEvidenceResponseBuilder
     /**
      * @return array<string, mixed>
      */
-    public function build(string $intentId, AgentAccessToken $accessToken, ?string $sourceId = null): array
-    {
+    public function build(
+        string $intentId,
+        AgentAccessToken $accessToken,
+        ?string $sourceId = null,
+        ?string $requestId = null
+    ): array {
         $this->lastLogPayload = [];
         $this->logger->debug('agent.response.building', [
+            'request_id' => $requestId,
             'intent_id' => $intentId,
             'has_source_id' => $sourceId !== null && $sourceId !== '',
         ]);
@@ -54,6 +59,7 @@ final class AgentEvidenceResponseBuilder
         $intent = $this->intentCatalog->get($intentId);
         if ($intent === null) {
             $this->logger->warning('agent.response.unknown_intent', [
+                'request_id' => $requestId,
                 'intent_id' => $intentId,
             ]);
             throw new InvalidArgumentException('Unknown agent intent_id.');
@@ -61,6 +67,7 @@ final class AgentEvidenceResponseBuilder
 
         if (!$this->toolset->supportsIntent($intentId)) {
             $this->logger->info('agent.response.placeholder', [
+                'request_id' => $requestId,
                 'intent_id' => $intentId,
             ]);
             return $this->placeholderResponseBuilder->build($intentId);
@@ -68,17 +75,18 @@ final class AgentEvidenceResponseBuilder
 
         if ($intentId === AgentIntentCatalog::SHOW_SOURCE && ($sourceId === null || $sourceId === '')) {
             $this->logger->info('agent.response.source_required', [
+                'request_id' => $requestId,
                 'intent_id' => $intentId,
             ]);
-            return $this->sourceRequiredResponse($intent, $accessToken);
+            return $this->sourceRequiredResponse($intent, $accessToken, $requestId);
         }
 
-        $packet = $this->toolset->buildPacket($intentId, $accessToken, $intent, $sourceId);
+        $packet = $this->toolset->buildPacket($intentId, $accessToken, $intent, $sourceId, $requestId);
         $this->lastLogPayload = $this->safeBuildLogPayload($intent, $accessToken, $packet);
 
         $this->logger->info('agent.response.evidence_ready', [
-            'intent_id' => $intentId,
             'request_id' => (string) ($packet['request_id'] ?? ''),
+            'intent_id' => $intentId,
             'citation_count' => is_array($packet['sources'] ?? null) ? count($packet['sources']) : 0,
             'checked_evidence_count' => is_array($packet['checked_evidence'] ?? null) ? count($packet['checked_evidence']) : 0,
             'placeholder_count' => $this->anonymizer->placeholderCount($accessToken),
@@ -121,10 +129,10 @@ final class AgentEvidenceResponseBuilder
      * @param array<string, mixed> $intent
      * @return array<string, mixed>
      */
-    private function sourceRequiredResponse(array $intent, AgentAccessToken $accessToken): array
+    private function sourceRequiredResponse(array $intent, AgentAccessToken $accessToken, ?string $requestId): array
     {
         $packet = [
-            'request_id' => '',
+            'request_id' => $requestId ?? '',
             'intent_id' => $intent['intent_id'],
             'caps' => [
                 'max_records' => $intent['max_records'],
@@ -188,12 +196,29 @@ final class AgentEvidenceResponseBuilder
      */
     private function buildLogPayload(array $intent, AgentAccessToken $accessToken, array $packet): array
     {
+        $anonymizedPrompt = $this->anonymizer->anonymizePayload($accessToken, (string) $intent['prompt_text']);
+        $promptMetrics = $this->anonymizer->getLastMetrics();
+        $anonymizedPacket = $this->anonymizer->anonymizeEvidencePacket($accessToken, $packet);
+        $packetMetrics = $this->anonymizer->getLastMetrics();
+
         return [
             'payload_version' => 'agent.log.v1',
+            'request_id' => (string) ($packet['request_id'] ?? ''),
             'intent_id' => (string) $intent['intent_id'],
-            'prompt_text' => $this->anonymizer->anonymizePayload($accessToken, (string) $intent['prompt_text']),
-            'evidence_packet' => $this->anonymizer->anonymizeEvidencePacket($accessToken, $packet),
+            'prompt_text' => $anonymizedPrompt,
+            'evidence_packet' => $anonymizedPacket,
             'placeholder_count' => $this->anonymizer->placeholderCount($accessToken),
+            'redaction' => [
+                'status' => 'anonymized',
+                'prompt' => $promptMetrics,
+                'evidence_packet' => $packetMetrics,
+                'replacement_count' => $this->sumMetric($promptMetrics, 'replacement_count')
+                    + $this->sumMetric($packetMetrics, 'replacement_count'),
+                'category_counts' => $this->mergeCategoryCounts(
+                    is_array($promptMetrics['category_counts'] ?? null) ? $promptMetrics['category_counts'] : [],
+                    is_array($packetMetrics['category_counts'] ?? null) ? $packetMetrics['category_counts'] : []
+                ),
+            ],
         ];
     }
 
@@ -215,6 +240,7 @@ final class AgentEvidenceResponseBuilder
         } catch (Throwable $exception) {
             $this->logger->warning('agent.response.log_payload_skipped', [
                 'intent_id' => (string) ($intent['intent_id'] ?? ''),
+                'request_id' => (string) ($packet['request_id'] ?? ''),
                 'error_class' => $exception::class,
             ]);
             return [];
@@ -327,6 +353,31 @@ final class AgentEvidenceResponseBuilder
             'source_record' => $status,
             default => 'source_record',
         };
+    }
+
+    /**
+     * @param array<string, mixed> $metrics
+     */
+    private function sumMetric(array $metrics, string $name): int
+    {
+        return is_int($metrics[$name] ?? null) ? $metrics[$name] : 0;
+    }
+
+    /**
+     * @param array<string, int> $first
+     * @param array<string, int> $second
+     * @return array<string, int>
+     */
+    private function mergeCategoryCounts(array $first, array $second): array
+    {
+        $merged = $first;
+        foreach ($second as $category => $count) {
+            $merged[$category] = ($merged[$category] ?? 0) + $count;
+        }
+
+        ksort($merged);
+
+        return $merged;
     }
 
 }

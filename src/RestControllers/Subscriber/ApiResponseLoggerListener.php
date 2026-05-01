@@ -47,14 +47,18 @@ class ApiResponseLoggerListener implements EventSubscriberInterface
         $kernel = $event->getKernel();
         $globalsBag = $kernel instanceof OEHttpKernel ? $kernel->getGlobalsBag() : new OEGlobalsBag([]);
         $anonymizedPayloadLog = $request->attributes->get('agentAnonymizedPayloadLog');
-        $hasAnonymizedPayloadLog = is_array($anonymizedPayloadLog) || is_string($anonymizedPayloadLog);
+        $hasAnonymizedPayloadLog = (is_array($anonymizedPayloadLog) && $anonymizedPayloadLog !== [])
+            || (is_string($anonymizedPayloadLog) && $anonymizedPayloadLog !== '');
+        $skipRawResponseLogging = $request->attributes->has("skipResponseLogging")
+            || $request->attributes->getBoolean('agentRouteRawResponseLoggingDisabled')
+            || $this->isAgentRoute($request);
 
         // only log when using standard api calls (skip when using local api calls from within OpenEMR)
         //  and when api log option is set
         if (
             !$request->isLocalApi() &&
             // skip raw logging, but allow routes to provide an already-redacted payload.
-            (!$request->attributes->has("skipResponseLogging") || $hasAnonymizedPayloadLog) &&
+            (!$skipRawResponseLogging || $hasAnonymizedPayloadLog) &&
             $globalsBag->getInt('api_log_option') > 0
         ) {
             if ($globalsBag->getInt('api_log_option') === 1) {
@@ -127,5 +131,15 @@ class ApiResponseLoggerListener implements EventSubscriberInterface
             }
         }
         return false;
+    }
+
+    private function isAgentRoute(HttpRestRequest $request): bool
+    {
+        $path = $request->getPathInfo();
+        $resource = trim((string) $request->getResource(), '/');
+
+        return str_starts_with($path, '/api/agent/')
+            || $path === '/api/agent'
+            || str_starts_with($resource, 'agent/');
     }
 }

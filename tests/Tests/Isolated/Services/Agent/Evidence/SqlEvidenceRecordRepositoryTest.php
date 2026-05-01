@@ -186,6 +186,7 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
                 'postal_code' => '02111',
                 'phone_cell' => '555-111-2222',
                 'email' => 'jane.doe@example.test',
+                'last_updated' => '2026-04-29 12:34:56',
                 'ss' => '123-45-6789',
                 'drivers_license' => 'D1234567',
             ]);
@@ -196,16 +197,23 @@ namespace OpenEMR\Tests\Isolated\Services\Agent\Evidence {
             $this->assertSame('demographics:patient_data:123', $records[0]['source_id']);
             $this->assertStringContainsString('name: Jane Quinn Doe', $records[0]['display']);
             $this->assertStringContainsString('preferred name: Janie', $records[0]['display']);
-            $this->assertStringContainsString('public patient id: MRN-12345', $records[0]['display']);
             $this->assertStringContainsString('date of birth: 1974-04-15', $records[0]['display']);
             $this->assertStringContainsString('sex at birth: Female', $records[0]['display']);
             $this->assertStringContainsString('address: 123 Main St, Boston MA 02111', $records[0]['display']);
             $this->assertStringContainsString('mobile phone:', $records[0]['display']);
             $this->assertStringContainsString('email: jane.doe@example.test', $records[0]['display']);
+            $this->assertStringNotContainsString('public patient id', $records[0]['display']);
+            $this->assertStringNotContainsString('MRN-12345', $records[0]['display']);
+            $this->assertStringNotContainsString('last updated', $records[0]['display']);
+            $this->assertStringNotContainsString('2026-04-29', $records[0]['display']);
             $this->assertStringNotContainsString('123-45-6789', $records[0]['display']);
             $this->assertStringNotContainsString('D1234567', $records[0]['display']);
+            $this->assertNotContains('pubpid', $records[0]['fields_used']);
+            $this->assertNotContains('last_updated', $records[0]['fields_used']);
             $this->assertNotContains('ss', $records[0]['fields_used']);
             $this->assertNotContains('drivers_license', $records[0]['fields_used']);
+            $this->assertStringNotContainsString('pubpid', SqlEvidenceRecordRepositorySqlFixture::$queries[0]['sql']);
+            $this->assertStringNotContainsString('last_updated', SqlEvidenceRecordRepositorySqlFixture::$queries[0]['sql']);
             $this->assertSame(0, preg_match('/\bss\b/i', SqlEvidenceRecordRepositorySqlFixture::$queries[0]['sql']));
             $this->assertStringNotContainsString('drivers_license', SqlEvidenceRecordRepositorySqlFixture::$queries[0]['sql']);
         }

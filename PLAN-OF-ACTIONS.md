@@ -69,7 +69,7 @@ Status values: `Done`, `Pending`.
 
 | ID   | Status  | Work Item                                                                                              | Dependencies / Notes                                                       |
 | ---- | ------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
-| P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned structured contact addresses, and patient-owned structured telecom values. | Implemented with bounded child sources and `max_records = 10`. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
+| P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned structured contact addresses, and patient-owned structured telecom values. | Implemented with bounded child sources and `max_records = 10`. Public patient id and last-updated timestamp are excluded. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
 
 ### P7.1 Detailed Plan: Expand `basic_patient_data`
 
@@ -92,6 +92,7 @@ Expand the `basic_patient_data` evidence packet so the button answers the natura
 
 - Implemented in [SqlEvidenceRecordRepository.php](src\Services\Agent\Evidence\SqlEvidenceRecordRepository.php), [AgentIntentCatalog.php](src\Services\Agent\AgentIntentCatalog.php), [AgentEvidenceResponseBuilder.php](src\Services\Agent\AgentEvidenceResponseBuilder.php), [EvidencePacketNormalizer.php](src\Services\Agent\Evidence\EvidencePacketNormalizer.php), and [Anonymizer.php](src\Services\Agent\Anonymizer.php).
 - The primary patient source now uses the curated `patient_data` projection and continues to emit `demographics:patient_data:{pid}`.
+- Public patient id and last-updated timestamp are intentionally not selected or emitted by `basic_patient_data`.
 - Structured addresses are emitted only through the patient-owned `contact` -> `contact_address` -> `addresses` pattern and are capped at 3 child sources.
 - Structured phone, SMS, fax, and email values are emitted only through the patient-owned `contact` -> `contact_telecom` pattern and are capped at 5 child sources.
 - Direct `phone_numbers.foreign_id` reads were not implemented because `phone_numbers` is generic and does not provide a safe patient ownership discriminator by itself.
@@ -137,7 +138,6 @@ Identity and chart identifiers:
 
 - `pid`: internal patient id, used for patient binding and source ownership.
 - `uuid`: patient UUID, converted using existing UUID helpers.
-- `pubpid`: public patient id / chart id / MRN-style identifier.
 - `title`: optional name prefix.
 - `fname`: first name.
 - `mname`: middle name.
@@ -194,7 +194,6 @@ Registration, portal, and provider context:
 
 - `date`: original record date currently used by the tool.
 - `regdate`: registration date.
-- `last_updated`: last update timestamp.
 - `providerID`: primary provider id, if this field is locally used that way.
 - `ref_providerID`: referring provider id.
 - `referrer`, `referrerID`: referral source context.
@@ -207,6 +206,8 @@ Fields explicitly excluded from P7.1 despite being present in `patient_data`:
 
 - `ss`: Social Security number.
 - `drivers_license`: driver's license.
+- `pubpid`: public patient id / chart id / MRN-style identifier.
+- `last_updated`: last update timestamp.
 - `billing_note`: billing note.
 - `financial`, `financial_review`, `monthly_income`, `pricelevel`, and other billing/financial values.
 - `genericname*`, `genericval*`, `usertext*`, and `userlist*` unless a later mapping defines exactly what each deployment stores there.
@@ -325,7 +326,7 @@ The answer should also be explicit about missing data:
 
 - Raw evidence may still go to the configured LLM provider only through the existing BAA-covered LLM path.
 - Durable API logging must continue to use anonymized evidence only.
-- Address, phone, email, name, DOB, and public patient id must be included in anonymizer coverage.
+- Address, phone, email, name, and DOB must be included in anonymizer coverage.
 - SSN and driver's license should remain excluded from P7.1 evidence to avoid unnecessary high-risk identifier exposure.
 - Free-text fields should be kept out of P7.1 unless they have clear bounded semantics. Avoid broad text fields that can carry unrelated notes.
 
@@ -359,7 +360,7 @@ The answer should also be explicit about missing data:
 - Unit test that address and phone source ids can be drilled down only for the current patient.
 - Unit test that invalid/tampered address or phone source ids return no source.
 - Controller or isolated service test that the response remains authorized by `patients/demo`.
-- Anonymizer test coverage for newly emitted address, phone, email, name, DOB, and public patient id values.
+- Anonymizer test coverage for newly emitted address, phone, email, name, and DOB values.
 - Verifier test that claims cite only emitted sources.
 - Regression test that `current_medications`, `allergies_to_confirm`, `recent_events`, and `changed_since_last_visit` behavior does not change.
 

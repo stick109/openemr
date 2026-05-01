@@ -35,7 +35,6 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             "SELECT
                 pid,
                 uuid,
-                pubpid,
                 title,
                 fname,
                 mname,
@@ -79,7 +78,6 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
                 contact_relationship,
                 date,
                 regdate,
-                last_updated,
                 providerID,
                 ref_providerID,
                 referrer,
@@ -576,7 +574,6 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'birth_mname',
             'birth_lname',
         ]));
-        $this->addDisplayPart($displayParts, $fieldsUsed, 'public patient id', $row['pubpid'] ?? null, ['pubpid']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'date of birth', $this->dateValue($row, ['DOB']), ['DOB']);
         $this->addRawDisplayPart($displayParts, $fieldsUsed, $this->ageFromDob($row['DOB'] ?? null), ['DOB']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'sex at birth', $row['sex'] ?? null, ['sex']);
@@ -613,7 +610,6 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
         $this->addDisplayPart($displayParts, $fieldsUsed, 'direct email', $row['email_direct'] ?? null, ['email_direct']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'contact relationship', $row['contact_relationship'] ?? null, ['contact_relationship']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'registration date', $this->dateValue($row, ['regdate']), ['regdate']);
-        $this->addDisplayPart($displayParts, $fieldsUsed, 'last updated', $this->dateValue($row, ['last_updated']), ['last_updated']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'primary provider id', $this->nonZeroValue($row['providerID'] ?? null), ['providerID']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'referring provider id', $this->nonZeroValue($row['ref_providerID'] ?? null), ['ref_providerID']);
         $this->addDisplayPart($displayParts, $fieldsUsed, 'referrer', $row['referrer'] ?? null, ['referrer']);

@@ -23,7 +23,9 @@
             unavailable: panel.dataset.unavailableLabel || 'Agent endpoint is unavailable.',
             missing: panel.dataset.missingLabel || 'Missing or uncertain',
             evidence: panel.dataset.evidenceLabel || 'Checked evidence',
-            none: panel.dataset.noneLabel || 'None'
+            none: panel.dataset.noneLabel || 'None',
+            source: panel.dataset.sourceLabel || 'source',
+            sourceAria: panel.dataset.sourceAriaLabel || 'Show source'
         };
 
         buttons.forEach(function (button) {
@@ -50,26 +52,33 @@
             return element;
         }
 
-        function appendCitationChips(parent, citationIds) {
+        function appendCitationLinks(parent, citationIds) {
             if (!Array.isArray(citationIds) || citationIds.length === 0) {
                 return;
             }
 
-            var chipContainer = document.createElement('div');
-            chipContainer.className = 'agent-panel__citation-list';
-            citationIds.forEach(function (citationId) {
-                var chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'agent-panel__citation badge badge-light border mr-1';
-                chip.dataset.sourceId = citationId;
-                chip.textContent = citationId;
-                chip.setAttribute('aria-label', citationId);
-                chip.addEventListener('click', function () {
+            var sourceContainer = document.createElement('span');
+            sourceContainer.className = 'agent-panel__source-list text-muted';
+            sourceContainer.appendChild(document.createTextNode(' ('));
+            citationIds.forEach(function (citationId, index) {
+                var sourceLink = document.createElement('button');
+                sourceLink.type = 'button';
+                sourceLink.className = 'agent-panel__source-link btn btn-link p-0 align-baseline';
+                sourceLink.dataset.sourceId = citationId;
+                sourceLink.textContent = citationIds.length === 1
+                    ? messages.source
+                    : messages.source + ' ' + (index + 1);
+                sourceLink.setAttribute('aria-label', messages.sourceAria + ': ' + citationId);
+                sourceLink.addEventListener('click', function () {
                     requestIntent('show_source', citationId);
                 });
-                chipContainer.appendChild(chip);
+                if (index > 0) {
+                    sourceContainer.appendChild(document.createTextNode(', '));
+                }
+                sourceContainer.appendChild(sourceLink);
             });
-            parent.appendChild(chipContainer);
+            sourceContainer.appendChild(document.createTextNode(')'));
+            parent.appendChild(sourceContainer);
         }
 
         function shouldShowCertainty(certainty) {
@@ -142,7 +151,7 @@
                     if (shouldShowCertainty(claim.certainty)) {
                         appendTextElement(item, 'span', 'text-muted ml-1', '(' + claim.certainty + ')');
                     }
-                    appendCitationChips(item, claim.citation_ids);
+                    appendCitationLinks(item, claim.citation_ids);
                     list.appendChild(item);
                 });
                 outputNode.appendChild(list);
@@ -155,7 +164,7 @@
                 data.answer.missing_or_uncertain.forEach(function (item) {
                     var missingItem = document.createElement('li');
                     appendTextElement(missingItem, 'span', '', item.text || '');
-                    appendCitationChips(missingItem, item.citation_ids);
+                    appendCitationLinks(missingItem, item.citation_ids);
                     missingList.appendChild(missingItem);
                 });
                 outputNode.appendChild(missingList);

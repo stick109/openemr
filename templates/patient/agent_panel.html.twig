@@ -18,8 +18,7 @@
         gap: 0.375rem;
     }
 
-    .agent-panel__intents .btn,
-    .agent-panel__citation {
+    .agent-panel__intents .btn {
         border-radius: 0.25rem;
     }
 
@@ -57,13 +56,11 @@
         margin-top: 0.375rem;
     }
 
-    .agent-panel__citation-list {
-        margin-top: 0.25rem;
-    }
-
-    .agent-panel__citation {
-        font-size: 0.75rem;
-        line-height: 1.2;
+    .agent-panel__source-link {
+        font-size: inherit;
+        line-height: inherit;
+        text-decoration: underline;
+        vertical-align: baseline;
     }
 
     @media (max-width: 575.98px) {
@@ -86,6 +83,8 @@
     data-missing-label="{{ "Missing or uncertain"|xla }}"
     data-evidence-label="{{ "Checked evidence"|xla }}"
     data-none-label="{{ "None"|xla }}"
+    data-source-label="{{ "source"|xla }}"
+    data-source-aria-label="{{ "Show source"|xla }}"
 >
     <div class="agent-panel__toolbar d-flex flex-wrap align-items-start mb-2">
         <div class="agent-panel__intents d-flex flex-wrap mb-1">

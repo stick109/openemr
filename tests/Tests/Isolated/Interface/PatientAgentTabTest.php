@@ -120,6 +120,8 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString('var intentPrompts = new Map', $this->scriptContent);
         $this->assertStringContainsString('promptPreviewNode.value = intentPrompts.get(intentId)', $this->scriptContent);
         $this->assertStringContainsString('data-loading-label="{{ "LOADING"|xla }}..."', $this->templateContent);
+        $this->assertStringContainsString('data-source-label="{{ "source"|xla }}"', $this->templateContent);
+        $this->assertStringContainsString('data-source-aria-label="{{ "Show source"|xla }}"', $this->templateContent);
         $this->assertStringContainsString("panel.classList.toggle('is-agent-loading', loading)", $this->scriptContent);
         $this->assertStringContainsString("document.body.classList.toggle('agent-loading-cursor', loading)", $this->scriptContent);
         $this->assertStringContainsString('cursor: wait !important;', $this->templateContent);
@@ -127,6 +129,9 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString("panel.querySelectorAll('button')", $this->scriptContent);
         $this->assertStringContainsString('button.dataset.agentWasDisabled', $this->scriptContent);
         $this->assertStringContainsString("panel.setAttribute('aria-busy', loading ? 'true' : 'false')", $this->scriptContent);
+        $this->assertStringContainsString('function appendCitationLinks', $this->scriptContent);
+        $this->assertStringContainsString("sourceLink.textContent = citationIds.length === 1", $this->scriptContent);
+        $this->assertStringContainsString("sourceLink.dataset.sourceId = citationId", $this->scriptContent);
         $this->assertStringNotContainsString('function renderAnswer', $this->templateContent);
         $this->assertStringNotContainsString('function renderValidationErrors', $this->templateContent);
         $this->assertStringNotContainsString('const apiUrl =', $this->templateContent);

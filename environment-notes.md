@@ -1,6 +1,6 @@
 # Environment Notes
 
-Last verified: 2026-04-30
+Last verified: 2026-05-01
 
 ## Current State
 
@@ -47,6 +47,7 @@ The Redis extension is a manually installed PECL DLL. If PHP is upgraded, replac
 ## Windows PowerShell Notes
 
 - For local OpenEMR readiness checks, use HTTP endpoints, Docker health status, or a PowerShell/.NET certificate callback only when HTTPS response content must be inspected.
+- 2026-05-01: Symptom: using `[System.Net.Http.HttpClient]` in Windows PowerShell without first loading the assembly can fail with `Unable to find type [System.Net.Http.HttpClient]`. Likely cause: Windows PowerShell does not always auto-load `System.Net.Http` for inline probes. Workaround: run `Add-Type -AssemblyName System.Net.Http` before constructing `HttpClient`, or use `Invoke-WebRequest` for simple HTTP checks. Follow-up: prefer `Invoke-WebRequest` unless raw byte access is needed.
 - 2026-04-30: Symptom: piping inline PHP from a PowerShell here-string into `php` can fail in session-using code with `Failed to start the session because headers have already been sent by "Standard input code" at line 1`. Likely cause: the pipeline can prepend or emit a UTF-8 BOM before PHP starts, so PHP sees output before session headers. Workaround: avoid PowerShell here-string stdin for PHP probes that bootstrap OpenEMR sessions; use a temporary checked script, `php -r` only for quote-light code that does not need sessions, or an existing PHPUnit/render test. Follow-up: keep session-sensitive render probes in tests rather than ad hoc stdin scripts.
 - 2026-04-30: Symptom: running an isolated test with the default PHPUnit config, such as `vendor\bin\phpunit.bat --filter PatientAgentTabTest tests\Tests\Isolated\Interface\PatientAgentTabTest.php`, can fail during `tests\bootstrap.php` with `mysqli_query(): Argument #1 ($mysql) must be of type mysqli, false given` and `CRITICAL ERROR: Safety-net bootstrap did not load`. Likely cause: `phpunit.xml` loads the full OpenEMR bootstrap and expects a working database connection, while isolated tests are meant to run with `phpunit-isolated.xml` and `DISABLE_DATABASE=1`. Workaround: run isolated tests with `vendor\bin\phpunit.bat -c phpunit-isolated.xml --filter PatientAgentTabTest tests\Tests\Isolated\Interface\PatientAgentTabTest.php`. Follow-up: keep targeted isolated-test commands pinned to `phpunit-isolated.xml`.
 - 2026-04-29: Symptom: invoking `.\vendor\bin\phpunit.bat -c phpunit-isolated.xml --filter "A|B"` can fail with `'B' is not recognized as an internal or external command`. Likely cause: the Windows batch wrapper passes the filter through `cmd.exe`, where `|` is treated as a command pipe despite the PowerShell quoting. Workaround: the global PowerShell profile defines `punit` / `phpunit-safe`, which call the repo-local PHPUnit PHP entrypoint with `php` and bypass `cmd.exe`; use that for any `--filter` with regex alternation. Follow-up: do not use the `.bat` wrapper for pipe-containing PHPUnit filters.

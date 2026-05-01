@@ -21,7 +21,6 @@
             requestFailed: panel.dataset.requestFailedLabel || 'Request failed.',
             noResponse: panel.dataset.noResponseLabel || 'No agent response was returned.',
             unavailable: panel.dataset.unavailableLabel || 'Agent endpoint is unavailable.',
-            followUps: panel.dataset.followupsLabel || 'Follow-up',
             missing: panel.dataset.missingLabel || 'Missing or uncertain',
             evidence: panel.dataset.evidenceLabel || 'Checked evidence',
             none: panel.dataset.noneLabel || 'None'
@@ -120,31 +119,6 @@
             appendTextElement(outputNode, 'div', 'alert alert-danger py-2 mb-0', message);
         }
 
-        function renderFollowUps(followupIntents) {
-            if (!Array.isArray(followupIntents) || followupIntents.length === 0) {
-                return;
-            }
-
-            appendTextElement(outputNode, 'div', 'small font-weight-bold mt-2 mb-1', messages.followUps);
-            var container = document.createElement('div');
-            container.className = 'agent-panel__followups d-flex flex-wrap';
-            followupIntents.forEach(function (intentId) {
-                if (!intentLabels.has(intentId)) {
-                    return;
-                }
-                var followupButton = document.createElement('button');
-                followupButton.type = 'button';
-                followupButton.className = 'btn btn-sm btn-outline-secondary';
-                followupButton.dataset.intentId = intentId;
-                followupButton.textContent = intentLabels.get(intentId);
-                followupButton.addEventListener('click', function () {
-                    requestIntent(intentId);
-                });
-                container.appendChild(followupButton);
-            });
-            outputNode.appendChild(container);
-        }
-
         function renderAnswer(data) {
             showOutput();
             clearNode(outputNode);
@@ -187,7 +161,6 @@
                 ? data.checked_evidence.join(', ')
                 : messages.none;
             appendTextElement(outputNode, 'div', 'small text-muted', messages.evidence + ': ' + evidence);
-            renderFollowUps(data.answer.followup_intents);
         }
 
         async function requestIntent(intentId, sourceId) {

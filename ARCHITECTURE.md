@@ -4,9 +4,9 @@
 
 The first MVP iteration of the Clinical Co-Pilot will be a constrained, source-grounded agent embedded in OpenEMR for **a single narrow outpatient user: a doctor preparing to enter the room of a scheduled patient**. These constraints define the initial build scope, not the full long-term shape of the Clinical Co-Pilot. For this MVP, the agent is not a general chatbot, chart search engine, diagnosis assistant, or documentation writer. Its first job is to answer a small set of patient-specific questions quickly: show basic patient data, show current medications, show active allergies, show recent events, explain what changed since the last visit, and show source evidence behind a claim.
 
-The most important product decision is that there will be **no free-text communication between the user and the agent**. The UI presents buttons and follow-up action chips, alongside a read-only prompt-preview field and disabled send button that surface the exact text dispatched to the LLM. Those controls map to a server-owned intent catalog with stable prompt templates, for example "show me current medications" or "show me recent events." The browser will not send arbitrary prompt text to the LLM, and the LLM will not choose patients, run generic searches, or request arbitrary OpenEMR routes. This keeps the interaction fast and conversational enough for follow-up use while **removing the highest-risk prompt-injection** and cross-patient search surface.
+The most important product decision is that there will be **no free-text communication between the user and the agent**. The UI presents intent buttons alongside a read-only prompt-preview field and disabled send button that surface the exact text dispatched to the LLM. Those controls map to a server-owned intent catalog with stable prompt templates, for example "show me current medications" or "show me recent events." The browser will not send arbitrary prompt text to the LLM, and the LLM will not choose patients, run generic searches, or request arbitrary OpenEMR routes. Multi-turn behavior is supported by re-clicking any intent button — every button issues a fresh server-owned prompt, so users can move between "current medications," "allergies to confirm," and "show source" inside one interaction without typing. This keeps the interaction fast while **removing the highest-risk prompt-injection** and cross-patient search surface.
 
-The most important security decision is that the agent server gets a separate data access component: the Agent Access Broker. Current OpenEMR auth and ACL infrastructure is useful, but the audit found that it is not sufficient for this purpose because many checks answer "can this user access this category of data?" instead of "**can this exact user access this exact patient right now**?" The broker will sit in front of every agent retrieval tool. At the beginning of an agent interaction, it will validate the authenticated OpenEMR session, API CSRF token, user role, OpenEMR ACLs, current patient context, and appointment or chart binding, and resolve the user's full set of allowed tools, data classes, and ACL categories for that patient in a single call. If access is granted, it bakes that complete permission set into a short-lived agent access token alongside patient and user identity, so follow-up actions reuse the token without a second broker call. Per-intent caps such as record counts and lookback windows live in the intent catalog and are applied at retrieval time. The token expires at interaction end or timeout. Tools must present that token and cannot accept patient IDs directly from the LLM or browser.
+The most important security decision is that the agent server gets a separate data access component: the Agent Access Broker. Current OpenEMR auth and ACL infrastructure is useful, but the audit found that it is not sufficient for this purpose because many checks answer "can this user access this category of data?" instead of "**can this exact user access this exact patient right now**?" The broker will sit in front of every agent retrieval tool. At the beginning of an agent interaction, it will validate the authenticated OpenEMR session, API CSRF token, user role, OpenEMR ACLs, current patient context, and appointment or chart binding, and resolve the user's full set of allowed tools, data classes, and ACL categories for that patient in a single call. If access is granted, it bakes that complete permission set into a short-lived agent access token alongside patient and user identity, so subsequent intent clicks within the same interaction reuse the token without a second broker call. Per-intent caps such as record counts and lookback windows live in the intent catalog and are applied at retrieval time. The token expires at interaction end or timeout. Tools must present that token and cannot accept patient IDs directly from the LLM or browser.
 
 The backend should integrate through OpenEMR's existing API and module patterns rather than adding standalone public scripts. The planned MVP shape is a small UI extension in the authenticated chart or scheduled-visit workflow, a REST endpoint routed through `apis\dispatch.php` and `apis\routes\_rest_routes_standard.inc.php`, and namespaced services under `src\Services\Agent`. The pre-search decision is to start with a custom single-agent orchestrator rather than a heavy multi-agent framework, because the **workflow is closed-intent, tool-bounded, and verification-heavy**. Evidence retrieval will reuse existing services where they are trustworthy and bounded, such as patient, encounter, appointment, medication, list, vitals, document, and clinical note services. When existing services are too broad, the agent layer will add purpose-built read models with explicit patient filters, time windows, and result limits.
 
@@ -162,7 +162,7 @@ flowchart TD
     K --> N
 ```
 
-The browser is intentionally thin. It renders buttons, sends selected intent IDs, displays verified answers, and lets the user inspect citations. The agent server owns prompt text, tool routing, patient context, access checks, evidence selection, LLM calls, verification, and audit events. The first action in an interaction issues the patient-scoped agent access token; follow-up buttons and source drilldowns reuse that token until the interaction ends or the token expires.
+The browser is intentionally thin. It renders buttons, sends selected intent IDs, displays verified answers, and lets the user inspect citations. The agent server owns prompt text, tool routing, patient context, access checks, evidence selection, LLM calls, verification, and audit events. The first action in an interaction issues the patient-scoped agent access token; subsequent intent clicks and source drilldowns reuse that token until the interaction ends or the token expires.
 
 ## OpenEMR Integration Points
 
@@ -200,8 +200,7 @@ The UI never accepts free-text input. To make the LLM exchange transparent, the 
 
 User actions are limited to:
 
-- Initial intent buttons.
-- Contextual follow-up buttons generated from server-approved intent options.
+- Intent buttons from the server-owned catalog (re-clickable to drive multi-turn workflows).
 - Citation buttons that request source detail.
 - Retry buttons after explicit tool or model failure.
 
@@ -220,7 +219,7 @@ The browser does not send:
 - Patient IDs chosen by the user.
 - Arbitrary prompt text.
 - SQL, route names, or tool names.
-- Free-form follow-up questions.
+- Free-form questions of any kind.
 
 The server maps `intent_id` to a stable prompt template:
 
@@ -228,8 +227,7 @@ The server maps `intent_id` to a stable prompt template:
 {
   "intent_id": "current_medications",
   "llm_user_text": "Show me current medications.",
-  "required_tools": ["get_current_medications"],
-  "allowed_followups": ["show_source", "allergies_to_confirm", "changed_since_last_visit"]
+  "required_tools": ["get_current_medications"]
 }
 ```
 
@@ -252,12 +250,12 @@ The broker will:
 - Resolve the user's full access set for the current patient in a single pass — every data class, tool, and ACL category the user may touch — and bake that union into the token at issuance, so subsequent intent clicks reuse the token without a new broker call.
 - Treat per-intent caps (record counts, document counts, lookback windows) as catalog policy applied by retrieval tools, not as broker output baked into the token.
 - Produce a short-lived agent access token at the beginning of the agent interaction.
-- Reuse that token across the user's follow-up buttons and source drilldowns for the same interaction.
+- Reuse that token across subsequent intent clicks and source drilldowns within the same interaction.
 - Audit both token grants and denials.
 
 ### Agent Access Token
 
-The agent access token is an internal server-side object, not a browser token. It is short-lived, but its lifetime is long enough for one user-agent interaction around one patient. It is issued once at the beginning of the interaction with the user's full permission set for the current patient pre-resolved, reused by retrieval tools during follow-up actions without re-calling the broker, and expires when the interaction ends, the patient context changes, or the timeout is reached.
+The agent access token is an internal server-side object, not a browser token. It is short-lived, but its lifetime is long enough for one user-agent interaction around one patient. It is issued once at the beginning of the interaction with the user's full permission set for the current patient pre-resolved, reused by retrieval tools during subsequent intent clicks without re-calling the broker, and expires when the interaction ends, the patient context changes, or the timeout is reached.
 
 ```json
 {
@@ -379,7 +377,7 @@ The MVP should use a single orchestrator, not multiple autonomous agents. The wo
 5. Build the bounded evidence packet.
 6. Call the LLM with the intent text, formatting instructions, refusal rules, and the bounded evidence packet (raw, no placeholder substitution — the provider operates under a signed BAA).
 7. In parallel, project the same packet through the anonymizer to produce the log-safe payload that `ApiResponseLoggerListener` will write to `api_log`.
-8. Require structured output with claims, citations, uncertainty labels, and follow-up intent suggestions.
+8. Require structured output with claims, citations, and uncertainty labels.
 9. Send the output to verification.
 10. Render only verified output.
 
@@ -427,8 +425,7 @@ The LLM should return structured JSON:
       "text": "Medication verification date was not found in checked records.",
       "citation_ids": []
     }
-  ],
-  "followup_intents": ["show_source", "allergies_to_confirm"]
+  ]
 }
 ```
 
@@ -444,7 +441,6 @@ The verifier will:
 - Reject diagnosis, treatment, prescribing, ordering, or billing recommendations in MVP.
 - Reject hidden tool failures or fabricated source IDs.
 - Enforce maximum answer length for the 90-second workflow.
-- Ensure follow-up buttons are from the server-approved intent catalog.
 
 If verification fails, the system can:
 
@@ -639,7 +635,7 @@ The phased implementation plan now lives in [PLAN-OF-ACTIONS.md](PLAN-OF-ACTIONS
 
 ### Button-Only UI vs. Open Conversation
 
-The assignment calls for an agentic conversational interface, but this architecture deliberately removes free-text user input. The tradeoff is reduced flexibility in exchange for stronger HIPAA posture, simpler authorization, better eval coverage, lower prompt-injection risk, and faster physician workflows. Multi-turn behavior still exists through server-approved follow-up buttons and citation drilldowns.
+The assignment calls for an agentic conversational interface, but this architecture deliberately removes free-text user input. The tradeoff is reduced flexibility in exchange for stronger HIPAA posture, simpler authorization, better eval coverage, lower prompt-injection risk, and faster physician workflows. Multi-turn behavior is preserved through re-clickable intent buttons (each click issues a fresh server-owned prompt against the same agent access token) and citation drilldowns.
 
 ### Bounded Evidence vs. Full Completeness
 
@@ -657,7 +653,7 @@ Avoiding raw prompts and completions makes debugging harder. The MVP should favo
 
 - The agent lives inside authenticated OpenEMR workflows.
 - The UI has no free-text input.
-- The server owns every prompt template and allowed follow-up.
+- The server owns every prompt template.
 - Patient identity comes from server-side OpenEMR context.
 - The Agent Access Broker enforces patient-specific authorization before retrieval.
 - Every tool is patient-scoped, read-only, bounded, and token-protected.

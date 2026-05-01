@@ -18,13 +18,11 @@ final class AgentLlmRequest
      * @param array<string, mixed> $intent
      * @param array<string, mixed> $evidencePacket
      * @param array<string, mixed> $jsonSchema
-     * @param list<string> $allowedFollowupIntents
      */
     public function __construct(
         private readonly array $intent,
         private readonly array $evidencePacket,
-        private readonly array $jsonSchema,
-        private readonly array $allowedFollowupIntents
+        private readonly array $jsonSchema
     ) {
     }
 
@@ -63,7 +61,6 @@ final class AgentLlmRequest
                 'button_label' => (string) ($this->intent['button_label'] ?? ''),
                 'prompt_text' => (string) ($this->intent['prompt_text'] ?? ''),
             ],
-            'allowed_followup_intents' => $this->allowedFollowupIntents,
             'evidence_packet' => $this->evidencePacket,
             'response_rules' => [
                 'cite_only_source_ids_in_evidence_packet' => true,

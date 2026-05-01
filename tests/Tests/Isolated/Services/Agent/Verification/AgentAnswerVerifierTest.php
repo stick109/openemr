@@ -23,7 +23,7 @@ use PHPUnit\Framework\TestCase;
 #[Group('agent')]
 class AgentAnswerVerifierTest extends TestCase
 {
-    public function testAcceptsSourceGroundedClaimsAndCatalogFollowups(): void
+    public function testAcceptsSourceGroundedClaims(): void
     {
         $result = (new AgentAnswerVerifier())->verify($this->supportedAnswer(), $this->accessToken(), $this->packet());
 
@@ -62,17 +62,6 @@ class AgentAnswerVerifierTest extends TestCase
 
         $this->assertFalse($result->passed());
         $this->assertStringContainsString('out-of-scope clinical advice', implode(' ', $result->errors()));
-    }
-
-    public function testRejectsUnknownFollowupIntent(): void
-    {
-        $answer = $this->supportedAnswer();
-        $answer['followup_intents'] = ['full_chart_export'];
-
-        $result = (new AgentAnswerVerifier())->verify($answer, $this->accessToken(), $this->packet());
-
-        $this->assertFalse($result->passed());
-        $this->assertStringContainsString('unknown intent', implode(' ', $result->errors()));
     }
 
     public function testRejectsCompletenessStatementInMissingOrUncertain(): void
@@ -114,10 +103,6 @@ class AgentAnswerVerifierTest extends TestCase
                     'text' => 'Medication verification date was not found in checked evidence.',
                     'citation_ids' => [],
                 ],
-            ],
-            'followup_intents' => [
-                AgentIntentCatalog::SHOW_SOURCE,
-                AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
             ],
         ];
     }

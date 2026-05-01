@@ -13,7 +13,6 @@ declare(strict_types=1);
 namespace OpenEMR\Services\Agent\Verification;
 
 use OpenEMR\Services\Agent\AgentAccessToken;
-use OpenEMR\Services\Agent\AgentIntentCatalog;
 
 final class AgentAnswerVerifier
 {
@@ -27,11 +26,6 @@ final class AgentAnswerVerifier
         'not_checked',
         'unknown',
     ];
-
-    public function __construct(
-        private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog()
-    ) {
-    }
 
     /**
      * @param array<string, mixed> $answer
@@ -87,7 +81,6 @@ final class AgentAnswerVerifier
             $this->verifyMissingOrUncertain($item, $itemIndex, $sourceMap, $errors, $totalText);
         }
 
-        $this->verifyFollowups($answer['followup_intents'] ?? null, $errors);
         $this->verifyToolFailures($packet, $answer, $errors);
 
         if (strlen($totalText) > self::MAX_TOTAL_TEXT_LENGTH) {
@@ -210,24 +203,6 @@ final class AgentAnswerVerifier
         foreach ($this->stringList($item['citation_ids'] ?? []) as $citationId) {
             if (!isset($sourceMap[$citationId])) {
                 $errors[] = $path . ' cites unknown source_id ' . $citationId . '.';
-            }
-        }
-    }
-
-    /**
-     * @param list<string> $errors
-     */
-    private function verifyFollowups(mixed $followupIntents, array &$errors): void
-    {
-        if (!is_array($followupIntents) || array_is_list($followupIntents) === false) {
-            $errors[] = 'followup_intents must be a list.';
-            return;
-        }
-
-        $catalogIntentIds = $this->intentCatalog->intentIds();
-        foreach ($followupIntents as $intentId) {
-            if (!is_string($intentId) || !in_array($intentId, $catalogIntentIds, true)) {
-                $errors[] = 'followup_intents contains an unknown intent.';
             }
         }
     }

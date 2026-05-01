@@ -27,7 +27,7 @@ final class AgentAnswerSchema
         return [
             'type' => 'object',
             'additionalProperties' => false,
-            'required' => ['answer_blocks', 'missing_or_uncertain', 'followup_intents'],
+            'required' => ['answer_blocks', 'missing_or_uncertain'],
             'properties' => [
                 'answer_blocks' => [
                     'type' => 'array',
@@ -77,10 +77,6 @@ final class AgentAnswerSchema
                         ],
                     ],
                 ],
-                'followup_intents' => [
-                    'type' => 'array',
-                    'items' => ['type' => 'string'],
-                ],
             ],
         ];
     }
@@ -94,7 +90,6 @@ final class AgentAnswerSchema
         return [
             'answer_blocks' => $this->answerBlocks($answer['answer_blocks'] ?? []),
             'missing_or_uncertain' => $this->missingOrUncertain($answer['missing_or_uncertain'] ?? []),
-            'followup_intents' => $this->stringList($answer['followup_intents'] ?? []),
         ];
     }
 

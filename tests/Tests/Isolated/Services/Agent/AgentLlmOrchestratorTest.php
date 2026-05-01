@@ -251,7 +251,6 @@ class AgentLlmOrchestratorTest extends TestCase
                 ],
             ],
             'missing_or_uncertain' => [],
-            'followup_intents' => [AgentIntentCatalog::SHOW_SOURCE],
         ];
     }
 
@@ -274,7 +273,6 @@ class AgentLlmOrchestratorTest extends TestCase
                 ],
             ],
             'missing_or_uncertain' => [],
-            'followup_intents' => [AgentIntentCatalog::SHOW_SOURCE],
         ];
     }
 

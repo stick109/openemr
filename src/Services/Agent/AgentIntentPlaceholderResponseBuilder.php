@@ -20,8 +20,7 @@ final class AgentIntentPlaceholderResponseBuilder
      * @var array<string, array{
      *     heading: string,
      *     text: string,
-     *     missing: string,
-     *     followup_intents: list<string>
+     *     missing: string
      * }>
      */
     private const PLACEHOLDERS = [
@@ -29,52 +28,31 @@ final class AgentIntentPlaceholderResponseBuilder
             'heading' => 'Basic patient data',
             'text' => 'Basic patient demographics and visit context were not checked by this phase-one placeholder.',
             'missing' => 'Demographics evidence is not connected yet; no chart facts were evaluated.',
-            'followup_intents' => [
-                AgentIntentCatalog::CURRENT_MEDICATIONS,
-                AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
-            ],
         ],
         AgentIntentCatalog::CURRENT_MEDICATIONS => [
             'heading' => 'Current medications',
             'text' => 'Current medication evidence is not connected yet; no medication claims are made.',
             'missing' => 'Medication records were not checked by this placeholder response.',
-            'followup_intents' => [
-                AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
         ],
         AgentIntentCatalog::ALLERGIES_TO_CONFIRM => [
             'heading' => 'Allergies to confirm',
             'text' => 'Allergy evidence is not connected yet; no allergy claims are made.',
             'missing' => 'Allergy records were not checked by this placeholder response.',
-            'followup_intents' => [
-                AgentIntentCatalog::CURRENT_MEDICATIONS,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
         ],
         AgentIntentCatalog::RECENT_EVENTS => [
             'heading' => 'Recent events',
             'text' => 'Recent encounters, results, documents, and intake events are not connected yet.',
             'missing' => 'Timeline evidence was not checked by this placeholder response.',
-            'followup_intents' => [
-                AgentIntentCatalog::CHANGED_SINCE_LAST_VISIT,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
         ],
         AgentIntentCatalog::CHANGED_SINCE_LAST_VISIT => [
             'heading' => 'Changed since last visit',
             'text' => 'The change-comparison tool is not connected yet; no chart changes are reported.',
             'missing' => 'Last-visit and newer evidence were not checked by this placeholder response.',
-            'followup_intents' => [
-                AgentIntentCatalog::RECENT_EVENTS,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
         ],
         AgentIntentCatalog::SHOW_SOURCE => [
             'heading' => 'Show source',
             'text' => 'Source drilldown is not connected yet; no citation record was requested or evaluated.',
             'missing' => 'No source record was checked by this placeholder response.',
-            'followup_intents' => [],
         ],
     ];
 
@@ -99,8 +77,7 @@ final class AgentIntentPlaceholderResponseBuilder
      *         missing_or_uncertain: list<array{
      *             text: string,
      *             citation_ids: list<string>
-     *         }>,
-     *         followup_intents: list<string>
+     *         }>
      *     },
      *     citations: list<array<string, mixed>>,
      *     checked_evidence: list<string>
@@ -135,7 +112,6 @@ final class AgentIntentPlaceholderResponseBuilder
                         'citation_ids' => [],
                     ],
                 ],
-                'followup_intents' => $placeholder['followup_intents'],
             ],
             'citations' => [],
             'checked_evidence' => [],

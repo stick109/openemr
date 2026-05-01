@@ -74,8 +74,7 @@ class OpenAiResponsesAgentLlmProviderTest extends TestCase
                 'prompt_text' => 'Show me current medications.',
             ],
             evidencePacket: ['request_id' => 'request-123', 'sources' => []],
-            jsonSchema: (new AgentAnswerSchema())->jsonSchema(),
-            allowedFollowupIntents: [AgentIntentCatalog::SHOW_SOURCE]
+            jsonSchema: (new AgentAnswerSchema())->jsonSchema()
         ));
 
         $this->assertSame($this->answer(), $response->getAnswer());
@@ -98,7 +97,6 @@ class OpenAiResponsesAgentLlmProviderTest extends TestCase
         return [
             'answer_blocks' => [],
             'missing_or_uncertain' => [],
-            'followup_intents' => [],
         ];
     }
 }

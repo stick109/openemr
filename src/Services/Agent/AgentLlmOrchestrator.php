@@ -31,7 +31,6 @@ final class AgentLlmOrchestrator
         ?AgentLlmProviderInterface $provider = null,
         private readonly AgentAnswerVerifier $verifier = new AgentAnswerVerifier(),
         private readonly AgentAnswerSchema $answerSchema = new AgentAnswerSchema(),
-        private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
         private readonly LoggerInterface $logger = new SystemLogger(),
         ?Anonymizer $anonymizer = null
     ) {
@@ -58,8 +57,7 @@ final class AgentLlmOrchestrator
                 $request = new AgentLlmRequest(
                     intent: $intent,
                     evidencePacket: $packet,
-                    jsonSchema: $this->answerSchema->jsonSchema(),
-                    allowedFollowupIntents: $this->intentCatalog->intentIds()
+                    jsonSchema: $this->answerSchema->jsonSchema()
                 );
                 $this->logLlmRequest($intent, $accessToken, $packet, $request);
                 $llmResponse = $this->provider->complete($request);
@@ -391,7 +389,6 @@ final class AgentLlmOrchestrator
                 ],
             ],
             'missing_or_uncertain' => [],
-            'followup_intents' => [],
         ];
     }
 }

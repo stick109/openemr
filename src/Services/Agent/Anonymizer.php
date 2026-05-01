@@ -41,7 +41,6 @@ final class Anonymizer
         'date' => true,
         'error_class' => true,
         'fields_used' => true,
-        'followup_intents' => true,
         'heading' => true,
         'intent_id' => true,
         'latency_ms' => true,

@@ -38,19 +38,4 @@ class AgentIntentPlaceholderResponseBuilderTest extends TestCase
             $this->assertSame([], $first['checked_evidence']);
         }
     }
-
-    public function testFollowupIntentsStayInsideServerCatalog(): void
-    {
-        $catalog = new AgentIntentCatalog();
-        $builder = new AgentIntentPlaceholderResponseBuilder();
-        $catalogIntentIds = $catalog->intentIds();
-
-        foreach ($catalogIntentIds as $intentId) {
-            $placeholder = $builder->build($intentId);
-
-            foreach ($placeholder['answer']['followup_intents'] as $followupIntentId) {
-                $this->assertContains($followupIntentId, $catalogIntentIds);
-            }
-        }
-    }
 }

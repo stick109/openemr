@@ -154,7 +154,6 @@ final class AgentEvidenceResponseBuilder
                     ],
                 ],
                 'missing_or_uncertain' => [],
-                'followup_intents' => [],
             ],
             'citations' => [],
             'checked_evidence' => [],
@@ -265,7 +264,6 @@ final class AgentEvidenceResponseBuilder
                 ],
             ],
             'missing_or_uncertain' => $missingOrUncertain,
-            'followup_intents' => $this->followupIntents((string) $intent['intent_id']),
         ];
     }
 
@@ -300,29 +298,4 @@ final class AgentEvidenceResponseBuilder
         return $status === '' ? 'source_record' : $status;
     }
 
-    /**
-     * @return list<string>
-     */
-    private function followupIntents(string $intentId): array
-    {
-        return match ($intentId) {
-            AgentIntentCatalog::BASIC_PATIENT_DATA => [
-                AgentIntentCatalog::CURRENT_MEDICATIONS,
-                AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
-            ],
-            AgentIntentCatalog::CURRENT_MEDICATIONS => [
-                AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
-            AgentIntentCatalog::ALLERGIES_TO_CONFIRM => [
-                AgentIntentCatalog::CURRENT_MEDICATIONS,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
-            AgentIntentCatalog::RECENT_EVENTS => [
-                AgentIntentCatalog::CHANGED_SINCE_LAST_VISIT,
-                AgentIntentCatalog::SHOW_SOURCE,
-            ],
-            default => [],
-        };
-    }
 }

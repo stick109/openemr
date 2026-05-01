@@ -1,5 +1,3 @@
-# Why not let the LLM decide what data to pull
-
 ## Decision
 
 Do not make the LLM responsible for deciding what OpenEMR data to retrieve.

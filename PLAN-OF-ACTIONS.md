@@ -65,11 +65,12 @@ Status values: `Done`, `Pending`.
 | P6.5 | Done    | Build eval fixtures for missing, stale, conflicting, duplicate, unauthorized, and prompt-injection cases. | Depends on P2, P3, P4, and P5 behavior becoming testable.                  |
 | P6.6 | Done    | Add a deployment kill switch for external model calls.                                                  | Depends on P5.1 and should be available before enabling external providers. |
 
-## Phase 7: Basic Patient Data Scope Expansion
+## Phase 7: Evidence Scope Expansion
 
 | ID   | Status  | Work Item                                                                                              | Dependencies / Notes                                                       |
 | ---- | ------- | ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- |
 | P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned contact records, structured contact addresses, structured telecom values, and latest employer data. | Implemented with bounded child sources and `max_records = 11`. Public patient id and last-updated timestamp are excluded. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
+| P7.2 | Pending | Plan the `current_medications` evidence expansion to include the must-have medication sources: additional `lists_medication` fields, patient-owned `prescriptions`, and the `lists_touch` medication-list review marker. | Planning-only item. Do not include the optional/should sources yet (`drugs`, `list_options`, `users`, `pharmacies`, `issue_encounter`, `form_encounter`, `drug_sales`, `drug_inventory`). Do not implement code until this plan is reviewed. |
 
 ### P7.1 Detailed Plan: Expand `basic_patient_data`
 
@@ -387,3 +388,363 @@ The answer should also be explicit about missing data:
 - The implementation does not expose SSN or driver's license.
 - The implementation remains closed-intent and does not add any free-text retrieval path.
 - Tests cover ownership, caps, missing data, privacy exclusions, source drilldown, and regression behavior.
+
+### P7.2 Detailed Plan: Expand `current_medications`
+
+#### Current Baseline
+
+- The `Current medications` button maps to the `current_medications` intent in [AgentIntentCatalog.php](src\Services\Agent\AgentIntentCatalog.php).
+- The intent maps to the `get_current_medications` evidence tool in [AgentEvidenceToolset.php](src\Services\Agent\Evidence\AgentEvidenceToolset.php).
+- The evidence tool requires the `medications` data class and is authorized through the existing `patients/med` access policy.
+- The SQL repository method is `fetchCurrentMedications()` in [SqlEvidenceRecordRepository.php](src\Services\Agent\Evidence\SqlEvidenceRecordRepository.php).
+- The current SQL anchors on `lists` rows where `lists.pid = ?`, `lists.type = 'medication'`, and the row is active/current by `activity`, `enddate`, or null `enddate`.
+- The current SQL left joins `lists_medication` by `lists_medication.list_id = lists.id`.
+- The current SQL selects these `lists` fields: `id`, `uuid`, `pid`, `date`, `begdate`, `enddate`, `title`, `activity`, `comments`, and `modifydate`.
+- The current SQL selects these `lists_medication` fields: `id`, `drug_dosage_instructions`, `usage_category_title`, `request_intent_title`, `medication_adherence`, `medication_adherence_date_asserted`, and `prescription_id`.
+- The current response emits medication sources with ids shaped like `medication:lists_medication:{id}` when a `lists_medication` row exists, otherwise `medication:lists:{id}`.
+- The current `fields_used` list is `title`, `activity`, `begdate`, `enddate`, `drug_dosage_instructions`, and `usage_category_title`.
+- The current intent cap is `max_records = 25`, `max_documents = 0`, and `lookback_days = 365`.
+
+#### Goal
+
+Expand the `current_medications` evidence packet so it can represent the current medication list more faithfully. The expanded packet should include medication-list records, supplemental medication metadata, patient-owned prescription records, and a medication-list review marker when the list has been reviewed/touched even if no active medications are found.
+
+The answer should remain a current-medication summary. It should not become a dispense-history, billing, pharmacy-inventory, medication-reconciliation audit, or broad medication-administration workflow.
+
+#### Non-Goals
+
+- Do not add a new UI button as part of P7.2. The existing `Current medications` button should keep working.
+- Do not add free-text routing. This remains a closed-intent retrieval path.
+- Do not create or modify schema.
+- Do not include optional/should enrichment sources in P7.2 unless a later plan explicitly promotes them to scope.
+- Do not include `drugs` catalog enrichment in P7.2.
+- Do not include `list_options` label/code resolution in P7.2.
+- Do not include provider/filler display joins from `users` in P7.2.
+- Do not include `pharmacies` joins in P7.2.
+- Do not include `issue_encounter` or `form_encounter` joins in P7.2.
+- Do not include `drug_sales` dispense/sale/fill history in P7.2.
+- Do not include `drug_inventory`, lot numbers, inventory quantity, warehouse, vendor, or expiration details in P7.2.
+- Do not include billing, claims, payments, prices, notes outside medication fields, documents, allergies, labs, problems, procedures, or immunizations.
+- Do not expose raw eRx debug payloads such as `drug_info_erx` by default.
+
+#### In-Scope Tables
+
+1. `lists`
+   - Purpose: medication-list anchor records already used by the current implementation.
+   - Ownership rule: `lists.pid = current patient pid` and `lists.type = 'medication'`.
+   - Continue using this as the primary medication-list source.
+
+2. `lists_medication`
+   - Purpose: medication-specific supplemental fields for a `lists` medication row.
+   - Join rule: `lists_medication.list_id = lists.id`.
+   - Ownership rule: ownership is inherited only through the joined `lists` row. Never read a `lists_medication` row without joining back to `lists.pid = current patient pid`.
+   - P7.2 adds missing supplemental fields that clarify source, adherence, intent, and primary/reported status.
+
+3. `prescriptions`
+   - Purpose: patient-owned prescription records that may have richer details than the medication-list row.
+   - Link rule A: `prescriptions.id = lists_medication.prescription_id` when a medication-list row references a prescription.
+   - Link rule B: `prescriptions.patient_id = current patient pid` for active/current prescriptions that are not represented by a `lists_medication.prescription_id`.
+   - Ownership rule: every prescription query must include `prescriptions.patient_id = current patient pid`, even when resolving by `prescription_id`.
+   - P7.2 should use prescriptions as patient evidence sources, not just background enrichment, because they are patient-owned records.
+
+4. `lists_touch`
+   - Purpose: review marker for list-level attestation/touch events.
+   - Ownership rule: `lists_touch.pid = current patient pid` and `lists_touch.type = 'medication'`.
+   - Use only to indicate that the medication list was reviewed/touched, especially when no current medication records are returned.
+   - Do not treat `lists_touch` as a medication record.
+
+#### `lists` Field Plan
+
+Continue selecting the existing fields:
+
+- `id`: medication-list record id.
+- `uuid`: medication-list UUID.
+- `pid`: patient id.
+- `date`: list record date.
+- `begdate`: medication start/begin date.
+- `enddate`: medication end date.
+- `title`: medication name/free-text title.
+- `activity`: active flag.
+- `comments`: medication-list comments.
+- `modifydate`: medication-list last modification timestamp.
+
+Consider adding these `lists` fields if they are useful and remain current-medication scoped:
+
+- `subtype`: local medication subtype, if populated.
+- `diagnosis`: diagnosis/reason attached to the medication-list record.
+- `external_id`: external medication/list id.
+- `list_option_id`: local option/coded reference if used for medication names.
+- `erx_source`: whether the record came from OpenEMR or an eRx/external source.
+- `erx_uploaded`: whether the medication-list record was uploaded to the eRx system.
+
+Do not add unrelated `lists` fields that are issue-type-specific but not medication-specific, such as allergy reaction/severity fields or injury fields.
+
+#### `lists_medication` Field Plan
+
+Continue selecting the existing fields:
+
+- `id`: `lists_medication` row id.
+- `list_id`: FK to `lists.id`; select explicitly if needed for source drilldown and debugging.
+- `drug_dosage_instructions`: free-text medication dosage instructions.
+- `usage_category_title`: display title for medication usage category.
+- `request_intent_title`: display title for medication request intent.
+- `medication_adherence`: adherence value.
+- `medication_adherence_date_asserted`: date the adherence value was asserted.
+- `prescription_id`: linked prescription id.
+
+Add these must-have fields:
+
+- `usage_category`: coded/option id for usage category.
+- `request_intent`: coded/option id for request intent.
+- `medication_adherence_information_source`: source of adherence information.
+- `is_primary_record`: whether this is the primary medication record or a reported record.
+- `reporting_source_record_id`: user/address-book source id for a reported medication record.
+
+Field usage rules:
+
+- `usage_category` and `usage_category_title` should be carried together so the answer can cite both the code and human label when available.
+- `request_intent` and `request_intent_title` should be carried together so the answer can distinguish plan/order/proposal style semantics when available.
+- `medication_adherence` should not be summarized as "taking as prescribed" unless the value clearly supports that interpretation.
+- `medication_adherence_information_source` should be included as provenance, not as a clinical claim by itself.
+- `is_primary_record = 0` should be surfaced as "reported medication" or similar cautious wording when appropriate.
+- `reporting_source_record_id` should not be dereferenced in P7.2 unless a later plan defines safe ownership and display rules for the referenced source.
+
+#### `prescriptions` Field Plan
+
+Prescription identity and ownership:
+
+- `id`: prescription id.
+- `uuid`: prescription UUID.
+- `patient_id`: must equal current patient pid.
+- `encounter`: encounter number/id attached to the prescription, if present.
+- `provider_id`: prescribing provider id, but do not join provider display details in P7.2.
+- `filled_by_id`: filler/user id, but do not join filler display details in P7.2.
+- `pharmacy_id`: pharmacy id, but do not join pharmacy display details in P7.2.
+
+Medication name and coding:
+
+- `drug`: prescription drug name.
+- `drug_id`: local drug catalog id, but do not join `drugs` in P7.2.
+- `rxnorm_drugcode`: RxNorm code, when present.
+- `medication`: local medication field, if used by existing prescription workflows.
+
+Dates and status:
+
+- `date_added`: prescription creation date.
+- `date_modified`: prescription modified date.
+- `start_date`: start date.
+- `end_date`: end date.
+- `filled_date`: filled date.
+- `datetime`: legacy/current timestamp field if populated.
+- `active`: prescription active flag.
+- `txDate`: transaction/date field if required by existing eRx semantics.
+
+Directions, dose, quantity, and dispense/refill:
+
+- `drug_dosage_instructions`: structured/free-text dosage instructions.
+- `dosage`: dosage.
+- `quantity`: quantity.
+- `size`: size/strength.
+- `unit`: unit option id.
+- `route`: route option id/text.
+- `interval`: interval/frequency option id.
+- `form`: dosage form option id.
+- `substitute`: substitution flag.
+- `refills`: refill count.
+- `per_refill`: per-refill amount.
+- `prn`: PRN/as-needed flag.
+- `note`: prescription note. Treat as potentially free text and keep the excerpt bounded.
+
+Intent, category, indication, and diagnosis:
+
+- `usage_category`: coded/option id for usage category.
+- `usage_category_title`: human label for usage category.
+- `request_intent`: coded/option id for request intent.
+- `request_intent_title`: human label for request intent.
+- `indication`: prescription indication.
+- `diagnosis`: diagnosis/reason for prescription.
+
+eRx/external provenance:
+
+- `erx_source`: OpenEMR vs external/eRx source marker.
+- `erx_uploaded`: upload status to eRx system.
+- `external_id`: external prescription id.
+- `prescriptionguid`: external/eRx GUID, if needed for source drilldown/provenance. Do not display by default unless necessary.
+
+Fields to exclude from normal display even if selected for source-level metadata:
+
+- `drug_info_erx`: raw eRx drug payload/debug data.
+- Large opaque external payloads.
+- Any field that cannot be explained in a current-medication answer without local workflow knowledge.
+
+#### `prescriptions` Retrieval Rules
+
+Use two bounded prescription paths:
+
+1. Linked prescriptions:
+   - Start from the current `lists` medication query.
+   - Join `prescriptions` on `prescriptions.id = lists_medication.prescription_id`.
+   - Require `prescriptions.patient_id = current patient pid`.
+   - If the linked prescription exists and is patient-owned, either merge key prescription details into the medication-list source or emit a separate `prescriptions` source. The source strategy must be chosen before implementation and tested.
+
+2. Standalone current prescriptions:
+   - Query `prescriptions` where `patient_id = current patient pid`.
+   - Include only current/active prescriptions by default: `active = 1` and no ended date, or `end_date IS NULL`, `end_date = '0000-00-00'`, or `end_date >= CURDATE()`.
+   - Also consider `start_date`, `date_added`, and `date_modified` for ordering.
+   - Exclude prescriptions already represented by a current `lists_medication.prescription_id`.
+   - Keep this path bounded by the intent cap.
+
+Deduplication rules:
+
+- If a `lists` medication row links to a `prescriptions` row, avoid producing two identical claims for the same medication.
+- Prefer a single merged medication claim when `lists.title` and `prescriptions.drug` clearly refer to the same medication.
+- If the prescription has materially different name/directions/status from the list record, preserve both as separate cited facts and mark the uncertainty instead of silently merging.
+- Deduplicate by `prescription_id`, `prescriptions.id`, medication title/drug name, RxNorm code, and active date window where possible.
+- Never drop a patient-owned prescription solely because the free-text name is similar; similarity-based dedupe should be conservative.
+
+#### `lists_touch` Field Plan
+
+Select:
+
+- `pid`: patient id.
+- `type`: list type; must be `medication`.
+- `date`: last touch/review date.
+
+Use rules:
+
+- Read only rows where `pid = current patient pid` and `type = 'medication'`.
+- Emit at most one `lists_touch` source, preferably the latest by `date DESC`.
+- Use `lists_touch` only as a medication-list review marker.
+- If current medication records exist, the review marker can be included as secondary provenance or omitted from the main answer if it adds noise.
+- If no current medication records exist but a recent `lists_touch` row exists, answer that no current medication records were found in checked medication evidence and that the medication list has a review/touch marker dated `date`.
+- If no current medication records and no `lists_touch` row exist, answer that no matching current medication records were found in checked evidence and that no medication-list review marker was found.
+
+#### Evidence Shape
+
+Preferred implementation shape:
+
+- Keep `data_class = medications` for all P7.2 sources.
+- Keep `source_type = medication` for true medication or prescription records.
+- Consider `source_type = medication_review` for `lists_touch`.
+- Continue to emit `source_id = medication:lists_medication:{id}` when the `lists_medication` row is the primary source.
+- Continue to emit `source_id = medication:lists:{id}` when a medication-list row has no `lists_medication` row.
+- Add source ids for patient-owned prescriptions if emitted separately: `medication:prescriptions:{id}`.
+- Add source ids for list review markers if emitted separately: `medication:lists_touch:{pid}` or `medication:lists_touch:{stableRowKey}`. Because `lists_touch` has no id column, the implementation must define a stable record id strategy before emitting it as a drilldown source.
+- Every emitted source must include `source_id`, `source_type`, `data_class`, `table`, `record_id`, `patient_id`, `date`, `status`, `display`, `excerpt`, `fields_used`, and `reliability`.
+- Prescription-backed sources should use status semantics derived from `active`, `end_date`, and possibly `start_date`.
+- Medication-list-backed sources should keep status semantics derived from `activity` and `enddate`.
+- `fields_used` must be updated to truthfully include all new selected fields used in display, excerpt, status, or provenance.
+
+Cap handling:
+
+- Keep `max_documents = 0`; these are structured records, not documents.
+- Keep `lookback_days = 365` unless later evidence shows current prescriptions outside the lookback need to be included.
+- Revisit `max_records = 25` only if the implementation emits separate prescription and list-touch sources in addition to medication-list rows.
+- If linked prescription fields are merged into medication-list sources, `max_records = 25` can likely remain unchanged.
+- If standalone prescription and review-marker sources are emitted separately, use the existing cap as the total packet cap and reserve capacity in this order: medication-list rows, linked prescription details, standalone current prescriptions, list review marker.
+
+#### Source Drilldown
+
+Future implementation should update `Show source` only for source ids that can be resolved safely:
+
+- Continue supporting `medication:lists:{id}` with `lists.pid = current patient pid` and `lists.type = 'medication'`.
+- Continue supporting `medication:lists_medication:{id}` by joining back through `lists.id = lists_medication.list_id`, `lists.pid = current patient pid`, and `lists.type = 'medication'`.
+- Add `medication:prescriptions:{id}` only with `prescriptions.patient_id = current patient pid`.
+- Add `medication:lists_touch:{...}` only if a stable and safely resolvable record id strategy exists. Otherwise include the review date in the packet but do not create a clickable source id for it.
+- A source id must never be enough by itself to retrieve a row. All drilldown queries must include current patient ownership in the `WHERE` clause.
+- If a linked prescription id points to another patient or cannot be resolved, drop the prescription enrichment and record the source as missing/uncertain rather than exposing it.
+
+#### Access Control And Data Classes
+
+- Keep P7.2 under the existing `medications` data class.
+- Keep authorization under the existing broker path for `patients/med`.
+- Do not require `patients/demo`; demographics are not needed for P7.2.
+- Do not require `patients/appt`; encounter details are not in P7.2 scope.
+- Do not add new data classes unless a later policy decision separates prescriptions from medication-list records.
+- The access token should still grant only the final data classes and tools authorized by the broker. Retrieval code must not infer extra permission from the intent label.
+
+#### Response Content Rules
+
+The final answer for `Current medications` should prefer short, separate claims:
+
+- Medication name.
+- Active/current status and relevant start/end date.
+- Dosage instructions, dose, route, frequency/interval, quantity, and PRN status when available.
+- Usage category and request intent when available.
+- RxNorm code when available.
+- Adherence status, adherence assertion date, and adherence information source when available.
+- Prescription source/provenance, including OpenEMR vs external/eRx marker when available.
+- Refill and substitution details when available and not misleading.
+- Indication/diagnosis only when directly attached to the medication or prescription record.
+- Whether a medication is a reported/non-primary record when `is_primary_record` indicates that.
+
+The answer should also be explicit about missing or uncertain data:
+
+- If no current medication records are found, say no matching current medication records were found in checked medication evidence.
+- If a `lists_touch` medication review marker exists, include the review/touch date.
+- If a linked prescription cannot be found or is not patient-owned, state that linked prescription evidence was unavailable or not used.
+- If a medication-list row and prescription row conflict, preserve the conflict rather than choosing silently.
+- Do not infer patient adherence from active prescription status.
+- Do not infer active use from a stale prescription if the active/end-date fields do not support it.
+
+#### Privacy And Logging
+
+- Raw evidence may still go to the configured LLM provider only through the existing BAA-covered LLM path.
+- Durable API logging must continue to use anonymized evidence only.
+- Medication names, prescription notes, dosage instructions, indications, diagnoses, external ids, and eRx identifiers must be considered PHI-bearing.
+- Keep prescription notes and dosage instructions bounded in excerpts to avoid overexposing free text.
+- Do not include raw `drug_info_erx` by default.
+- Do not include billing, claim, payment, or inventory data in this packet.
+
+#### Implementation Steps For Later
+
+1. Decide whether linked `prescriptions` data should be merged into medication-list sources or emitted as separate prescription sources.
+2. Decide whether `lists_touch` should be emitted as a source with a stable source id or used only as packet-level review metadata.
+3. Update `SqlEvidenceRecordRepository::fetchCurrentMedications()` to select the additional `lists_medication` fields.
+4. Add a patient-owned linked-prescription join, requiring `prescriptions.patient_id = current patient pid`.
+5. Add a bounded standalone current-prescription query for active/current patient prescriptions not already represented by `lists_medication.prescription_id`.
+6. Add a bounded `lists_touch` medication review query.
+7. Add or update mapping helpers for medication-list, linked-prescription, standalone-prescription, and medication-review evidence.
+8. Update source id parsing and source drilldown only for newly emitted resolvable source ids.
+9. Update `fields_used` for all medication evidence sources.
+10. Add conservative deduplication between `lists`, `lists_medication`, and `prescriptions`.
+11. Keep all SQL parameterized and patient-scoped.
+12. Keep all source counts bounded by catalog caps.
+13. Update deterministic fallback answers if needed so the no-LLM path still produces readable current-medication claims.
+14. Update eval fixtures for missing, stale, conflicting, duplicate, and unauthorized medication evidence.
+
+#### Test Plan For Later
+
+- Unit test that existing `lists` + `lists_medication` current medication behavior still works.
+- Unit test that newly selected `lists_medication` fields appear in source display/excerpt/fields-used when populated.
+- Unit test that `is_primary_record = 0` is represented as a reported/non-primary medication.
+- Unit test that adherence information source is included without overstating adherence.
+- Unit test that linked prescriptions are included only when `prescriptions.patient_id` matches the current patient.
+- Unit test that linked prescription ids pointing to another patient are ignored.
+- Unit test that standalone active prescriptions are included when not represented by a `lists_medication.prescription_id`.
+- Unit test that inactive or ended prescriptions are excluded from current medications unless policy explicitly includes them as uncertain/stale.
+- Unit test that duplicate medication-list and prescription records do not produce duplicate claims.
+- Unit test that conflicting medication-list and prescription details are preserved as missing/uncertain or conflicting evidence.
+- Unit test that `lists_touch` medication markers are included when no active current medications are found.
+- Unit test that `lists_touch` for another patient or another type is not included.
+- Unit test that `checked_evidence` remains `medications`.
+- Unit test that all emitted source ids can be drilled down only for the current patient.
+- Unit test that invalid/tampered prescription source ids return no source.
+- Controller or isolated service test that the response remains authorized by `patients/med`.
+- Anonymizer test coverage for prescription notes, dosage instructions, medication names, diagnoses, indications, RxNorm/external ids, and eRx provenance values.
+- Verifier test that claims cite only emitted medication sources.
+- Regression test that `basic_patient_data`, `allergies_to_confirm`, `recent_events`, and `changed_since_last_visit` behavior does not change.
+
+#### Acceptance Criteria
+
+- Clicking `Current medications` retrieves a bounded medication evidence packet from current `lists`/`lists_medication` medication rows, patient-owned prescriptions, and the medication-list review marker when available.
+- The packet stays within `data_class = medications`.
+- The packet includes the must-have `lists_medication` fields: `usage_category`, `request_intent`, `medication_adherence_information_source`, `is_primary_record`, and `reporting_source_record_id`.
+- The packet includes patient-owned `prescriptions` details for linked and standalone current prescriptions without exposing prescriptions from other patients.
+- The packet can distinguish "no current medication records found" from "medication list reviewed/touched but no current medications found" when `lists_touch` evidence exists.
+- The packet never includes allergies, problems, encounters, notes outside medication/prescription fields, documents, labs, billing, claims, payments, pharmacy inventory, dispense/sale history, or unrelated patient-data classes.
+- The response cites every claim to a source id in the packet.
+- Source drilldown works for every emitted source id or the implementation deliberately emits only source ids that can be drilled down safely.
+- The response handles missing prescriptions, stale prescriptions, conflicting list/prescription data, and missing review markers without implying unverified absence.
+- The implementation remains closed-intent and does not add any free-text retrieval path.
+- Tests cover ownership, caps, deduplication, stale/current filtering, missing data, privacy exclusions, source drilldown, and regression behavior.

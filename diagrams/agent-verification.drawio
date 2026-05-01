@@ -1,0 +1,57 @@
+<mxfile host="app.diagrams.net" modified="2026-05-01T13:30:00.000Z" agent="Claude Code" version="26.0.0" type="device">
+  <diagram id="agent-verification" name="Agent Verification">
+    <mxGraphModel dx="1400" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Agent Verification — AgentAnswerVerifier::verify()" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#111827;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1320" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="Five layers — inputs &amp; source map, schema checks, per-claim rules, patient/source integrity, missingness &amp; tool-failure disclosure." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=13;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="100" y="60" width="1200" height="28" as="geometry" />
+        </mxCell>
+
+        <mxCell id="L1" value="1. Inputs &amp; Source Map&#xa;&#xa;verify(array $answer, AgentAccessToken $accessToken, array $packet)&#xa;sourceMap() ← $packet['sources'] indexed by source_id&#xa;$packet['tool_runs'] held aside for verifyToolFailures()&#xa;$accessToken->getPatientContext()->getPid() — single allowed patient ID&#xa;Accumulators: $errors, $warnings, $totalText" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;spacing=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="110" width="1280" height="125" as="geometry" />
+        </mxCell>
+
+        <mxCell id="L2" value="2. Schema &amp; Shape Checks&#xa;&#xa;answer_blocks must be a list (array_is_list)&#xa;each block must be an object; heading required&#xa;each block.claims must be a list&#xa;missing_or_uncertain must be a list&#xa;strlen($totalText) ≤ MAX_TOTAL_TEXT_LENGTH (4000) — 90-second workflow cap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;fontSize=12;spacing=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="255" width="1280" height="135" as="geometry" />
+        </mxCell>
+
+        <mxCell id="L3" value="3. verifyClaim() per claim&#xa;&#xa;text required&#xa;containsOutOfScopeAdvice():&#xa;  /should|recommend|consider|start|stop|increase|decrease|prescribe|diagnose|treat|bill|order/&#xa;empty citation_ids → certainty must be in UNCITED_CERTAINTIES&#xa;  ['not_found','not_checked','unknown']&#xa;soundsLikeMissingness() ↔ usesSafeMissingness()&#xa;every citation_id must exist in sourceMap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;spacing=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="410" width="620" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="L4" value="4. Patient &amp; Source Integrity&#xa;&#xa;source.patient_id == accessToken.PatientContext.pid&#xa;  → else 'cites a source outside the current patient context.'&#xa;verifyActiveStatusClaim(): \bactive\b on medication|allergy|problem|result|event&#xa;  → cited source.status must be 'active'&#xa;claimTextSupportedBySources(): significantTokens(claim) ∩ tokens(display+excerpt) ≠ ∅&#xa;  → stopWords filter active/checked/daily/tablet/status/…&#xa;certainty == 'conflicting' → warning (not error)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=12;spacing=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="720" y="410" width="620" height="200" as="geometry" />
+        </mxCell>
+
+        <mxCell id="L5" value="5. Missingness &amp; Tool Failures&#xa;&#xa;verifyMissingOrUncertain(): text + advice + missingness phrasing + citation lookup&#xa;isCompletenessStatement(): /no (additional|other|more) … (found|identified|listed|seen|present)/&#xa;  → completeness statements forbidden in missing_or_uncertain&#xa;verifyToolFailures(): packet.tool_runs[].error_class present →&#xa;  json_encode(answer) must contain 'unavailable' OR 'not checked' OR 'tool'&#xa;Result: new AgentVerificationResult($errors === [], unique $errors, unique $warnings)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;spacing=10;align=left;" vertex="1" parent="1">
+          <mxGeometry x="60" y="630" width="1280" height="180" as="geometry" />
+        </mxCell>
+
+        <mxCell id="edge-l1-l2" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#475569;endArrow=block;endFill=1;" edge="1" parent="1" source="L1" target="L2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-l2-l3" value="for each claim" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#475569;endArrow=block;endFill=1;fontSize=11;fontColor=#0f172a;" edge="1" parent="1" source="L2" target="L3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-l3-l4" value="claim has citations" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#475569;endArrow=block;endFill=1;fontSize=11;fontColor=#0f172a;" edge="1" parent="1" source="L3" target="L4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-l4-l5" value="" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#475569;endArrow=block;endFill=1;" edge="1" parent="1" source="L4" target="L5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="edge-l1-l5" value="tool_runs[]" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;strokeColor=#7c3aed;dashed=1;endArrow=block;endFill=1;fontSize=11;fontColor=#0f172a;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" parent="1" source="L1" target="L5">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="30" y="172" />
+              <mxPoint x="30" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

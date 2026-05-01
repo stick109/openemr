@@ -315,8 +315,18 @@ final class AgentEvidenceResponseBuilder
      */
     private function certainty(array $source): string
     {
-        $status = (string) ($source['status'] ?? 'unknown');
-        return $status === '' ? 'source_record' : $status;
+        $status = strtolower(trim((string) ($source['status'] ?? '')));
+        return match ($status) {
+            'active',
+            'inactive',
+            'unknown',
+            'conflicting',
+            'not_found',
+            'not_checked',
+            'supported',
+            'source_record' => $status,
+            default => 'source_record',
+        };
     }
 
 }

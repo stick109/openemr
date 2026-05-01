@@ -127,6 +127,10 @@ class AgentIntentRestControllerTest extends TestCase
             ['Public ID P123', 'sex Female', 'age 52', 'status single'],
             array_column($body['data']['answer']['answer_blocks'][0]['claims'], 'text')
         );
+        $this->assertSame(
+            ['source_record', 'source_record', 'source_record', 'source_record'],
+            array_column($body['data']['answer']['answer_blocks'][0]['claims'], 'certainty')
+        );
         $this->assertIsArray($anonymizedPayload);
         $this->assertSame('agent.log.v1', $anonymizedPayload['payload_version']);
         $this->assertSame('basic_patient_data', $anonymizedPayload['intent_id']);
@@ -372,7 +376,7 @@ final class AgentIntentRestControllerEvidenceRepository implements EvidenceRecor
                 'record_id' => '123',
                 'patient_id' => 123,
                 'date' => '2026-04-20',
-                'status' => 'active',
+                'status' => 'available',
                 'display' => 'Public ID P123; sex Female; age 52; status single',
                 'fields_used' => ['pubpid', 'DOB', 'sex', 'status'],
                 'reliability' => 'structured_patient_record',

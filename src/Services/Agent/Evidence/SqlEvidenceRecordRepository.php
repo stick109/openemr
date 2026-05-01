@@ -381,7 +381,7 @@ final class SqlEvidenceRecordRepository implements EvidenceRecordRepositoryInter
             'patient_id' => (int) $row['pid'],
             'patient_uuid' => $this->uuidToString($row['uuid'] ?? null),
             'date' => $this->dateValue($row, ['date']),
-            'status' => $this->filled($row['status'] ?? null) ?: 'unknown',
+            'status' => 'available',
             'display' => $this->joinDisplay($displayParts, 'Patient demographic record'),
             'excerpt' => $this->joinDisplay($displayParts, 'Patient demographic record'),
             'fields_used' => ['pubpid', 'DOB', 'sex', 'status'],

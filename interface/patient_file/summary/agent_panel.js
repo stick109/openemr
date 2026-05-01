@@ -72,6 +72,10 @@
             parent.appendChild(chipContainer);
         }
 
+        function shouldShowCertainty(certainty) {
+            return certainty && certainty !== 'source_record' && certainty !== 'supported';
+        }
+
         function setButtonsDisabled(disabled) {
             Array.prototype.slice.call(panel.querySelectorAll('button')).forEach(function (button) {
                 if (disabled) {
@@ -135,7 +139,7 @@
                 claims.forEach(function (claim) {
                     var item = document.createElement('li');
                     appendTextElement(item, 'span', '', claim.text || '');
-                    if (claim.certainty) {
+                    if (shouldShowCertainty(claim.certainty)) {
                         appendTextElement(item, 'span', 'text-muted ml-1', '(' + claim.certainty + ')');
                     }
                     appendCitationChips(item, claim.citation_ids);

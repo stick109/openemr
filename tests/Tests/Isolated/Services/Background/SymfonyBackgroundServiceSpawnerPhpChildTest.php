@@ -184,7 +184,7 @@ class SymfonyBackgroundServiceSpawnerPhpChildTest extends TestCase
         parent::tearDown();
     }
 
-    private function makeSpawner(): SymfonyBackgroundServiceSpawner
+    private function makeSpawner(?string $phpBinary = null): SymfonyBackgroundServiceSpawner
     {
         // Leave phpBinary at its default (PHP_BINARY) so the fixture
         // runs under the same PHP build as the tests, matching what
@@ -192,7 +192,16 @@ class SymfonyBackgroundServiceSpawnerPhpChildTest extends TestCase
         return new SymfonyBackgroundServiceSpawner(
             $this->fakeProjectDir,
             $this->logger,
+            $phpBinary,
         );
+    }
+
+    public function testEmptyPhpBinaryFallsBackToRunnablePhp(): void
+    {
+        $result = $this->makeSpawner('')->spawn('ok', false, 60);
+
+        $this->assertSame(['name' => 'ok', 'status' => 'executed'], $result);
+        $this->assertSame([], $this->logger->warnings);
     }
 
     public function testNonceIsPropagatedAndStatusParsedFromRealPhpChild(): void

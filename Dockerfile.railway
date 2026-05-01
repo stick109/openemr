@@ -5,3 +5,9 @@ WORKDIR /var/www/localhost/htdocs/openemr
 # Overlay this checkout's application source onto the pinned production image.
 # Runtime secrets come from Railway variables, not from files copied into the image.
 COPY --chown=apache:apache . /var/www/localhost/htdocs/openemr/
+
+# Align the base image's vendor/ tree with this checkout's composer.lock after
+# overlaying source. Otherwise production can run current app code against
+# stale dependency versions and stale Composer classmaps from the pinned image.
+RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader \
+    && chown -R apache:apache /var/www/localhost/htdocs/openemr/vendor

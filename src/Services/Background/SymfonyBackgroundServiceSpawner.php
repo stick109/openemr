@@ -80,22 +80,26 @@ final readonly class SymfonyBackgroundServiceSpawner implements BackgroundServic
 
     private LoggerInterface $logger;
 
+    private string $phpBinary;
+
     /**
      * @param string      $projectDir Absolute path to the OpenEMR project
      *                                root (used to locate bin/console).
-     * @param string      $phpBinary  Absolute path to the PHP binary the
+     * @param string|null $phpBinary  Absolute path to the PHP binary the
      *                                child should run under. Defaults to
-     *                                PHP_BINARY, which matches the PHP
-     *                                currently running the parent,
+     *                                PHP_BINARY when available, with a
+     *                                PHP_BINDIR/php fallback for SAPIs where
+     *                                PHP_BINARY is empty,
      *                                aligning FPM/CLI extensions, INI
      *                                settings, and version.
      */
     public function __construct(
         private string $projectDir,
         ?LoggerInterface $logger = null,
-        private string $phpBinary = PHP_BINARY,
+        ?string $phpBinary = null,
     ) {
         $this->logger = $logger ?? ServiceContainer::getLogger();
+        $this->phpBinary = self::resolvePhpBinary($phpBinary);
     }
 
     public function spawn(string $name, bool $force, int $timeoutSeconds): array
@@ -324,5 +328,23 @@ final readonly class SymfonyBackgroundServiceSpawner implements BackgroundServic
             $sanitized = substr($sanitized, 0, self::SERVICE_NAME_LOG_MAX) . '…[truncated]';
         }
         return $sanitized;
+    }
+
+    private static function resolvePhpBinary(?string $phpBinary): string
+    {
+        if (is_string($phpBinary) && trim($phpBinary) !== '') {
+            return $phpBinary;
+        }
+
+        if (PHP_BINARY !== '') {
+            return PHP_BINARY;
+        }
+
+        $binaryName = PHP_OS_FAMILY === 'Windows' ? 'php.exe' : 'php';
+        if (PHP_BINDIR !== '') {
+            return rtrim(PHP_BINDIR, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . $binaryName;
+        }
+
+        return $binaryName;
     }
 }

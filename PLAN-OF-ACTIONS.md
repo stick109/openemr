@@ -71,6 +71,7 @@ Status values: `Done`, `Pending`.
 | ---- | ------- | --------- | -------------------- |
 | P7.1 | Done    | Expand the `basic_patient_data` evidence packet to include richer `patient_data` fields, patient-owned structured contact addresses, structured telecom values, and latest displayable employer data. | Implemented with bounded child sources and `max_records = 10`. Public patient id and last-updated timestamp are excluded. Direct generic `phone_numbers` lookup was avoided because safe patient ownership is not available through `foreign_id` alone. |
 | P7.2 | Pending | Plan the `current_medications` evidence expansion to include the must-have medication sources: additional `lists_medication` fields, patient-owned `prescriptions`, and the `lists_touch` medication-list review marker. | Planning-only item. Do not include the optional/should sources yet (`drugs`, `list_options`, `users`, `pharmacies`, `issue_encounter`, `form_encounter`, `drug_sales`, `drug_inventory`). Do not implement code until this plan is reviewed. |
+| P7.3 | Pending | Plan the `allergies_to_confirm` evidence expansion to include the must-have allergy sources: allergy-list review marker, additional `lists` allergy fields, coded allergen lookup, and severity lookup when severity is coded. | Planning-only item. Keep scope limited to allergy evidence in `lists`, `lists_touch`, and bounded `list_options` lookups. Do not implement code until this plan is reviewed. |
 
 ### P7.1 Detailed Plan: Expand `basic_patient_data`
 
@@ -748,3 +749,275 @@ The answer should also be explicit about missing or uncertain data:
 - The response handles missing prescriptions, stale prescriptions, conflicting list/prescription data, and missing review markers without implying unverified absence.
 - The implementation remains closed-intent and does not add any free-text retrieval path.
 - Tests cover ownership, caps, deduplication, stale/current filtering, missing data, privacy exclusions, source drilldown, and regression behavior.
+
+### P7.3 Detailed Plan: Expand `allergies_to_confirm`
+
+#### Current Baseline
+
+- The `Allergies to confirm` button maps to the `allergies_to_confirm` intent in [AgentIntentCatalog.php](src\Services\Agent\AgentIntentCatalog.php).
+- The intent maps to the `get_allergies_to_confirm` evidence tool in [AgentEvidenceToolset.php](src\Services\Agent\Evidence\AgentEvidenceToolset.php).
+- The evidence tool requires the `allergies` data class and is authorized through the existing `patients/med` access policy.
+- The SQL repository method is `fetchAllergiesToConfirm()` in [SqlEvidenceRecordRepository.php](src\Services\Agent\Evidence\SqlEvidenceRecordRepository.php).
+- The current SQL anchors on `lists` rows where `lists.pid = ?`, `lists.type = 'allergy'`, and the row is active/current by `activity`, `enddate`, or null `enddate`.
+- The current SQL selects these `lists` fields: `id`, `uuid`, `pid`, `date`, `begdate`, `enddate`, `title`, `activity`, `comments`, `reaction`, `verification`, `severity_al`, and `modifydate`.
+- The current SQL already resolves `reaction_title` through `list_options` where `list_id = 'reaction'`.
+- The current SQL already resolves `verification_title` through `list_options` where `list_id = 'allergyintolerance-verification'`.
+- The current response emits allergy sources with ids shaped like `allergy:lists:{id}`.
+- The current `fields_used` list is `title`, `activity`, `reaction`, `verification`, and `severity_al`.
+- The current intent cap is `max_records = 25`, `max_documents = 0`, and `lookback_days = 365`.
+
+#### Goal
+
+Expand the `allergies_to_confirm` evidence packet so it can represent active allergy/intolerance records more completely while keeping the intent narrowly focused on confirming allergy evidence. The expanded packet should add list-review context, coded allergen details, external/eRx provenance, allergy subtype/diagnosis metadata, and human-readable severity labels when `severity_al` is coded.
+
+The answer should remain an allergy confirmation summary. It should not become a medication interaction checker, clinical decision rule workflow, allergy assessment workflow, or free-form chart search.
+
+#### Non-Goals
+
+- Do not add a new UI button as part of P7.3. The existing `Allergies to confirm` button should keep working.
+- Do not add free-text routing. This remains a closed-intent retrieval path.
+- Do not create or modify schema.
+- Do not include medication records, prescriptions, medication fills, or pharmacy inventory.
+- Do not include encounters, forms, notes, SOAP notes, dictation, documents, labs, procedures, orders, immunizations, billing, claims, payments, reminders, clinical-rule logs, or audit logs.
+- Do not add allergy clinical-decision-rule evidence from `clinical_rules`, `rule_*`, or CDR tables.
+- Do not dereference external/eRx ids into remote systems.
+- Do not interpret allergy severity, verification, or reaction codes beyond the labels stored in local structured tables.
+- Do not infer absence of allergies globally unless both active allergy rows and the allergy-list review marker were checked.
+
+#### In-Scope Tables
+
+1. `lists`
+   - Purpose: allergy/intolerance anchor records already used by the current implementation.
+   - Ownership rule: `lists.pid = current patient pid` and `lists.type = 'allergy'`.
+   - Continue using this as the primary allergy source.
+   - P7.3 adds missing allergy metadata fields from the same patient-owned row.
+
+2. `lists_touch`
+   - Purpose: review marker for list-level allergy attestation/touch events.
+   - Ownership rule: `lists_touch.pid = current patient pid` and `lists_touch.type = 'allergy'`.
+   - Use only to indicate that the allergy list was reviewed/touched, especially when no active allergies are found.
+   - Do not treat `lists_touch` as an allergy record.
+
+3. `list_options` for coded allergen lookup
+   - Purpose: resolve `lists.list_option_id` into a coded/local allergen label and optional code payload.
+   - Candidate lookup: `list_options.option_id = lists.list_option_id`, normally under the allergy issue list, for example `list_options.list_id = 'allergy_issue_list'`.
+   - Implementation must confirm the local list id convention before joining. If the list id cannot be determined safely, carry `lists.list_option_id` as a raw coded reference and do not do a broad `option_id`-only lookup.
+
+4. `list_options` for severity lookup
+   - Purpose: resolve `lists.severity_al` into a human-readable severity label and optional code payload when `severity_al` stores an option id.
+   - Implementation must identify the correct severity list id before joining. If `severity_al` is already display text or the list id is ambiguous, do not do a broad lookup; keep the existing raw severity value.
+
+#### `lists` Field Plan
+
+Continue selecting the existing fields:
+
+- `id`: allergy-list record id.
+- `uuid`: allergy-list UUID.
+- `pid`: patient id.
+- `date`: list record date.
+- `begdate`: allergy/intolerance begin date.
+- `enddate`: allergy/intolerance end date.
+- `title`: allergen/substance title.
+- `activity`: active flag.
+- `comments`: allergy comments.
+- `reaction`: reaction code/value.
+- `verification`: verification status code/value.
+- `severity_al`: allergy severity value.
+- `modifydate`: list record last modification timestamp.
+
+Add these must-have `lists` fields:
+
+- `list_option_id`: local coded allergen/list option reference.
+- `external_allergyid`: external eRx allergy id.
+- `external_id`: external allergy/list id.
+- `erx_source`: whether the allergy came from OpenEMR or an eRx/external source.
+- `erx_uploaded`: whether the allergy was uploaded to the eRx system.
+- `subtype`: local allergy subtype/classification, if populated.
+- `diagnosis`: diagnosis/reason metadata attached to the allergy row.
+
+Field usage rules:
+
+- `list_option_id` should be displayed only with a resolved label when the lookup is safe. Otherwise include it as a coded reference in source detail, not as a patient-facing claim.
+- `external_allergyid`, `external_id`, `erx_source`, and `erx_uploaded` should be treated as provenance, not as clinical facts.
+- `subtype` should be included only when non-empty and clearly allergy-related.
+- `diagnosis` should be included only when directly attached to the allergy row and should not be expanded into problem-list evidence.
+- `comments` should remain bounded in excerpts because it is free text.
+- `reaction`, `verification`, and `severity_al` should keep existing raw values and add resolved labels where available.
+
+#### `lists_touch` Field Plan
+
+Select:
+
+- `pid`: patient id.
+- `type`: list type; must be `allergy`.
+- `date`: last touch/review date.
+
+Use rules:
+
+- Read only rows where `pid = current patient pid` and `type = 'allergy'`.
+- Emit at most one `lists_touch` source or review marker, preferably the latest by `date DESC`.
+- Use `lists_touch` only as an allergy-list review marker.
+- If active allergy records exist, the review marker can be included as secondary provenance or omitted from the main answer if it adds noise.
+- If no active allergy records exist but a `lists_touch` row exists, answer that no current allergy records were found in checked allergy evidence and that the allergy list has a review/touch marker dated `date`.
+- If no active allergy records and no `lists_touch` row exist, answer that no matching active allergy records were found in checked evidence and that no allergy-list review marker was found.
+
+#### Coded Allergen Lookup Plan
+
+Use `list_options` to resolve `lists.list_option_id` only when the list id is known and safe.
+
+Fields to select:
+
+- `list_id`: list-options list id used for the allergen lookup.
+- `option_id`: coded allergen option id.
+- `title`: coded allergen title.
+- `codes`: optional coding payload.
+
+Lookup rules:
+
+- Join only from a patient-owned `lists` allergy row.
+- Prefer a specific list id such as `allergy_issue_list` if the local schema/data convention confirms it.
+- Do not use a global `option_id = lists.list_option_id` lookup without list-id restriction, because option ids are not globally unique across all lists.
+- If no safe lookup is possible, do not fail the allergy row; keep `lists.title` as the primary allergen display and include `list_option_id` only as a source field.
+- If both `lists.title` and resolved `list_options.title` exist and differ materially, preserve both as separate source details or mark uncertainty instead of silently overwriting one.
+
+#### Severity Lookup Plan
+
+Use `list_options` to resolve `lists.severity_al` only when `severity_al` is coded and the correct list id is known.
+
+Fields to select:
+
+- `option_id`: severity option id.
+- `title`: severity title.
+- `codes`: optional coding payload.
+
+Lookup rules:
+
+- Join only from a patient-owned `lists` allergy row.
+- Confirm the severity list id before implementation. Do not guess with a broad `option_id` lookup.
+- If `severity_al` is already text, use the existing raw value and skip lookup.
+- If `severity_al` is empty, do not add a severity claim.
+- If severity code and severity title conflict or cannot be resolved, include the raw value as source detail and mark the severity as uncertain if surfaced in the answer.
+
+#### Evidence Shape
+
+Preferred implementation shape:
+
+- Keep `data_class = allergies` for all P7.3 sources.
+- Keep `source_type = allergy` for true allergy/intolerance records.
+- Consider `source_type = allergy_review` for `lists_touch`.
+- Continue to emit `source_id = allergy:lists:{id}` for allergy rows.
+- Add a review-marker source id only if it can be resolved safely despite `lists_touch` having no id column, for example `allergy:lists_touch:{stableRowKey}`. If no stable row key is chosen, include the review marker as packet-level metadata rather than a clickable source.
+- Do not emit standalone `list_options` sources. Coded allergen and severity lookups should enrich the allergy source; they are not patient-owned records by themselves.
+- Every emitted patient-owned source must include `source_id`, `source_type`, `data_class`, `table`, `record_id`, `patient_id`, `date`, `status`, `display`, `excerpt`, `fields_used`, and `reliability`.
+- Allergy row status should continue to use verification status where available, otherwise active/current status from `activity` and `enddate`.
+- `fields_used` must be updated to truthfully include all new selected fields used in display, excerpt, status, or provenance.
+
+Cap handling:
+
+- Keep `max_documents = 0`; these are structured records, not documents.
+- Keep `lookback_days = 365` unless later evidence shows active allergy records outside the lookback need to be included.
+- Keep `max_records = 25` unless the implementation emits `lists_touch` as an extra source in addition to allergy rows.
+- If `lists_touch` is emitted as a source, reserve one slot for the review marker only after active allergy rows have been collected, or include it only when no active allergy rows are found.
+
+#### Source Drilldown
+
+Future implementation should update `Show source` only for source ids that can be resolved safely:
+
+- Continue supporting `allergy:lists:{id}` with `lists.pid = current patient pid` and `lists.type = 'allergy'`.
+- Add newly selected `lists` fields to the source drilldown output.
+- Include resolved coded allergen and severity labels in source drilldown only as enrichment from the patient-owned allergy row.
+- Add `allergy:lists_touch:{...}` only if a stable and safely resolvable record id strategy exists. Otherwise include the review date in the packet but do not create a clickable source id for it.
+- A source id must never be enough by itself to retrieve a row. All drilldown queries must include current patient ownership in the `WHERE` clause.
+- If a coded allergen or severity lookup is ambiguous, omit the enrichment rather than doing an unsafe lookup.
+
+#### Access Control And Data Classes
+
+- Keep P7.3 under the existing `allergies` data class.
+- Keep authorization under the existing broker path for `patients/med`.
+- Do not require `patients/demo`; demographics are not needed for P7.3.
+- Do not require `patients/appt`; encounter details are not in P7.3 scope.
+- Do not add new data classes unless a later policy decision separates eRx provenance or coded vocabularies from allergy records.
+- The access token should still grant only the final data classes and tools authorized by the broker. Retrieval code must not infer extra permission from the intent label.
+
+#### Response Content Rules
+
+The final answer for `Allergies to confirm` should prefer short, separate claims:
+
+- Allergen/substance name from `lists.title`.
+- Coded allergen title and code when `lists.list_option_id` safely resolves.
+- Reaction label/value.
+- Severity label/value.
+- Verification status.
+- Active/current status and relevant begin/end date.
+- Comments or notes only as bounded excerpts.
+- eRx/external provenance when useful and not noisy.
+- Subtype and diagnosis only when directly attached to the allergy row.
+- Allergy-list review/touch date when no active allergy rows are found or when the review marker is needed for provenance.
+
+The answer should also be explicit about missing or uncertain data:
+
+- If no current allergy records are found, say no matching current allergy records were found in checked allergy evidence.
+- If a `lists_touch` allergy review marker exists, include the review/touch date.
+- If a coded allergen lookup cannot be safely resolved, do not imply the free-text title is coded.
+- If severity cannot be safely resolved, show raw severity only as source detail or mark severity as uncertain.
+- If reaction, severity, or verification fields are empty, do not invent them.
+- Do not infer absence of allergies globally unless allergy rows and the allergy-list review marker were both checked.
+
+#### Privacy And Logging
+
+- Raw evidence may still go to the configured LLM provider only through the existing BAA-covered LLM path.
+- Durable API logging must continue to use anonymized evidence only.
+- Allergy substance names, reactions, comments, diagnoses, external ids, and eRx identifiers must be considered PHI-bearing.
+- Keep allergy comments bounded in excerpts to avoid overexposing free text.
+- Do not include clinical-rule logs, billing, claim, payment, medication, or unrelated chart data in this packet.
+
+#### Implementation Steps For Later
+
+1. Update `SqlEvidenceRecordRepository::fetchAllergiesToConfirm()` to select the additional must-have `lists` fields.
+2. Add a bounded `lists_touch` allergy review query.
+3. Confirm the safe `list_options` list id for `lists.list_option_id` allergy lookup, likely `allergy_issue_list`, before adding the join.
+4. Confirm whether `severity_al` stores option ids and identify the correct severity list id before adding the severity lookup.
+5. Add or update mapping helpers for allergy records, coded allergen enrichment, severity enrichment, and allergy-review evidence.
+6. Decide whether `lists_touch` should be emitted as a source with a stable source id or used only as packet-level review metadata.
+7. Update source id parsing and source drilldown only for newly emitted resolvable source ids.
+8. Update `fields_used` for allergy evidence sources.
+9. Keep all SQL parameterized and patient-scoped.
+10. Keep all source counts bounded by catalog caps.
+11. Update deterministic fallback answers if needed so the no-LLM path still produces readable allergy confirmation claims.
+12. Update eval fixtures for missing, stale, conflicting, duplicate, coded, uncoded, and unauthorized allergy evidence.
+
+#### Test Plan For Later
+
+- Unit test that existing active `lists` allergy behavior still works.
+- Unit test that newly selected `lists` fields appear in source display/excerpt/fields-used when populated.
+- Unit test that `list_option_id` is resolved only through a safe list-id-restricted `list_options` lookup.
+- Unit test that ambiguous `list_option_id` values do not trigger a broad unsafe lookup.
+- Unit test that coded allergen title/code enrichment is included when safely resolved.
+- Unit test that conflicting free-text title and coded allergen title are preserved or marked uncertain.
+- Unit test that severity lookup is included only when `severity_al` is coded and the severity list id is known.
+- Unit test that raw severity text still works when no severity lookup is available.
+- Unit test that `external_allergyid`, `external_id`, `erx_source`, and `erx_uploaded` are treated as provenance.
+- Unit test that `lists_touch` allergy markers are included when no active current allergies are found.
+- Unit test that `lists_touch` for another patient or another type is not included.
+- Unit test that `checked_evidence` remains `allergies`.
+- Unit test that all emitted source ids can be drilled down only for the current patient.
+- Unit test that invalid/tampered allergy source ids return no source.
+- Controller or isolated service test that the response remains authorized by `patients/med`.
+- Anonymizer test coverage for allergy names, reactions, comments, diagnoses, external ids, eRx provenance, and coded allergen labels.
+- Verifier test that claims cite only emitted allergy sources.
+- Regression test that `basic_patient_data`, `current_medications`, `recent_events`, and `changed_since_last_visit` behavior does not change.
+
+#### Acceptance Criteria
+
+- Clicking `Allergies to confirm` retrieves a bounded allergy evidence packet from active/current patient-owned `lists` allergy rows and the allergy-list review marker when available.
+- The packet stays within `data_class = allergies`.
+- The packet includes the must-have additional `lists` fields: `list_option_id`, `external_allergyid`, `external_id`, `erx_source`, `erx_uploaded`, `subtype`, and `diagnosis`.
+- The packet resolves coded allergen labels/codes through `list_options` only when the list id is safe and specific.
+- The packet resolves severity labels/codes through `list_options` only when `severity_al` is coded and the severity list id is safe and specific.
+- The packet can distinguish "no current allergy records found" from "allergy list reviewed/touched but no current allergies found" when `lists_touch` evidence exists.
+- The packet never includes medications, prescriptions, encounters, notes outside allergy fields, documents, labs, billing, claims, payments, clinical-rule logs, or unrelated patient-data classes.
+- The response cites every claim to a source id in the packet.
+- Source drilldown works for every emitted source id or the implementation deliberately emits only source ids that can be drilled down safely.
+- The response handles missing coded lookup, missing severity lookup, empty reaction/severity/verification fields, and missing review markers without implying unverified absence.
+- The implementation remains closed-intent and does not add any free-text retrieval path.
+- Tests cover ownership, caps, coded lookup safety, severity lookup safety, missing data, privacy exclusions, source drilldown, and regression behavior.

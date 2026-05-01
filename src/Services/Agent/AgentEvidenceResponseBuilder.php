@@ -236,11 +236,13 @@ final class AgentEvidenceResponseBuilder
                 continue;
             }
 
-            $claims[] = [
-                'text' => $this->claimText((string) $intent['intent_id'], $source),
-                'citation_ids' => [(string) ($source['source_id'] ?? '')],
-                'certainty' => $this->certainty($source),
-            ];
+            foreach ($this->claimTexts((string) $intent['intent_id'], $source) as $claimText) {
+                $claims[] = [
+                    'text' => $claimText,
+                    'citation_ids' => [(string) ($source['source_id'] ?? '')],
+                    'certainty' => $this->certainty($source),
+                ];
+            }
         }
 
         $missingOrUncertain = [];
@@ -265,6 +267,25 @@ final class AgentEvidenceResponseBuilder
             ],
             'missing_or_uncertain' => $missingOrUncertain,
         ];
+    }
+
+    /**
+     * @param array<string, mixed> $source
+     * @return list<string>
+     */
+    private function claimTexts(string $intentId, array $source): array
+    {
+        $text = $this->claimText($intentId, $source);
+        if ($intentId !== AgentIntentCatalog::BASIC_PATIENT_DATA) {
+            return [$text];
+        }
+
+        $parts = array_values(array_filter(
+            array_map('trim', explode(';', $text)),
+            static fn (string $part): bool => $part !== ''
+        ));
+
+        return $parts === [] ? [$text] : $parts;
     }
 
     /**

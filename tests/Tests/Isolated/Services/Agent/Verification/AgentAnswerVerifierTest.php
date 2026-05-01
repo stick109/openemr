@@ -31,6 +31,16 @@ class AgentAnswerVerifierTest extends TestCase
         $this->assertSame('passed', $result->toArray()['status']);
     }
 
+    public function testAcceptsExactShortSubstringClaim(): void
+    {
+        $answer = $this->supportedAnswer();
+        $answer['answer_blocks'][0]['claims'][0]['text'] = '500 mg';
+
+        $result = (new AgentAnswerVerifier())->verify($answer, $this->accessToken(), $this->packet());
+
+        $this->assertTrue($result->passed());
+    }
+
     public function testRejectsFabricatedCitationIds(): void
     {
         $answer = $this->supportedAnswer();

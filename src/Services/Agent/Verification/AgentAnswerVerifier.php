@@ -262,13 +262,22 @@ final class AgentAnswerVerifier
      */
     private function claimTextSupportedBySources(string $claimText, array $sources): bool
     {
+        $normalizedClaimText = $this->normalizedText($claimText);
         $claimTokens = $this->significantTokens($claimText);
-        if ($claimTokens === []) {
-            return false;
-        }
 
         foreach ($sources as $source) {
             $sourceText = (string) ($source['display'] ?? '') . ' ' . (string) ($source['excerpt'] ?? '');
+            if (
+                $normalizedClaimText !== ''
+                && str_contains($this->normalizedText($sourceText), $normalizedClaimText)
+            ) {
+                return true;
+            }
+
+            if ($claimTokens === []) {
+                continue;
+            }
+
             $sourceTokens = $this->significantTokens($sourceText);
             if (array_intersect($claimTokens, $sourceTokens) !== []) {
                 return true;
@@ -297,6 +306,11 @@ final class AgentAnswerVerifier
         if ($status !== 'active') {
             $errors[] = $path . ' claims an active ' . $sourceType . ' without an active cited source.';
         }
+    }
+
+    private function normalizedText(string $text): string
+    {
+        return trim((string) preg_replace('/\s+/', ' ', strtolower($text)));
     }
 
     /**

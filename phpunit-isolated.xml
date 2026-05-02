@@ -39,6 +39,13 @@ This file configures the kind that does not require initialization.
     <server name="DISABLE_DATABASE" value="1"/>
   </php>
 
+  <!-- The "live-llm" group is opt-in: it drives the agent against a real LLM provider. Run via composer phpunit-live-llm once the agent LLM env vars are configured. -->
+  <groups>
+    <exclude>
+      <group>live-llm</group>
+    </exclude>
+  </groups>
+
   <source ignoreIndirectDeprecations="true">
     <include>
       <directory>.</directory>

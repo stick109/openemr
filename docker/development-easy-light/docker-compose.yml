@@ -26,20 +26,15 @@ services:
       retries: 3
   openemr:
     restart: always
-    image: openemr/openemr:flex@sha256:e4562b0c7d3f222ec8f72122ce00d10ffa93f559c38c00ab12c1355394c35d1c
+    image: ${OPENEMR_LOCAL_IMAGE:-openemr-local:latest}
+    build:
+      context: ../..
+      dockerfile: Dockerfile.railway
     ports:
     - "${WT_HTTP_PORT:-8300}:80"
     - "${WT_HTTPS_PORT:-9300}:443"
     volumes:
-    - ${OPENEMR_DIR:-../..}:/openemr:ro
-    - ${OPENEMR_DIR:-../..}:/var/www/localhost/htdocs/openemr:rw
-    - assetvolume:/var/www/localhost/htdocs/openemr/public/assets:rw
-    - themevolume:/var/www/localhost/htdocs/openemr/public/themes:rw
     - sitesvolume:/var/www/localhost/htdocs/openemr/sites:rw
-    - nodemodules:/var/www/localhost/htdocs/openemr/node_modules:rw
-    - vendordir:/var/www/localhost/htdocs/openemr/vendor:rw
-    - ccdanodemodules:/var/www/localhost/htdocs/openemr/ccdaservice/node_modules:rw
-    - ccdanodemodules2:/var/www/localhost/htdocs/openemr/ccdaservice/packages/oe-cqm-service/node_modules:rw
     - logvolume:/var/log
     - couchdbvolume:/couchdb/data
     environment:
@@ -53,7 +48,6 @@ services:
       OE_USER: admin
       OE_PASS: pass
       EASY_DEV_MODE: "yes"
-      EASY_DEV_MODE_NEW: "yes"
       DEVELOPER_TOOLS: "yes"
       XDEBUG_ON: 1
       XDEBUG_PROFILER_ON: 1

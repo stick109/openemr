@@ -63,6 +63,109 @@ function Invoke-Railway {
     }
 }
 
+function ConvertTo-NativeArgument {
+    param([string]$Argument)
+
+    if ($null -eq $Argument -or $Argument.Length -eq 0) {
+        return '""'
+    }
+
+    if ($Argument -notmatch '[\s"]') {
+        return $Argument
+    }
+
+    $builder = New-Object System.Text.StringBuilder
+    $null = $builder.Append('"')
+    $backslashCount = 0
+
+    foreach ($character in $Argument.ToCharArray()) {
+        if ($character -eq [char]92) {
+            $backslashCount++
+            continue
+        }
+
+        if ($character -eq [char]34) {
+            if ($backslashCount -gt 0) {
+                $null = $builder.Append('\' * (($backslashCount * 2) + 1))
+                $backslashCount = 0
+            }
+            else {
+                $null = $builder.Append('\')
+            }
+
+            $null = $builder.Append('"')
+            continue
+        }
+
+        if ($backslashCount -gt 0) {
+            $null = $builder.Append('\' * $backslashCount)
+            $backslashCount = 0
+        }
+
+        $null = $builder.Append($character)
+    }
+
+    if ($backslashCount -gt 0) {
+        $null = $builder.Append('\' * ($backslashCount * 2))
+    }
+
+    $null = $builder.Append('"')
+    return $builder.ToString()
+}
+
+function ConvertTo-NativeArgumentString {
+    param([string[]]$Arguments)
+
+    return (($Arguments | ForEach-Object { ConvertTo-NativeArgument -Argument $_ }) -join " ")
+}
+
+function Resolve-RailwayExecutable {
+    $railwayCommand = Get-Command railway -ErrorAction Stop
+    $railwayExecutable = $railwayCommand.Source
+
+    if ([string]::IsNullOrWhiteSpace($railwayExecutable)) {
+        return "railway"
+    }
+
+    if (
+        $railwayExecutable.EndsWith(".ps1", [System.StringComparison]::OrdinalIgnoreCase) -or
+        $railwayExecutable.EndsWith(".cmd", [System.StringComparison]::OrdinalIgnoreCase)
+    ) {
+        $shimDirectory = Split-Path -Parent $railwayExecutable
+        $nativeExecutable = Join-Path $shimDirectory "node_modules\@railway\cli\bin\railway.exe"
+        if (Test-Path -LiteralPath $nativeExecutable) {
+            return $nativeExecutable
+        }
+
+        if ($railwayExecutable.EndsWith(".ps1", [System.StringComparison]::OrdinalIgnoreCase)) {
+            $cmdShim = [System.IO.Path]::ChangeExtension($railwayExecutable, ".cmd")
+            if (Test-Path -LiteralPath $cmdShim) {
+                return $cmdShim
+            }
+        }
+    }
+
+    return $railwayExecutable
+}
+
+function Set-ProcessStartInfoArguments {
+    param(
+        [System.Diagnostics.ProcessStartInfo]$StartInfo,
+        [string[]]$Arguments
+    )
+
+    $argumentListProperty = $StartInfo.PSObject.Properties["ArgumentList"]
+    if ($null -ne $argumentListProperty) {
+        foreach ($argument in $Arguments) {
+            $StartInfo.ArgumentList.Add($argument)
+        }
+
+        return
+    }
+
+    $StartInfo.Arguments = ConvertTo-NativeArgumentString -Arguments $Arguments
+}
+
 function Invoke-RailwayWithInput {
     param(
         [string[]]$Arguments,
@@ -70,14 +173,7 @@ function Invoke-RailwayWithInput {
         [switch]$SuppressSuccessOutput
     )
 
-    $railwayCommand = Get-Command railway -ErrorAction Stop
-    $railwayExecutable = $railwayCommand.Source
-    if ($railwayExecutable.EndsWith(".ps1", [System.StringComparison]::OrdinalIgnoreCase)) {
-        $cmdShim = [System.IO.Path]::ChangeExtension($railwayExecutable, ".cmd")
-        if (Test-Path $cmdShim) {
-            $railwayExecutable = $cmdShim
-        }
-    }
+    $railwayExecutable = Resolve-RailwayExecutable
 
     $credential = New-Object System.Net.NetworkCredential("", $Secret)
     $plainText = $credential.Password
@@ -85,7 +181,8 @@ function Invoke-RailwayWithInput {
     try {
         $startInfo = New-Object System.Diagnostics.ProcessStartInfo
         $startInfo.FileName = $railwayExecutable
-        $startInfo.Arguments = $Arguments -join " "
+        $startInfo.WorkingDirectory = (Get-Location).ProviderPath
+        Set-ProcessStartInfoArguments -StartInfo $startInfo -Arguments $Arguments
         $startInfo.RedirectStandardInput = $true
         $startInfo.RedirectStandardOutput = $true
         $startInfo.RedirectStandardError = $true
@@ -173,8 +270,10 @@ function Confirm-RailwayLogin {
 }
 
 function Confirm-RailwayProject {
-    & railway status | Out-Host
+    $statusOutput = & railway status
+    $statusOutput | Out-Host
     if ($LASTEXITCODE -eq 0) {
+        Set-RailwayDefaultScopeFromStatusOutput -StatusOutput $statusOutput
         return
     }
 
@@ -184,6 +283,22 @@ function Confirm-RailwayProject {
     }
 
     throw "Railway project/service is not linked. Run 'railway link', or pass -Project only for deploy-only runs."
+}
+
+function Set-RailwayDefaultScopeFromStatusOutput {
+    param([string[]]$StatusOutput)
+
+    foreach ($line in $StatusOutput) {
+        if ([string]::IsNullOrWhiteSpace($script:Environment) -and $line -match "^Environment:\s*(?<Value>.+?)\s*$") {
+            $script:Environment = $Matches.Value.Trim()
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($script:Service) -and $line -match "^Service:\s*(?<Value>.+?)\s*$") {
+            $script:Service = $Matches.Value.Trim()
+            continue
+        }
+    }
 }
 
 function Read-RequiredSecureString {

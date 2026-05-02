@@ -6,6 +6,8 @@ param(
 
     [int]$DockerStartupTimeoutSeconds = 120,
 
+    [int]$ReadinessPollSeconds = 10,
+
     [switch]$Build,
 
     [switch]$Pull,
@@ -124,9 +126,9 @@ function Get-DockerComposeServices {
 }
 
 function Get-DockerComposeContainers {
-    $output = & docker compose --project-name $ProjectName ps --format json
+    $output = & docker compose --project-name $ProjectName ps --all --format json
     if ($LASTEXITCODE -ne 0) {
-        throw "docker compose ps --format json failed with exit code $LASTEXITCODE."
+        throw "docker compose ps --all --format json failed with exit code $LASTEXITCODE."
     }
 
     $containers = @()
@@ -200,6 +202,142 @@ function Write-DockerComposeStatus {
     }
 }
 
+function Get-DockerComposeServiceBlockers {
+    param([string[]]$ExpectedServices)
+
+    $containers = @(Get-DockerComposeContainers)
+    $blockers = @()
+
+    foreach ($service in $ExpectedServices) {
+        $serviceContainers = @($containers | Where-Object { $_.Service -eq $service })
+        if ($serviceContainers.Count -eq 0) {
+            $blockers += "$service=missing"
+            continue
+        }
+
+        $runningContainers = @($serviceContainers | Where-Object { $_.State -eq "running" })
+        if ($runningContainers.Count -eq 0) {
+            $latestContainer = $serviceContainers | Select-Object -First 1
+            $blockers += "$service=$($latestContainer.State) ($($latestContainer.Status))"
+            continue
+        }
+
+        $unhealthyContainers = @($runningContainers | Where-Object { $_.Health -eq "unhealthy" })
+        if ($unhealthyContainers.Count -gt 0) {
+            $blockers += "$service=unhealthy ($($unhealthyContainers[0].Status))"
+        }
+    }
+
+    if ($blockers.Count -eq 0) {
+        return "all compose services are running"
+    }
+
+    return ($blockers -join "; ")
+}
+
+function Test-TcpPort {
+    param(
+        [string]$HostName,
+        [int]$Port,
+        [int]$TimeoutMilliseconds = 2000
+    )
+
+    $client = [System.Net.Sockets.TcpClient]::new()
+    try {
+        $connect = $client.BeginConnect($HostName, $Port, $null, $null)
+        if (-not $connect.AsyncWaitHandle.WaitOne($TimeoutMilliseconds, $false)) {
+            return [pscustomobject]@{
+                Ready = $false
+                Detail = "TCP connect timed out"
+            }
+        }
+
+        $client.EndConnect($connect)
+        return [pscustomobject]@{
+            Ready = $true
+            Detail = "TCP connect succeeded"
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Ready = $false
+            Detail = $_.Exception.Message
+        }
+    }
+    finally {
+        $client.Close()
+    }
+}
+
+function Test-HttpEndpoint {
+    param(
+        [string]$Uri,
+        [int]$TimeoutSeconds = 10
+    )
+
+    $previousCertificateCallback = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
+    try {
+        if ($Uri.StartsWith("https://", [System.StringComparison]::OrdinalIgnoreCase)) {
+            [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+        }
+
+        $request = [System.Net.WebRequest]::Create($Uri)
+        $request.Method = "GET"
+        $request.AllowAutoRedirect = $false
+        $request.Timeout = $TimeoutSeconds * 1000
+
+        $response = $request.GetResponse()
+        try {
+            $statusCode = [int]$response.StatusCode
+            $ready = ($statusCode -ge 200 -and $statusCode -lt 400)
+            return [pscustomobject]@{
+                Ready = $ready
+                Detail = "HTTP $statusCode $($response.StatusDescription)"
+            }
+        }
+        finally {
+            $response.Close()
+        }
+    }
+    catch [System.Net.WebException] {
+        $response = $_.Exception.Response
+        if ($null -ne $response) {
+            try {
+                $statusCode = [int]$response.StatusCode
+                return [pscustomobject]@{
+                    Ready = $false
+                    Detail = "HTTP $statusCode $($response.StatusDescription)"
+                }
+            }
+            finally {
+                $response.Close()
+            }
+        }
+
+        return [pscustomobject]@{
+            Ready = $false
+            Detail = $_.Exception.Message
+        }
+    }
+    catch {
+        return [pscustomobject]@{
+            Ready = $false
+            Detail = $_.Exception.Message
+        }
+    }
+    finally {
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCertificateCallback
+    }
+}
+
+function Get-OpenEmrHttpEndpoint {
+    if ($Profile -eq "production") {
+        return "http://localhost/"
+    }
+
+    return "http://localhost:$(Get-PortValue -Name "WT_HTTP_PORT" -DefaultValue "8300")/"
+}
+
 function Set-PortOverride {
     param(
         [string]$Name,
@@ -233,6 +371,85 @@ function Get-OpenEmrHttpsEndpoint {
     return "https://localhost:$(Get-PortValue -Name "WT_HTTPS_PORT" -DefaultValue "9300")/"
 }
 
+function Get-EndpointPort {
+    param([string]$Uri)
+
+    $parsedUri = [System.Uri]$Uri
+    return $parsedUri.Port
+}
+
+function Get-OpenEmrStartupDetail {
+    $openEmrContainer = @(Get-DockerComposeContainers | Where-Object { $_.Service -eq "openemr" } | Select-Object -First 1)
+    if ($openEmrContainer.Count -eq 0) {
+        return "openemr container is missing"
+    }
+
+    $details = @("openemr container: state=$($openEmrContainer[0].State), health=$($openEmrContainer[0].Health), status=$($openEmrContainer[0].Status)")
+    if ($openEmrContainer[0].State -ne "running") {
+        return ($details -join "; ")
+    }
+
+    $processes = & docker compose --project-name $ProjectName exec -T openemr ps aux 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        $details += "unable to inspect openemr processes"
+        return ($details -join "; ")
+    }
+
+    $processText = ($processes -join "`n")
+    if ($processText -match "rsync .* /openemr ") {
+        $details += "startup is still copying the mounted checkout with rsync"
+    }
+    elseif ($processText -match "httpd|apache2") {
+        $details += "Apache appears to be running"
+    }
+    else {
+        $details += "Apache has not appeared in the process list yet"
+    }
+
+    return ($details -join "; ")
+}
+
+function Wait-OpenEmrEndpoints {
+    param(
+        [string]$HttpEndpoint,
+        [string]$HttpsEndpoint,
+        [string[]]$ExpectedServices,
+        [int]$PollSeconds
+    )
+
+    Write-Host ""
+    Write-Host "Waiting for OpenEMR HTTP and HTTPS endpoints to serve normally..."
+
+    while ($true) {
+        $httpPort = Get-EndpointPort -Uri $HttpEndpoint
+        $httpsPort = Get-EndpointPort -Uri $HttpsEndpoint
+
+        $httpTcp = Test-TcpPort -HostName "localhost" -Port $httpPort
+        $httpsTcp = Test-TcpPort -HostName "localhost" -Port $httpsPort
+
+        $httpProbe = if ($httpTcp.Ready) { Test-HttpEndpoint -Uri $HttpEndpoint } else { [pscustomobject]@{ Ready = $false; Detail = "not attempted because TCP is unavailable" } }
+        $httpsProbe = if ($httpsTcp.Ready) { Test-HttpEndpoint -Uri $HttpsEndpoint } else { [pscustomobject]@{ Ready = $false; Detail = "not attempted because TCP is unavailable" } }
+
+        if ($httpProbe.Ready -and $httpsProbe.Ready) {
+            Write-Host "OpenEMR endpoints are ready."
+            Write-Host "HTTP:  $HttpEndpoint ($($httpProbe.Detail))"
+            Write-Host "HTTPS: $HttpsEndpoint ($($httpsProbe.Detail))"
+            return
+        }
+
+        Write-Host ""
+        Write-Host "OpenEMR is not ready yet. Next check in $PollSeconds seconds."
+        Write-Host "HTTP port $httpPort TCP:  $($httpTcp.Detail)"
+        Write-Host "HTTP endpoint:       $($httpProbe.Detail)"
+        Write-Host "HTTPS port $httpsPort TCP: $($httpsTcp.Detail)"
+        Write-Host "HTTPS endpoint:      $($httpsProbe.Detail)"
+        Write-Host "Compose services:    $(Get-DockerComposeServiceBlockers -ExpectedServices $ExpectedServices)"
+        Write-Host "Blocker: $(Get-OpenEmrStartupDetail)"
+
+        Start-Sleep -Seconds $PollSeconds
+    }
+}
+
 Confirm-DockerCompose
 
 Set-PortOverride -Name "WT_HTTP_PORT" -Value $HttpPort
@@ -263,6 +480,8 @@ if ($Pull) {
 Push-Location (Join-Path $repoRoot $composeDirectory)
 try {
     Write-Host "Using compose profile: $composeDirectory"
+    $httpEndpoint = Get-OpenEmrHttpEndpoint
+    $httpsEndpoint = Get-OpenEmrHttpsEndpoint
     $expectedServices = Get-DockerComposeServices
     $containers = @(Get-DockerComposeContainers)
     $stackRunning = Test-DockerComposeStackRunning -ExpectedServices $expectedServices -Containers $containers
@@ -272,7 +491,10 @@ try {
         Write-DockerComposeStatus -ExpectedServices $expectedServices -Containers $containers | Format-Table -AutoSize
 
         if (-not $Restart) {
-            Write-Host "No changes made. Use -Restart to stop and start the running stack."
+            Write-Host "No stack changes made. Use -Restart to stop and start the running stack."
+            if (-not $Foreground) {
+                Wait-OpenEmrEndpoints -HttpEndpoint $httpEndpoint -HttpsEndpoint $httpsEndpoint -ExpectedServices $expectedServices -PollSeconds $ReadinessPollSeconds
+            }
             return
         }
 
@@ -283,17 +505,15 @@ try {
     Invoke-DockerCompose -ComposeArguments $upArguments
 
     if (-not $Foreground) {
-        $httpsEndpoint = Get-OpenEmrHttpsEndpoint
-
         Write-Host ""
         Write-Host "OpenEMR is starting in the background."
 
         if ($Profile -eq "production") {
-            Write-Host "OpenEMR HTTP:  http://localhost/"
+            Write-Host "OpenEMR HTTP:  $httpEndpoint"
             Write-Host "OpenEMR HTTPS: $httpsEndpoint"
         }
         else {
-            Write-Host "OpenEMR HTTP:  http://localhost:$(Get-PortValue -Name "WT_HTTP_PORT" -DefaultValue "8300")/"
+            Write-Host "OpenEMR HTTP:  $httpEndpoint"
             Write-Host "OpenEMR HTTPS: $httpsEndpoint"
         }
 
@@ -303,6 +523,8 @@ try {
             Write-Host "phpMyAdmin:    http://localhost:$(Get-PortValue -Name "WT_PMA_PORT" -DefaultValue "8310")/"
             Write-Host "MySQL:         localhost:$(Get-PortValue -Name "WT_MYSQL_PORT" -DefaultValue "8320")"
         }
+
+        Wait-OpenEmrEndpoints -HttpEndpoint $httpEndpoint -HttpsEndpoint $httpsEndpoint -ExpectedServices $expectedServices -PollSeconds $ReadinessPollSeconds
 
         Write-Host "Opening HTTPS endpoint in the default browser..."
         Start-Process -FilePath $httpsEndpoint

@@ -41,6 +41,22 @@ class AgentAnswerVerifierTest extends TestCase
         $this->assertTrue($result->passed());
     }
 
+    public function testAcceptsMedicationSourceStartDateField(): void
+    {
+        $answer = $this->supportedAnswer();
+        $answer['answer_blocks'][0]['claims'][0]['text'] =
+            'Source medication from 2026-05-01 22:35:32 (active): '
+            . 'medication: Metformin; status: active; start date: 2026-05-01';
+
+        $packet = $this->packet();
+        $packet['sources'][0]['display'] = 'medication: Metformin; status: active; start date: 2026-05-01';
+        $packet['sources'][0]['excerpt'] = 'medication: Metformin; status: active; start date: 2026-05-01';
+
+        $result = (new AgentAnswerVerifier())->verify($answer, $this->accessToken(), $packet);
+
+        $this->assertTrue($result->passed(), implode(' ', $result->errors()));
+    }
+
     public function testRejectsFabricatedCitationIds(): void
     {
         $answer = $this->supportedAnswer();

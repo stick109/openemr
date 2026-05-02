@@ -351,7 +351,7 @@ final class AgentAnswerVerifier
     private function containsOutOfScopeAdvice(string $text): bool
     {
         return preg_match(
-            '/\b(should|recommend|recommended|consider|start|stop|increase|decrease|prescribe|diagnose|treat|bill|billing code|place an order|order a)\b/i',
+            '/\b(should|recommend|recommended|consider|stop|increase|decrease|prescribe|diagnose|treat|bill|billing code|place an order|order a)\b/i',
             $text
         ) === 1;
     }

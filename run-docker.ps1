@@ -12,6 +12,8 @@ param(
 
     [switch]$Foreground,
 
+    [switch]$Restart,
+
     [string]$HttpPort,
 
     [string]$HttpsPort,
@@ -112,6 +114,92 @@ function Invoke-DockerCompose {
     }
 }
 
+function Get-DockerComposeServices {
+    $output = & docker compose --project-name $ProjectName config --services
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose config --services failed with exit code $LASTEXITCODE."
+    }
+
+    return @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Get-DockerComposeContainers {
+    $output = & docker compose --project-name $ProjectName ps --format json
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose ps --format json failed with exit code $LASTEXITCODE."
+    }
+
+    $containers = @()
+    foreach ($line in @($output)) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+            continue
+        }
+
+        $containers += ($line | ConvertFrom-Json)
+    }
+
+    return $containers
+}
+
+function Test-DockerComposeStackRunning {
+    param(
+        [string[]]$ExpectedServices,
+        [object[]]$Containers
+    )
+
+    if ($ExpectedServices.Count -eq 0 -or $Containers.Count -eq 0) {
+        return $false
+    }
+
+    foreach ($service in $ExpectedServices) {
+        $matchingContainers = @($Containers | Where-Object { $_.Service -eq $service })
+        if ($matchingContainers.Count -eq 0) {
+            return $false
+        }
+
+        $runningContainers = @($matchingContainers | Where-Object { $_.State -eq "running" })
+        if ($runningContainers.Count -eq 0) {
+            return $false
+        }
+    }
+
+    return $true
+}
+
+function Write-DockerComposeStatus {
+    param(
+        [string[]]$ExpectedServices,
+        [object[]]$Containers
+    )
+
+    if ($Containers.Count -eq 0) {
+        Write-Host "No containers found for compose project '$ProjectName'."
+        return
+    }
+
+    foreach ($service in $ExpectedServices) {
+        $serviceContainers = @($Containers | Where-Object { $_.Service -eq $service })
+        if ($serviceContainers.Count -eq 0) {
+            [pscustomobject]@{
+                Service = $service
+                State = "missing"
+                Health = ""
+                Status = ""
+            }
+            continue
+        }
+
+        foreach ($container in $serviceContainers) {
+            [pscustomobject]@{
+                Service = $container.Service
+                State = $container.State
+                Health = $container.Health
+                Status = $container.Status
+            }
+        }
+    }
+}
+
 function Set-PortOverride {
     param(
         [string]$Name,
@@ -175,6 +263,23 @@ if ($Pull) {
 Push-Location (Join-Path $repoRoot $composeDirectory)
 try {
     Write-Host "Using compose profile: $composeDirectory"
+    $expectedServices = Get-DockerComposeServices
+    $containers = @(Get-DockerComposeContainers)
+    $stackRunning = Test-DockerComposeStackRunning -ExpectedServices $expectedServices -Containers $containers
+
+    if ($stackRunning) {
+        Write-Host "Compose stack '$ProjectName' is already running."
+        Write-DockerComposeStatus -ExpectedServices $expectedServices -Containers $containers | Format-Table -AutoSize
+
+        if (-not $Restart) {
+            Write-Host "No changes made. Use -Restart to stop and start the running stack."
+            return
+        }
+
+        Write-Host "Restart requested. Stopping running stack..."
+        Invoke-DockerCompose -ComposeArguments @("stop")
+    }
+
     Invoke-DockerCompose -ComposeArguments $upArguments
 
     if (-not $Foreground) {

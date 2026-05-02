@@ -1,6 +1,6 @@
 # Environment Notes
 
-Last verified: 2026-05-01
+Last verified: 2026-05-02
 
 ## Current State
 
@@ -39,6 +39,7 @@ The Redis extension is a manually installed PECL DLL. If PHP is upgraded, replac
 
 ## Docker Notes
 
+- 2026-05-02: Symptom: `.\run-docker.ps1` can fail with `open //./pipe/dockerDesktopLinuxEngine: The system cannot find the file specified` even though `docker compose version` works. Likely cause: Docker CLI and Compose are installed, but Docker Desktop and its Linux engine are not running. Workaround: `run-docker.ps1` now tries to start Docker Desktop from the standard install paths and waits for the daemon; if it still times out, wait for Docker Desktop to finish starting and rerun the script. Follow-up: if Docker Desktop is installed in a nonstandard location, start it manually before using the wrapper.
 - For forced recreates of the OpenEMR easy-dev containers, allow a 5-6 minute health wait before treating startup as failed.
 - Prefer `http://localhost:8300/...` for local OpenEMR health checks unless the HTTPS path itself is under test.
 - 2026-05-01: Symptom: after copying a development OpenEMR database into Railway production, `/meta/health/readyz` can return `OpenEMR Error: Key in drive is not compatible...` even though the SQL import succeeded. Likely cause: OpenEMR crypto has database keys in the `keys` table and drive keys under `sites\default\documents\logs_and_misc\methods`; replacing only the database can mismatch those keys with the existing Railway `sites` volume. Workaround: either copy the matching development drive key files into the production `sites` volume, or keep/restore the production `keys` table from the pre-import backup so it remains compatible with the existing production volume. Follow-up: for future full environment clones, plan database and `sites` volume migration together.

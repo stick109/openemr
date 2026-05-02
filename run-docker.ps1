@@ -4,6 +4,8 @@ param(
 
     [string]$ProjectName = "openemr",
 
+    [int]$DockerStartupTimeoutSeconds = 120,
+
     [switch]$Build,
 
     [switch]$Pull,
@@ -21,6 +23,49 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Test-DockerDaemon {
+    $ErrorActionPreference = "Continue"
+    try {
+        & docker info 1>$null 2>$null
+        return ($LASTEXITCODE -eq 0)
+    }
+    catch {
+        return $false
+    }
+}
+
+function Start-DockerDesktop {
+    $candidates = @(
+        (Join-Path $env:ProgramFiles "Docker\Docker\Docker Desktop.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "Docker\Docker\Docker Desktop.exe"),
+        (Join-Path $env:LocalAppData "Docker\Docker Desktop.exe")
+    )
+
+    $dockerDesktop = $candidates | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) } | Select-Object -First 1
+    if ($null -eq $dockerDesktop) {
+        return $false
+    }
+
+    Write-Host "Docker daemon is not running. Starting Docker Desktop..."
+    Start-Process -FilePath $dockerDesktop
+    return $true
+}
+
+function Wait-DockerDaemon {
+    param([int]$TimeoutSeconds)
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-DockerDaemon) {
+            return $true
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    return $false
+}
+
 function Confirm-DockerCompose {
     if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
         throw "Docker CLI was not found. Install Docker Desktop, then run this script again."
@@ -30,6 +75,22 @@ function Confirm-DockerCompose {
     if ($LASTEXITCODE -ne 0) {
         throw "Docker Compose v2 was not found. Install or enable the Docker Compose plugin, then run this script again."
     }
+
+    if (Test-DockerDaemon) {
+        return
+    }
+
+    $startedDockerDesktop = Start-DockerDesktop
+    if ($startedDockerDesktop) {
+        Write-Host "Waiting up to $DockerStartupTimeoutSeconds seconds for Docker Desktop..."
+        if (Wait-DockerDaemon -TimeoutSeconds $DockerStartupTimeoutSeconds) {
+            return
+        }
+
+        throw "Docker Desktop was started, but the Docker daemon was not ready after $DockerStartupTimeoutSeconds seconds. Wait for Docker Desktop to finish starting, then run this script again."
+    }
+
+    throw "Docker CLI is installed, but the Docker daemon is not running. Start Docker Desktop, then run this script again."
 }
 
 function Get-ComposeDirectory {

@@ -1,11 +1,16 @@
 # generate-lab-pdf.ps1 — synthetic lab PDF generator
 #
-# Generates a realistic-looking lab report PDF for the given patient by calling
-# OpenAI for the report content (Structured Outputs) and rendering via OpenEMR's
-# bundled mPDF inside the running 'openemr' container.
+# Generates a realistic-looking lab report PDF for the given patient and
+# renders it via OpenEMR's bundled mPDF inside the running 'openemr' container.
 #
-# PII contract: only patient INITIALS, AGE, and SEX are sent to OpenAI.
-# Full names, DOB-as-date, address, phone, and SSN never leave the host.
+# Two modes:
+#   Default — content from OpenAI Structured Outputs (most realistic, varied).
+#             PII contract: only patient INITIALS, AGE, and SEX leave the host.
+#             Requires OPENAI_API_KEY (env var or .env at repo root).
+#   -Offline — content from hard-coded panel templates (CBC, BMP, CMP, Lipid,
+#              A1c, TSH) with values drawn from realistic adult reference
+#              ranges. No network calls, no API key required.
+#              Pass -Seed N for reproducible output.
 #
 # The PDF is saved to disk only — it is NOT inserted into the OpenEMR documents
 # or procedure_* tables.
@@ -16,7 +21,8 @@ param(
     [string]$Panel,
     [string]$Model = "gpt-4o-mini",
     [string]$OutFile,
-    [int]$Seed
+    [int]$Seed,
+    [switch]$Offline
 )
 
 $ErrorActionPreference = "Stop"
@@ -151,6 +157,228 @@ WHERE pid = $PatientPid;
         Age       = $age
     }
 }
+
+# --- Offline mode: panel templates and report generator ---
+#
+# Each test entry: Name, Loinc, Units, Low, High (adult reference range), Decimals.
+# Reference ranges are unified across sex; pediatric patients may show abnormal flags
+# that wouldn't be flagged by an age-aware lab — fine for synthetic demo data.
+
+$Panels = @{
+    "CBC"   = @{
+        Name       = "Complete Blood Count"
+        LoincPanel = "58410-2"
+        Specimen   = "Whole blood"
+        Tests      = @(
+            @{ Name = "WBC"; Loinc = "6690-2"; Units = "10*3/uL"; Low = 4.0; High = 11.0; Decimals = 1 }
+            @{ Name = "RBC"; Loinc = "789-8"; Units = "10*6/uL"; Low = 4.2; High = 5.9; Decimals = 2 }
+            @{ Name = "Hemoglobin"; Loinc = "718-7"; Units = "g/dL"; Low = 12.0; High = 17.5; Decimals = 1 }
+            @{ Name = "Hematocrit"; Loinc = "4544-3"; Units = "%"; Low = 36.0; High = 52.0; Decimals = 1 }
+            @{ Name = "Platelets"; Loinc = "777-3"; Units = "10*3/uL"; Low = 150; High = 400; Decimals = 0 }
+            @{ Name = "MCV"; Loinc = "787-2"; Units = "fL"; Low = 80.0; High = 100.0; Decimals = 1 }
+            @{ Name = "MCH"; Loinc = "785-6"; Units = "pg"; Low = 27.0; High = 33.0; Decimals = 1 }
+            @{ Name = "MCHC"; Loinc = "786-4"; Units = "g/dL"; Low = 32.0; High = 36.0; Decimals = 1 }
+        )
+    }
+    "BMP"   = @{
+        Name       = "Basic Metabolic Panel"
+        LoincPanel = "51990-0"
+        Specimen   = "Serum"
+        Tests      = @(
+            @{ Name = "Sodium"; Loinc = "2951-2"; Units = "mmol/L"; Low = 136; High = 145; Decimals = 0 }
+            @{ Name = "Potassium"; Loinc = "2823-3"; Units = "mmol/L"; Low = 3.5; High = 5.1; Decimals = 1 }
+            @{ Name = "Chloride"; Loinc = "2075-0"; Units = "mmol/L"; Low = 98; High = 107; Decimals = 0 }
+            @{ Name = "CO2"; Loinc = "2028-9"; Units = "mmol/L"; Low = 22; High = 29; Decimals = 0 }
+            @{ Name = "BUN"; Loinc = "3094-0"; Units = "mg/dL"; Low = 7; High = 20; Decimals = 0 }
+            @{ Name = "Creatinine"; Loinc = "2160-0"; Units = "mg/dL"; Low = 0.6; High = 1.3; Decimals = 2 }
+            @{ Name = "Glucose"; Loinc = "2345-7"; Units = "mg/dL"; Low = 70; High = 99; Decimals = 0 }
+            @{ Name = "Calcium"; Loinc = "17861-6"; Units = "mg/dL"; Low = 8.6; High = 10.2; Decimals = 1 }
+        )
+    }
+    "CMP"   = @{
+        Name       = "Comprehensive Metabolic Panel"
+        LoincPanel = "24323-8"
+        Specimen   = "Serum"
+        Tests      = @(
+            @{ Name = "Sodium"; Loinc = "2951-2"; Units = "mmol/L"; Low = 136; High = 145; Decimals = 0 }
+            @{ Name = "Potassium"; Loinc = "2823-3"; Units = "mmol/L"; Low = 3.5; High = 5.1; Decimals = 1 }
+            @{ Name = "Chloride"; Loinc = "2075-0"; Units = "mmol/L"; Low = 98; High = 107; Decimals = 0 }
+            @{ Name = "CO2"; Loinc = "2028-9"; Units = "mmol/L"; Low = 22; High = 29; Decimals = 0 }
+            @{ Name = "BUN"; Loinc = "3094-0"; Units = "mg/dL"; Low = 7; High = 20; Decimals = 0 }
+            @{ Name = "Creatinine"; Loinc = "2160-0"; Units = "mg/dL"; Low = 0.6; High = 1.3; Decimals = 2 }
+            @{ Name = "Glucose"; Loinc = "2345-7"; Units = "mg/dL"; Low = 70; High = 99; Decimals = 0 }
+            @{ Name = "Calcium"; Loinc = "17861-6"; Units = "mg/dL"; Low = 8.6; High = 10.2; Decimals = 1 }
+            @{ Name = "Total Protein"; Loinc = "2885-2"; Units = "g/dL"; Low = 6.0; High = 8.3; Decimals = 1 }
+            @{ Name = "Albumin"; Loinc = "1751-7"; Units = "g/dL"; Low = 3.5; High = 5.0; Decimals = 1 }
+            @{ Name = "Total Bilirubin"; Loinc = "1975-2"; Units = "mg/dL"; Low = 0.1; High = 1.2; Decimals = 1 }
+            @{ Name = "Alkaline Phosphatase"; Loinc = "6768-6"; Units = "U/L"; Low = 44; High = 147; Decimals = 0 }
+            @{ Name = "ALT"; Loinc = "1742-6"; Units = "U/L"; Low = 7; High = 56; Decimals = 0 }
+            @{ Name = "AST"; Loinc = "1920-8"; Units = "U/L"; Low = 10; High = 40; Decimals = 0 }
+        )
+    }
+    "Lipid" = @{
+        Name       = "Lipid Panel"
+        LoincPanel = "57698-3"
+        Specimen   = "Serum"
+        Tests      = @(
+            @{ Name = "Total Cholesterol"; Loinc = "2093-3"; Units = "mg/dL"; Low = 100; High = 199; Decimals = 0 }
+            @{ Name = "Triglycerides"; Loinc = "2571-8"; Units = "mg/dL"; Low = 30; High = 149; Decimals = 0 }
+            @{ Name = "HDL Cholesterol"; Loinc = "2085-9"; Units = "mg/dL"; Low = 40; High = 100; Decimals = 0 }
+            @{ Name = "LDL Cholesterol"; Loinc = "13457-7"; Units = "mg/dL"; Low = 0; High = 99; Decimals = 0 }
+        )
+    }
+    "A1c"   = @{
+        Name       = "Hemoglobin A1c"
+        LoincPanel = "4548-4"
+        Specimen   = "Whole blood"
+        Tests      = @(
+            @{ Name = "Hemoglobin A1c"; Loinc = "4548-4"; Units = "%"; Low = 4.0; High = 5.6; Decimals = 1 }
+        )
+    }
+    "TSH"   = @{
+        Name       = "Thyroid Stimulating Hormone"
+        LoincPanel = "11580-8"
+        Specimen   = "Serum"
+        Tests      = @(
+            @{ Name = "TSH"; Loinc = "3016-3"; Units = "mIU/L"; Low = 0.4; High = 4.5; Decimals = 2 }
+        )
+    }
+}
+
+$PerformingLabs = @(
+    @{ Name = "Demoware Clinical Laboratories"; CliaId = "12D9876543"; Director = "Dr. Demo Director, MD"; Address = "100 Lab Way, Demo City, CA 90210" }
+    @{ Name = "Synthetic Pathology Services"; CliaId = "09D7654321"; Director = "Dr. Pat Synth, MD, PhD"; Address = "500 Beaker Blvd, Reagent City, TX 77001" }
+    @{ Name = "Sample Diagnostics, Inc."; CliaId = "05D1234567"; Director = "Dr. Sam Sample, MD"; Address = "200 Test Plaza, Sample Town, NY 10001" }
+    @{ Name = "Mockingbird Reference Lab"; CliaId = "33D5551212"; Director = "Dr. Quinn Mockler, MD"; Address = "42 Cytology Ct, Specimen IL 60601" }
+)
+
+function New-LabReport {
+    param(
+        [Parameter(Mandatory)]$Patient,
+        [string]$PanelKey,
+        [Parameter(Mandatory)][System.Random]$Rng
+    )
+
+    if (-not [string]::IsNullOrWhiteSpace($PanelKey)) {
+        if (-not $Panels.ContainsKey($PanelKey)) {
+            $validKeys = ($Panels.Keys | Sort-Object) -join ", "
+            throw "Unknown panel '$PanelKey' for offline mode. Valid keys: $validKeys"
+        }
+    }
+    else {
+        $sortedKeys = @($Panels.Keys | Sort-Object)
+        $PanelKey = $sortedKeys[$Rng.Next(0, $sortedKeys.Count)]
+    }
+    $template = $Panels[$PanelKey]
+    $tests = $template.Tests
+
+    # Pick 1-2 tests to be intentionally abnormal so the demo shows realistic flagging.
+    $abnormalCount = $Rng.Next(1, 3)
+    if ($tests.Count -eq 1) { $abnormalCount = 1 }
+    $abnormalIndices = New-Object System.Collections.Generic.HashSet[int]
+    while ($abnormalIndices.Count -lt $abnormalCount) {
+        [void]$abnormalIndices.Add($Rng.Next(0, $tests.Count))
+    }
+
+    $results = for ($i = 0; $i -lt $tests.Count; $i++) {
+        $t = $tests[$i]
+        $low = [double]$t.Low
+        $high = [double]$t.High
+        $range = $high - $low
+        $decimals = [int]$t.Decimals
+        $forceAbnormal = $abnormalIndices.Contains($i)
+
+        if ($forceAbnormal) {
+            $delta = $range * (0.10 + $Rng.NextDouble() * 0.30)
+            $value = if ($Rng.Next(0, 2) -eq 0) { $low - $delta } else { $high + $delta }
+            if ($value -lt 0 -and $low -ge 0) { $value = [math]::Max(0, $low * 0.5) }
+        }
+        else {
+            $center = ($low + $high) / 2.0
+            $jitter = $range * 0.30
+            $value = $center + ($Rng.NextDouble() * 2 - 1) * $jitter
+            if ($value -lt $low) { $value = $low + $range * 0.05 }
+            if ($value -gt $high) { $value = $high - $range * 0.05 }
+        }
+
+        $rounded = [math]::Round($value, $decimals)
+        $invariant = [Globalization.CultureInfo]::InvariantCulture
+        $valueText = $rounded.ToString("F$decimals", $invariant)
+
+        $flag = ""
+        if ($rounded -lt $low) { $flag = "L" }
+        elseif ($rounded -gt $high) { $flag = "H" }
+        if ($flag -eq "L" -and ($low - $rounded) -gt $range * 0.5) { $flag = "LL" }
+        if ($flag -eq "H" -and ($rounded - $high) -gt $range * 0.5) { $flag = "HH" }
+
+        $rangeFmt = "F$decimals"
+        $rangeText = "$($low.ToString($rangeFmt, $invariant)) - $($high.ToString($rangeFmt, $invariant))"
+
+        $comment = ""
+        if ($flag -eq "H" -or $flag -eq "HH") {
+            $comment = "Above reference range. Recommend clinical correlation."
+        }
+        elseif ($flag -eq "L" -or $flag -eq "LL") {
+            $comment = "Below reference range. Recommend clinical correlation."
+        }
+
+        [pscustomobject]@{
+            testName = $t.Name
+            loinc    = $t.Loinc
+            value    = $valueText
+            units    = $t.Units
+            refRange = $rangeText
+            flag     = $flag
+            status   = "final"
+            comment  = $comment
+        }
+    }
+
+    $abnormalDescriptions = @(
+        $results | Where-Object { -not [string]::IsNullOrWhiteSpace($_.flag) } | ForEach-Object {
+            $direction = switch -Regex ($_.flag) {
+                'HH' { "markedly elevated" }
+                'LL' { "markedly decreased" }
+                'H' { "elevated" }
+                'L' { "decreased" }
+                default { "abnormal" }
+            }
+            "$($_.testName) $direction"
+        }
+    )
+
+    if ($abnormalDescriptions.Count -eq 0) {
+        $narrative = "All values within reference range. No clinically significant findings on this $($template.Name)."
+    }
+    else {
+        $narrative = "$($template.Name) shows: $($abnormalDescriptions -join '; '). Recommend clinical correlation and follow-up testing as indicated."
+    }
+
+    $lab = $PerformingLabs[$Rng.Next(0, $PerformingLabs.Count)]
+    $collectedHoursAgo = $Rng.Next(20, 48)
+    $reportedHoursAgo = $Rng.Next(0, [math]::Max(1, $collectedHoursAgo - 4))
+    $collected = (Get-Date).AddHours(-$collectedHoursAgo)
+    $reported = (Get-Date).AddHours(-$reportedHoursAgo)
+    $isoFormat = "yyyy-MM-ddTHH:mm:ss"
+
+    return [pscustomobject]@{
+        panelName     = $template.Name
+        loincPanel    = $template.LoincPanel
+        specimen      = $template.Specimen
+        collectedAt   = $collected.ToString($isoFormat)
+        reportedAt    = $reported.ToString($isoFormat)
+        performingLab = [pscustomobject]@{
+            name     = $lab.Name
+            cliaId   = $lab.CliaId
+            director = $lab.Director
+            address  = $lab.Address
+        }
+        results       = @($results)
+        narrative     = $narrative
+    }
+}
+
+# --- LLM mode: OpenAI Structured Outputs ---
 
 function Invoke-OpenAILabReport {
     param(
@@ -471,7 +699,9 @@ $pdf->Output($argv[2], \Mpdf\Output\Destination::FILE);
 Confirm-DockerCompose
 Confirm-MysqlContainerRunning
 Confirm-OpenemrContainerRunning
-Confirm-OpenAIKey
+if (-not $Offline) {
+    Confirm-OpenAIKey
+}
 
 Write-Host "Fetching demographics for patient pid=$PatientId..."
 $patient = Get-PatientDemographics -PatientPid $PatientId
@@ -482,17 +712,33 @@ if ([string]::IsNullOrWhiteSpace($OutFile)) {
         New-Item -ItemType Directory -Path $reportsDir -Force | Out-Null
     }
     $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-    $OutFile = Join-Path $reportsDir "lab-$($patient.Pid)-$timestamp.pdf"
+    $suffix = if ($Offline) { "-offline" } else { "" }
+    $OutFile = Join-Path $reportsDir "lab-$($patient.Pid)-$timestamp$suffix.pdf"
 }
 
-Write-Host "Calling OpenAI ($Model) for synthetic lab report..."
-$report = Invoke-OpenAILabReport `
-    -Initials $patient.Initials `
-    -Age $patient.Age `
-    -Sex $patient.Sex `
-    -PanelOverride $Panel `
-    -SeedHint $Seed `
-    -ModelName $Model
+if ($Offline) {
+    if ($PSBoundParameters.ContainsKey('Seed')) {
+        $rngSeed = $Seed
+    }
+    else {
+        $rngSeed = Get-Random -Minimum 1 -Maximum 1000000
+    }
+    $rng = [System.Random]::new($rngSeed)
+
+    $panelLabel = if ([string]::IsNullOrWhiteSpace($Panel)) { "(random panel)" } else { $Panel }
+    Write-Host "Generating synthetic $panelLabel report (offline mode, seed $rngSeed)..."
+    $report = New-LabReport -Patient $patient -PanelKey $Panel -Rng $rng
+}
+else {
+    Write-Host "Calling OpenAI ($Model) for synthetic lab report..."
+    $report = Invoke-OpenAILabReport `
+        -Initials $patient.Initials `
+        -Age $patient.Age `
+        -Sex $patient.Sex `
+        -PanelOverride $Panel `
+        -SeedHint $Seed `
+        -ModelName $Model
+}
 
 Write-Host "Building HTML and rendering via mPDF inside the openemr container..."
 $html = Format-LabHtml -Patient $patient -Report $report
@@ -506,3 +752,6 @@ Write-Host "  File:     $OutFile"
 Write-Host "  Patient:  $($patient.FullName) (pid $($patient.Pid))"
 Write-Host "  Panel:    $($report.panelName)"
 Write-Host "  Results:  $(@($report.results).Count) total, $abnormalCount abnormal"
+if ($Offline) {
+    Write-Host "  Seed:     $rngSeed (use -Seed $rngSeed to reproduce)"
+}

@@ -112,3 +112,33 @@
 --  #IfMBOEncounterNeeded
 --    desc: Add encounter to the form_misc_billing_options table
 --    arguments: none
+
+--
+-- Upload Intake Form encounter form (intake-forms-plan.md §3.2, §3.3, §3.8)
+-- Provides a per-encounter PDF intake-form upload UI under the Administrative menu.
+--
+
+#IfNotTable form_upload_intake_form
+CREATE TABLE `form_upload_intake_form` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `pid` BIGINT NOT NULL,
+  `encounter` BIGINT NOT NULL,
+  `form_type` ENUM('Demographics','MedicalHistory','Consent') NOT NULL,
+  `document_id` INT NULL,
+  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_encounter` (`encounter`),
+  KEY `idx_pid` (`pid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+#EndIf
+
+#IfNotRow2D registry directory upload_intake_form name Upload Intake Form
+INSERT INTO `registry`
+  (`name`, `state`, `directory`, `sql_run`, `unpackaged`, `date`, `priority`,
+   `category`, `nickname`, `patient_encounter`, `therapy_group_encounter`,
+   `aco_spec`, `form_foreign_id`)
+VALUES
+  ('Upload Intake Form', 1, 'upload_intake_form', 1, 1, NOW(), 0,
+   'Administrative', '', 1, 0, 'admin|super', NULL);
+#EndIf
+

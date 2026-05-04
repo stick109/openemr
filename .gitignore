@@ -1,6 +1,9 @@
 # logs
 /logs
 
+# generated synthetic lab PDFs (output of generate-lab-pdf.ps1)
+/lab-reports/
+
 # environment vars
 .env
 

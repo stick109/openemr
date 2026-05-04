@@ -4,6 +4,9 @@
 # generated synthetic lab PDFs (output of generate-lab-pdf.ps1)
 /lab-reports/
 
+# generated synthetic intake-form PDFs (output of generate-intake-form.ps1)
+/intake-forms/
+
 # environment vars
 .env
 

@@ -14345,7 +14345,7 @@ CREATE TABLE `questionnaire_response` (
   `questionnaire_id` varchar(255) DEFAULT NULL COMMENT 'Id for questionnaire content. String version of UUID',
   `questionnaire_name` varchar(255) DEFAULT NULL,
   `patient_id` int(11) DEFAULT NULL,
-  `encounter` int(11) DEFAULT NULL COMMENT 'May or may not be associated with an encounter',
+  `encounter` bigint(20) DEFAULT NULL COMMENT 'May or may not be associated with an encounter',
   `audit_user_id` int(11) DEFAULT NULL,
   `creator_user_id` int(11) DEFAULT NULL COMMENT 'user id if answers are provider',
   `create_time` datetime DEFAULT current_timestamp(),

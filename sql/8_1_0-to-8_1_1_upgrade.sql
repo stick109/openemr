@@ -114,6 +114,17 @@
 --    arguments: none
 
 --
+-- Widen questionnaire_response.encounter to BIGINT.
+-- int(11) silently overflows for OpenEMR's modern bigint encounter ids
+-- (e.g. 900100000006 saturates to 2147483647). Match forms.encounter and
+-- form_encounter.encounter which already use bigint(20).
+--
+
+#IfNotColumnType questionnaire_response encounter bigint
+ALTER TABLE `questionnaire_response` MODIFY `encounter` BIGINT DEFAULT NULL COMMENT 'May or may not be associated with an encounter';
+#EndIf
+
+--
 -- Upload Intake Form encounter form (intake-forms-plan.md §3.2, §3.3, §3.8)
 -- Provides a per-encounter PDF intake-form upload UI under the Administrative menu.
 --

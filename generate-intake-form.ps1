@@ -864,18 +864,28 @@ $pdf->Output($argv[2], \Mpdf\Output\Destination::FILE);
     [IO.File]::WriteAllText($hostPhp, $phpShim, $utf8NoBom)
 
     try {
-        & docker compose --project-name $ProjectName cp $hostHtml "openemr:$htmlInContainer" | Out-Null
+        # `docker compose cp` writes "Copying ..." progress to stderr. Under
+        # Windows PowerShell 5.1 with $ErrorActionPreference='Stop', a native
+        # command's stderr is wrapped in an ErrorRecord and aborts the script
+        # *before* a `2>$null` redirect would suppress it. Lower the preference
+        # locally so $LASTEXITCODE governs success instead of stderr noise.
+        $previousEAP = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
+
+        & docker compose --project-name $ProjectName cp $hostHtml "openemr:$htmlInContainer" 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "docker compose cp (html in) failed with exit code $LASTEXITCODE." }
 
-        & docker compose --project-name $ProjectName cp $hostPhp "openemr:$phpInContainer" | Out-Null
+        & docker compose --project-name $ProjectName cp $hostPhp "openemr:$phpInContainer" 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "docker compose cp (php in) failed with exit code $LASTEXITCODE." }
 
         & docker compose --project-name $ProjectName exec -T openemr `
             sh -c "mkdir -p /tmp/mpdf && php $phpInContainer $htmlInContainer $pdfInContainer"
         if ($LASTEXITCODE -ne 0) { throw "mPDF rendering failed with exit code $LASTEXITCODE." }
 
-        & docker compose --project-name $ProjectName cp "openemr:$pdfInContainer" $OutputPath | Out-Null
+        & docker compose --project-name $ProjectName cp "openemr:$pdfInContainer" $OutputPath 2>$null | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "docker compose cp (pdf out) failed with exit code $LASTEXITCODE." }
+
+        $ErrorActionPreference = $previousEAP
     }
     finally {
         & docker compose --project-name $ProjectName exec -T openemr `

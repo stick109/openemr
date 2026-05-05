@@ -72,6 +72,19 @@ final class OpenAIClient
      * can be passed to {@see complete()} via a structured request so the
      * model receives the PDF as input.
      *
+     * After a successful upload this method fetches the file's metadata
+     * (`GET /v1/files/{id}`) and verifies that the `status` field is
+     * `"processed"`. If status is anything else (e.g. `"pending"`,
+     * `"error"`) the file is not yet usable at chat-completion time and
+     * OpenAI will reject the `file_id` reference with
+     * `400: ... got unsupported MIME type 'None'`.
+     *
+     * Limitation: the `GET /v1/files/{id}` response for `purpose=user_data`
+     * files does **not** include a `mime_type` field, so we cannot verify the
+     * registered MIME type directly. The only available signal is `status`.
+     * If OpenAI ever returns `status=processed` but still misregisters the
+     * MIME type, the error will still surface at chat-completion time.
+     *
      * @param non-empty-string $filePath Absolute path to a readable PDF
      * @param non-empty-string $filename Display filename to record in OpenAI
      * @return non-empty-string The OpenAI file id
@@ -123,7 +136,92 @@ final class OpenAIClient
             throw new OpenAIRequestFailedException('OpenAI file upload returned no file id.');
         }
 
+        $this->verifyUploadedFile($fileId, $apiKey);
+
         return $fileId;
+    }
+
+    /**
+     * Fetch file metadata and verify the file reached `processed` status.
+     * OpenAI's Files API can accept an upload and return a file id, but
+     * asynchronously fail to register the MIME type — the `status` field
+     * surfaces this as `"pending"` or `"error"` rather than `"processed"`.
+     * Attempting to reference such a file id in `chat/completions` produces
+     * `400: ... got unsupported MIME type 'None'`.
+     *
+     * On a bad status this method:
+     *   1. Logs the full metadata response at error level.
+     *   2. Best-effort DELETEs the orphan file (swallowed — not worth
+     *      masking the primary error).
+     *   3. Throws {@see OpenAIRequestFailedException} naming the status.
+     *
+     * Note: for `purpose=user_data` files the GET response does NOT include
+     * a `mime_type` field, so we cannot verify the MIME type directly.
+     *
+     * @param non-empty-string $fileId
+     * @param non-empty-string $apiKey
+     */
+    private function verifyUploadedFile(string $fileId, string $apiKey): void
+    {
+        try {
+            $metaResponse = $this->client()->request('GET', $this->url('files/' . $fileId), [
+                'auth_bearer' => $apiKey,
+                'headers' => ['Accept' => 'application/json'],
+                'timeout' => $this->timeoutSeconds,
+            ]);
+
+            $metaStatus = $metaResponse->getStatusCode();
+            $metaBody   = $metaResponse->getContent(false);
+        } catch (HttpClientExceptionInterface $exception) {
+            // A transport failure here is non-fatal for the upload itself;
+            // log and return so the caller can attempt the completions call.
+            $this->logger->warning('OpenAI file metadata fetch failed; skipping status check', [
+                'file_id'   => $fileId,
+                'exception' => $exception,
+            ]);
+            return;
+        }
+
+        if ($metaStatus < 200 || $metaStatus >= 300) {
+            $this->logger->warning('OpenAI file metadata returned non-2xx; skipping status check', [
+                'file_id'     => $fileId,
+                'status_code' => $metaStatus,
+            ]);
+            return;
+        }
+
+        $meta = $this->decodeJsonObject($metaBody, 'file metadata');
+
+        $fileStatus = $meta['status'] ?? null;
+        if ($fileStatus === 'processed') {
+            // Happy path — file is ready.
+            return;
+        }
+
+        // File is in a bad state. Log everything OpenAI returned so the
+        // operator can see the raw metadata (status, status_details, etc.).
+        $this->logger->error('OpenAI uploaded file is not in processed state; aborting ingestion', [
+            'file_id'       => $fileId,
+            'file_status'   => $fileStatus,
+            'file_metadata' => $meta,
+        ]);
+
+        // Best-effort cleanup — do not let a DELETE failure mask the real error.
+        try {
+            $this->client()->request('DELETE', $this->url('files/' . $fileId), [
+                'auth_bearer' => $apiKey,
+                'headers'     => ['Accept' => 'application/json'],
+                'timeout'     => $this->timeoutSeconds,
+            ])->getStatusCode();
+        } catch (HttpClientExceptionInterface) {
+            // Swallow — orphan cleanup is best-effort.
+        }
+
+        $registeredStatus = is_string($fileStatus) ? $fileStatus : 'unknown';
+        throw new OpenAIRequestFailedException(
+            "OpenAI file upload did not reach processed state (status: {$registeredStatus})."
+            . ' The file_id has been deleted. Re-uploading the PDF may resolve the issue.'
+        );
     }
 
     /**

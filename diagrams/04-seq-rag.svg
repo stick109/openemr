@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1100" viewBox="0 0 1480 1100">
+  <defs>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e11d48"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0284c7"/></marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/></marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <rect width="1480" height="1100" fill="white"/>
+  <rect x="60.0" y="380.0" width="1380.0" height="540.0" rx="6" fill="none" stroke="#16a34a" stroke-width="2.0" stroke-dasharray="8,4"/>
+  <text x="68.0" y="400.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#166534">Query — runs per retriever invocation; deterministic for fixed corpus + query</text>
+  <rect x="60.0" y="80.0" width="1380.0" height="280.0" rx="6" fill="none" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="8,4"/>
+  <text x="68.0" y="100.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0c4a6e">Indexing — runs once at agent-service startup; cached on corpus hash</text>
+  <rect x="60.0" y="940.0" width="1380.0" height="120.0" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="68.0" y="977.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Why hybrid + rerank?</text>
+  <text x="68.0" y="994.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">• BM25 alone: misses paraphrase ('hyperlipidemia' vs 'high cholesterol').</text>
+  <text x="68.0" y="1012.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">• Dense alone: misses rare clinical tokens (LOINC codes, drug names) and is sensitive to query phrasing.</text>
+  <text x="68.0" y="1029.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">• RRF fuses both robustly without tuning weights; rerank promotes the chunks that actually answer the query.</text>
+  <rect x="100.0" y="420.0" width="200.0" height="62.4" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="200.0" y1="482.4" x2="200.0" y2="900.0" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="200.0" y="445.8" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">retriever.py</text>
+  <text x="200.0" y="463.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">build_query(state)</text>
+  <rect x="380.0" y="420.0" width="200.0" height="62.4" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="480.0" y1="482.4" x2="480.0" y2="900.0" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="480.0" y="445.8" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">BM25 search</text>
+  <text x="480.0" y="463.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">top-50</text>
+  <rect x="660.0" y="420.0" width="200.0" height="62.4" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="760.0" y1="482.4" x2="760.0" y2="900.0" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="760.0" y="445.8" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">dense ANN</text>
+  <text x="760.0" y="463.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">top-50</text>
+  <rect x="940.0" y="420.0" width="200.0" height="62.4" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="1040.0" y1="482.4" x2="1040.0" y2="900.0" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="1040.0" y="445.8" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">RRF fuse</text>
+  <text x="1040.0" y="463.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">top-30</text>
+  <rect x="1220.0" y="420.0" width="200.0" height="62.4" rx="4" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"/>
+  <line x1="1320.0" y1="482.4" x2="1320.0" y2="900.0" stroke="#e11d48" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="1320.0" y="437.1" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Cohere rerank</text>
+  <text x="1320.0" y="454.5" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">rerank-english-v3.0</text>
+  <text x="1320.0" y="471.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">(or cross-encoder)</text>
+  <text x="740.0" y="44.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="bold" fill="#0f172a">Hybrid RAG — indexing (startup) and query (runtime)</text>
+  <rect x="100.0" y="120.0" width="200.0" height="28.6" rx="4" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <line x1="200.0" y1="148.6" x2="200.0" y2="340.0" stroke="#0284c7" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="200.0" y="120.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">agent-service/rag/corpus/</text>
+  <text x="200.0" y="137.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">USPSTF · ADA · JNC · CDC</text>
+  <text x="200.0" y="155.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">~50–100 markdown chunks</text>
+  <rect x="380.0" y="120.0" width="200.0" height="28.6" rx="4" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.5"/>
+  <line x1="480.0" y1="148.6" x2="480.0" y2="340.0" stroke="#0284c7" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="480.0" y="128.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">corpus_loader.py</text>
+  <text x="480.0" y="146.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">chunker (~200–400 words)</text>
+  <rect x="660.0" y="120.0" width="200.0" height="28.6" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="760.0" y1="148.6" x2="760.0" y2="340.0" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="760.0" y="128.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">bm25_index.py</text>
+  <text x="760.0" y="146.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">rank_bm25 in-memory</text>
+  <rect x="940.0" y="120.0" width="200.0" height="28.6" rx="4" fill="#fff1f2" stroke="#e11d48" stroke-width="1.5"/>
+  <line x1="1040.0" y1="148.6" x2="1040.0" y2="340.0" stroke="#e11d48" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="1040.0" y="128.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">OpenAI</text>
+  <text x="1040.0" y="146.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">text-embedding-3-small</text>
+  <rect x="1220.0" y="120.0" width="200.0" height="28.6" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <line x1="1320.0" y1="148.6" x2="1320.0" y2="340.0" stroke="#16a34a" stroke-width="1.5" stroke-dasharray="6,3"/>
+  <text x="1320.0" y="128.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">vector_index.py</text>
+  <text x="1320.0" y="146.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">sqlite-vec ANN</text>
+  <line x1="200.0" y1="200.0" x2="480.0" y2="200.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="340.0" y="193.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">1. read MD chunks + metadata</text>
+  <line x1="480.0" y1="240.0" x2="760.0" y2="240.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="620.0" y="233.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">2. tokenize + register chunks</text>
+  <line x1="480.0" y1="280.0" x2="1040.0" y2="280.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ar)"/>
+  <text x="760.0" y="273.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">3. embed batch</text>
+  <line x1="1040.0" y1="320.0" x2="1320.0" y2="320.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="8,4" />
+  <text x="1180.0" y="313.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">4. vectors</text>
+  <line x1="200.0" y1="500.0" x2="200.0" y2="500.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="200.0" y="493.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">1. build query string</text>
+  <line x1="200.0" y1="550.0" x2="480.0" y2="550.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="340.0" y="543.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">2. BM25 search</text>
+  <line x1="200.0" y1="600.0" x2="760.0" y2="600.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="480.0" y="593.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">3. dense search</text>
+  <line x1="480.0" y1="650.0" x2="1040.0" y2="650.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="8,4" />
+  <text x="760.0" y="643.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">4. top-50 ids</text>
+  <line x1="760.0" y1="700.0" x2="1040.0" y2="700.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="8,4" />
+  <text x="900.0" y="693.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">5. top-50 ids</text>
+  <line x1="1040.0" y1="750.0" x2="1320.0" y2="750.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="1180.0" y="743.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">6. RRF score → top-30</text>
+  <line x1="1320.0" y1="800.0" x2="200.0" y2="800.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="8,4" />
+  <text x="760.0" y="793.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">7. rerank → top-5 (with relevance scores)</text>
+  <line x1="200.0" y1="850.0" x2="200.0" y2="850.0" stroke="#0f172a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="200.0" y="843.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f172a">8. attach Citation per chunk → return GuidelineSnippet[]</text>
+</svg>

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="1080" viewBox="0 0 1480 1080">
+  <defs>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e11d48"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0284c7"/></marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/></marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <rect width="1480" height="1080" fill="white"/>
+  <rect x="60.0" y="120.0" width="640.0" height="380.0" rx="6" fill="none" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="8,4"/>
+  <text x="68.0" y="140.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0c4a6e">OpenEMR (PHP) — this repo</text>
+  <rect x="720.0" y="120.0" width="640.0" height="380.0" rx="6" fill="none" stroke="#16a34a" stroke-width="2.0" stroke-dasharray="8,4"/>
+  <text x="728.0" y="140.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#166534">agent-service/ (Python, FastAPI) — new in Week 2, this repo</text>
+  <rect x="60.0" y="540.0" width="1300.0" height="180.0" rx="6" fill="none" stroke="#e11d48" stroke-width="2.0" stroke-dasharray="8,4"/>
+  <text x="68.0" y="560.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#9f1239">External services (only image bytes + queries leave the host)</text>
+  <text x="740.0" y="46.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="24" font-weight="bold" fill="#0f172a">Week 2 Component Overview — OpenEMR + agent-service + RAG + Eval</text>
+  <rect x="90.0" y="400.0" width="580.0" height="80.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="380.0" y="434.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Encounter timeline + click-to-source preview</text>
+  <text x="380.0" y="452.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">(pdf.js renders the original; bbox overlays drawn from form_upload_intake_form_citation)</text>
+  <rect x="750.0" y="400.0" width="580.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="1040.0" y="424.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Eval harness — agent_service/eval/</text>
+  <text x="1040.0" y="443.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">50 cases · boolean rubrics · pre-push hook</text>
+  <text x="1040.0" y="462.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Local SQLite report; no PHI on disk</text>
+  <text x="740.0" y="77.8" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="normal" fill="#475569">PHP-side stays thin. Multi-agent orchestration, RAG, and eval live in the new Python service. External APIs are clearly fenced off.</text>
+  <rect x="90.0" y="280.0" width="280.0" height="100.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="230.0" y="305.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">MySQL (OpenEMR schema)</text>
+  <text x="230.0" y="324.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">patient_data · insurance_data · documents</text>
+  <text x="230.0" y="343.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">questionnaire_response · procedure_*</text>
+  <text x="230.0" y="361.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">form_upload_intake_form (+ _citation new in W2)</text>
+  <rect x="390.0" y="280.0" width="280.0" height="100.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="530.0" y="314.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">FHIR write paths</text>
+  <text x="530.0" y="333.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">(Patient · Observation · QuestionnaireResponse)</text>
+  <text x="530.0" y="352.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Surfaced through OpenEMR's existing FHIR layer</text>
+  <rect x="90.0" y="590.0" width="280.0" height="100.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="230.0" y="615.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenAI API</text>
+  <text x="230.0" y="634.1" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Files API + chat.completions</text>
+  <text x="230.0" y="653.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">gpt-4o-mini — vision extraction</text>
+  <text x="230.0" y="671.8" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">text-embedding-3-small — embeddings</text>
+  <rect x="400.0" y="590.0" width="280.0" height="100.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="540.0" y="624.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Cohere API</text>
+  <text x="540.0" y="643.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">rerank-english-v3.0</text>
+  <text x="540.0" y="662.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Cross-encoder fallback if no key</text>
+  <rect x="710.0" y="590.0" width="280.0" height="100.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="850.0" y="624.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenTelemetry → Honeycomb</text>
+  <text x="850.0" y="643.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Traces + spans, no PHI</text>
+  <text x="850.0" y="662.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Pre-emit redactor + Sanitized view</text>
+  <rect x="1020.0" y="590.0" width="280.0" height="100.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="1160.0" y="624.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Render (agent-service) +</text>
+  <text x="1160.0" y="643.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Cloudflare Tunnel (OpenEMR)</text>
+  <text x="1160.0" y="662.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Public URLs for graders</text>
+  <rect x="90.0" y="170.0" width="280.0" height="80.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="230.0" y="194.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">interface/forms/upload_intake_form/</text>
+  <text x="230.0" y="213.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">new.php · save.php · view.php · report.php</text>
+  <text x="230.0" y="232.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">CSRF + ACL + 10MB PDF cap</text>
+  <rect x="390.0" y="170.0" width="280.0" height="80.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="530.0" y="185.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">src/Services/Intake/</text>
+  <text x="530.0" y="204.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">IntakeFormIngestService · Dispatchers</text>
+  <text x="530.0" y="223.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">(Demographics · MedicalHistory · Consent)</text>
+  <text x="530.0" y="241.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Becomes a thin proxy in Week 2</text>
+  <rect x="750.0" y="170.0" width="280.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="890.0" y="194.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">POST /api/agent/run</text>
+  <text x="890.0" y="213.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">{patient_id, file_path, doc_type, encounter_id, trace_id}</text>
+  <text x="890.0" y="232.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Auth: shared secret with PHP</text>
+  <rect x="1050.0" y="170.0" width="280.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="1190.0" y="194.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">LangGraph StateGraph</text>
+  <text x="1190.0" y="213.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Supervisor → Extractor → Retriever → Finalize</text>
+  <text x="1190.0" y="232.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Deterministic supervisor (T=0)</text>
+  <rect x="750.0" y="280.0" width="280.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="890.0" y="304.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Extractor worker</text>
+  <text x="890.0" y="323.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenAI Files API + Structured Outputs</text>
+  <text x="890.0" y="342.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Pydantic v2 — strict schemas</text>
+  <rect x="1050.0" y="280.0" width="280.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="1190.0" y="304.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Retriever worker</text>
+  <text x="1190.0" y="323.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">BM25 + dense (sqlite-vec) + RRF</text>
+  <text x="1190.0" y="342.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Cohere rerank → top-5 chunks</text>
+  <line x1="230.0" y1="210.0" x2="530.0" y2="210.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <line x1="530.0" y1="210.0" x2="890.0" y2="210.0" stroke="#0f766e" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#at)"/>
+  <text x="710.0" y="203.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f766e">HTTP POST</text>
+  <line x1="890.0" y1="210.0" x2="1190.0" y2="210.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <line x1="1190.0" y1="210.0" x2="890.0" y2="320.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <line x1="1190.0" y1="210.0" x2="1190.0" y2="320.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <line x1="890.0" y1="320.0" x2="230.0" y2="640.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ar)"/>
+  <text x="560.0" y="473.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">vision call</text>
+  <line x1="1190.0" y1="320.0" x2="540.0" y2="640.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ar)"/>
+  <text x="865.0" y="473.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">rerank</text>
+  <line x1="890.0" y1="210.0" x2="850.0" y2="640.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="8,4" marker-end="url(#ar)"/>
+  <text x="870.0" y="418.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">OTel spans</text>
+  <line x1="530.0" y1="210.0" x2="230.0" y2="330.0" stroke="#0f766e" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#at)"/>
+  <text x="380.0" y="263.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f766e">dispatch FHIR/SQL</text>
+  <line x1="230.0" y1="330.0" x2="530.0" y2="330.0" stroke="#0f766e" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#at)"/>
+  <text x="380.0" y="323.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f766e">surface as Observation, etc.</text>
+  <line x1="530.0" y1="210.0" x2="380.0" y2="440.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <line x1="890.0" y1="210.0" x2="1160.0" y2="640.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="8,4" marker-end="url(#ar)"/>
+  <text x="1025.0" y="418.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">deploy</text>
+</svg>

@@ -35,7 +35,7 @@ regression gate. Anything broader is explicitly out of scope (see
 
 ## 2. Component diagram
 
-![Component overview](diagrams/01-component-overview.drawio)
+![Component overview](diagrams/01-component-overview.svg)
 
 | Component | Lives in | Responsibility |
 |-----------|----------|----------------|
@@ -60,7 +60,7 @@ LangGraph into PHP.
 
 ## 3. Document ingestion flow (sequence)
 
-![Document ingestion sequence](diagrams/02-seq-document-ingestion.drawio)
+![Document ingestion sequence](diagrams/02-seq-document-ingestion.svg)
 
 The path from "user clicks Upload" to "extracted facts visible in the
 encounter timeline":
@@ -100,7 +100,7 @@ the rubric `safe_refusal` records a pass.
 
 ## 4. Worker graph (multi-agent collaboration)
 
-![Supervisor and workers collaboration](diagrams/03-collab-supervisor-workers.drawio)
+![Supervisor and workers collaboration](diagrams/03-collab-supervisor-workers.svg)
 
 The graph is a `LangGraph` `StateGraph` with three working nodes plus
 entry/exit:
@@ -141,7 +141,7 @@ order on every fixture.
 
 ## 5. RAG design (sequence)
 
-![Hybrid RAG sequence](diagrams/04-seq-rag.drawio)
+![Hybrid RAG sequence](diagrams/04-seq-rag.svg)
 
 Hybrid retrieval has two phases:
 
@@ -180,7 +180,7 @@ nearest neighbors regardless of clinical relevance.
 
 ## 6. Citation contract
 
-![Citation flow](diagrams/05-component-citations.drawio)
+![Citation flow](diagrams/05-component-citations.svg)
 
 The Citation model — Pydantic v2:
 
@@ -241,7 +241,7 @@ small, debuggable, easy to query from the eval harness.
 
 ## 7. Eval gate
 
-![Eval gate sequence](diagrams/06-seq-eval-gate.drawio)
+![Eval gate sequence](diagrams/06-seq-eval-gate.svg)
 
 The gate is a small Python harness invoked from a Git pre-push hook and
 mirrored as a GitHub Actions check.
@@ -293,7 +293,9 @@ The flow:
    and the GitHub Actions mirror posts a red check on the PR.
 
 The rubric data flow is captured separately in
-[`diagrams/09-eval-rubric-data-flow.drawio`](diagrams/09-eval-rubric-data-flow.drawio).
+[`diagrams/09-eval-rubric-data-flow.svg`](diagrams/09-eval-rubric-data-flow.svg).
+
+![Eval rubric data flow](diagrams/09-eval-rubric-data-flow.svg)
 
 The grading scenario from the assignment ("we will introduce a small
 regression and confirm your CI gate fails") is the design centroid: the
@@ -307,7 +309,7 @@ more than 5pp, and the push is blocked.
 
 ## 8. Observability
 
-![Observability components](diagrams/07-component-observability.drawio)
+![Observability components](diagrams/07-component-observability.svg)
 
 Per agent run the service emits one `EncounterEvent`:
 
@@ -388,6 +390,8 @@ retrieval-hits observability pipe.
 
 ## 11. Tradeoffs explicitly chosen
 
+![Deployment topology](diagrams/08-deployment-topology.svg)
+
 These are the decisions where there was a real fork in the road, and we
 picked one branch. Each one is justified short-term (Week 2 ships in five
 days) and most have a clear migration path if they need to scale.
@@ -445,15 +449,15 @@ Week 2 ships single-PDF and gets it right.
 
 | File | Type | Section |
 |------|------|---------|
-| [`diagrams/01-component-overview.drawio`](diagrams/01-component-overview.drawio) | component | §2 |
-| [`diagrams/02-seq-document-ingestion.drawio`](diagrams/02-seq-document-ingestion.drawio) | sequence | §3 |
-| [`diagrams/03-collab-supervisor-workers.drawio`](diagrams/03-collab-supervisor-workers.drawio) | collaboration | §4 |
-| [`diagrams/04-seq-rag.drawio`](diagrams/04-seq-rag.drawio) | sequence | §5 |
-| [`diagrams/05-component-citations.drawio`](diagrams/05-component-citations.drawio) | component | §6 |
-| [`diagrams/06-seq-eval-gate.drawio`](diagrams/06-seq-eval-gate.drawio) | sequence | §7 |
-| [`diagrams/07-component-observability.drawio`](diagrams/07-component-observability.drawio) | component | §8 |
-| [`diagrams/08-deployment-topology.drawio`](diagrams/08-deployment-topology.drawio) | deployment | §11 (referenced) |
-| [`diagrams/09-eval-rubric-data-flow.drawio`](diagrams/09-eval-rubric-data-flow.drawio) | data flow | §7 (companion to 06) |
+| [`diagrams/01-component-overview.svg`](diagrams/01-component-overview.svg) | component | §2 |
+| [`diagrams/02-seq-document-ingestion.svg`](diagrams/02-seq-document-ingestion.svg) | sequence | §3 |
+| [`diagrams/03-collab-supervisor-workers.svg`](diagrams/03-collab-supervisor-workers.svg) | collaboration | §4 |
+| [`diagrams/04-seq-rag.svg`](diagrams/04-seq-rag.svg) | sequence | §5 |
+| [`diagrams/05-component-citations.svg`](diagrams/05-component-citations.svg) | component | §6 |
+| [`diagrams/06-seq-eval-gate.svg`](diagrams/06-seq-eval-gate.svg) | sequence | §7 |
+| [`diagrams/07-component-observability.svg`](diagrams/07-component-observability.svg) | component | §8 |
+| [`diagrams/08-deployment-topology.svg`](diagrams/08-deployment-topology.svg) | deployment | §11 (referenced) |
+| [`diagrams/09-eval-rubric-data-flow.svg`](diagrams/09-eval-rubric-data-flow.svg) | data flow | §7 (companion to 06) |
 
-Each `.drawio` file is checked-in XML — open with <https://app.diagrams.net>
-or any drawio-compatible editor.
+The `.drawio` source files remain checked-in alongside the SVGs — open them at
+<https://app.diagrams.net> via *File → Open from → Device* for interactive editing.

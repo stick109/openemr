@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="900" viewBox="0 0 1480 900">
+  <defs>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e11d48"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0284c7"/></marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/></marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <rect width="1480" height="900" fill="white"/>
+  <rect x="60.0" y="700.0" width="1360.0" height="120.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="68.0" y="737.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Trust boundary</text>
+  <text x="68.0" y="754.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">The bbox originates with the VLM. We validate (a) it lies inside the page, (b) area &gt; 0, and (c) cropping the</text>
+  <text x="68.0" y="772.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">page at bbox yields text whose normalized form contains quote_or_value. If any check fails, the field is</text>
+  <text x="68.0" y="789.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">rejected and the row is not persisted — the rubric factually_consistent then surfaces the regression.</text>
+  <rect x="700.0" y="80.0" width="720.0" height="170.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="708.0" y="130.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Contract</text>
+  <text x="708.0" y="149.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• Every persisted clinical fact must have a non-null Citation.</text>
+  <text x="708.0" y="168.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• rubric: citation_present asserts this on every fixture.</text>
+  <text x="708.0" y="187.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• PDF-derived citations carry a bbox so the UI can draw an overlay.</text>
+  <text x="708.0" y="206.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• Guideline citations omit bbox; the UI links source_url instead.</text>
+  <rect x="820.0" y="470.0" width="600.0" height="200.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="828.0" y="526.5" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">view.php click-to-source UI</text>
+  <text x="828.0" y="545.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• pdf.js renders the original document</text>
+  <text x="828.0" y="564.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• fetch /modules/upload-intake-form/citations?form_id=X → JSON of citations</text>
+  <text x="828.0" y="583.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• On hover/focus on an extracted field, draw a translucent box at (bbox)</text>
+  <text x="828.0" y="601.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• On click, scroll PDF to (page) and flash overlay</text>
+  <text x="828.0" y="620.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">• Guideline citations open a side panel with the snippet + source_url</text>
+  <rect x="60.0" y="80.0" width="600.0" height="170.0" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="68.0" y="112.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Citation (Pydantic v2)</text>
+  <text x="68.0" y="130.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">source_type: Literal['lab_pdf','intake_form','guideline','openemr_record']</text>
+  <text x="68.0" y="149.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">source_id: str   # OpenAI file_id, guideline chunk_id, or DB row id</text>
+  <text x="68.0" y="168.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">page_or_section: str   # 'page 2', '§4.1'</text>
+  <text x="68.0" y="187.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">field_or_chunk_id: str   # 'results[0].value' or 'chunk_42'</text>
+  <text x="68.0" y="206.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">quote_or_value: str</text>
+  <text x="68.0" y="225.1" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">bbox: tuple[x, y, w, h] | None   # PDF only</text>
+  <rect x="820.0" y="290.0" width="600.0" height="160.0" rx="6" fill="#fff7ed" stroke="#c2410c" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="828.0" y="345.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">PHP dispatcher writes:</text>
+  <text x="828.0" y="364.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">1. patient_data / procedure_result / questionnaire_response (the fact)</text>
+  <text x="828.0" y="383.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">2. form_upload_intake_form_citation (the citation row pointing back)</text>
+  <text x="828.0" y="401.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Both rows share a form_id so they can be joined in view.php</text>
+  <rect x="440.0" y="510.0" width="320.0" height="160.0" rx="6" fill="#fff7ed" stroke="#c2410c" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="448.0" y="549.8" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Schema — form_upload_intake_form_citation</text>
+  <text x="448.0" y="567.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">id INT PK · form_id FK · field_path VARCHAR(255)</text>
+  <text x="448.0" y="584.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">source_type ENUM · source_id VARCHAR(255)</text>
+  <text x="448.0" y="602.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">page_or_section VARCHAR(64) · field_or_chunk_id VARCHAR(255)</text>
+  <text x="448.0" y="619.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">quote_or_value TEXT</text>
+  <text x="448.0" y="636.8" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">bbox_x FLOAT · bbox_y FLOAT · bbox_w FLOAT · bbox_h FLOAT</text>
+  <text x="740.0" y="44.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="bold" fill="#0f172a">Citation Flow — extraction → DB → click-to-source UI overlay</text>
+  <rect x="60.0" y="290.0" width="320.0" height="120.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="220.0" y="315.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Extractor (Python)</text>
+  <text x="220.0" y="334.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenAI Structured Outputs</text>
+  <text x="220.0" y="353.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">LabResult.source_citation: Citation</text>
+  <text x="220.0" y="372.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Demographics.dob.source_citation: Citation</text>
+  <text x="220.0" y="391.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Bbox returned by VLM, validated &gt;0 area</text>
+  <rect x="60.0" y="430.0" width="320.0" height="120.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="220.0" y="465.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Retriever (Python)</text>
+  <text x="220.0" y="484.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Cohere top-5 chunks</text>
+  <text x="220.0" y="503.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Citation.source_type='guideline'</text>
+  <text x="220.0" y="521.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">page_or_section = chunk metadata</text>
+  <rect x="440.0" y="360.0" width="320.0" height="120.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="600.0" y="404.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">ExtractionResult (HTTP response)</text>
+  <text x="600.0" y="423.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">{ extracted, evidence, citations, ... }</text>
+  <text x="600.0" y="442.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Returned to PHP save.php</text>
+  <line x1="220.0" y1="350.0" x2="600.0" y2="420.0" stroke="#16a34a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ag)"/>
+  <line x1="220.0" y1="490.0" x2="600.0" y2="420.0" stroke="#16a34a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ag)"/>
+  <line x1="600.0" y1="420.0" x2="1120.0" y2="370.0" stroke="#0f766e" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#at)"/>
+  <text x="860.0" y="388.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0f766e">dispatch + persist</text>
+  <line x1="1120.0" y1="370.0" x2="600.0" y2="590.0" stroke="#c2410c" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ao)"/>
+  <text x="860.0" y="473.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#c2410c">INSERT citation rows</text>
+  <line x1="600.0" y1="590.0" x2="1120.0" y2="570.0" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ab)"/>
+  <text x="860.0" y="573.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0284c7">JOIN field → citation</text>
+  <line x1="360.0" y1="165.0" x2="220.0" y2="350.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="8,4" />
+  <line x1="360.0" y1="165.0" x2="220.0" y2="490.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="8,4" />
+</svg>

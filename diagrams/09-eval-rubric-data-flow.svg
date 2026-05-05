@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1480" height="900" viewBox="0 0 1480 900">
+  <defs>
+    <marker id="ad" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#475569"/></marker>
+    <marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#16a34a"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e11d48"/></marker>
+    <marker id="ab" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0284c7"/></marker>
+    <marker id="at" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/></marker>
+    <marker id="aa" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#d97706"/></marker>
+    <marker id="ap" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#7c3aed"/></marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="strokeWidth" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#c2410c"/></marker>
+  </defs>
+  <rect width="1480" height="900" fill="white"/>
+  <rect x="60.0" y="780.0" width="1360.0" height="100.0" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="68.0" y="807.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Why boolean (not 1–10) rubrics</text>
+  <text x="68.0" y="824.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">The assignment is explicit: 'Use boolean rubrics so failures are actionable.' Numeric scoring tempts the</text>
+  <text x="68.0" y="842.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">judge model to round; boolean forces a yes/no. The grader's regression injection becomes a count, not</text>
+  <text x="68.0" y="859.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">an opinion — and the diff between current and baseline is a percentage of fixtures, not a vibes shift.</text>
+  <rect x="60.0" y="320.0" width="640.0" height="200.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="68.0" y="379.8" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Score 5 boolean rubrics</text>
+  <text x="68.0" y="397.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">schema_valid: Pydantic .model_validate() returns OK</text>
+  <text x="68.0" y="414.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">citation_present: every persisted field has Citation != None</text>
+  <text x="68.0" y="432.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">factually_consistent: extracted matches expected.extracted (deep eq)</text>
+  <text x="68.0" y="449.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">safe_refusal: corrupt input → refusal_reason set, no DB writes</text>
+  <text x="68.0" y="466.8" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">no_phi_in_logs: regex blocklist sweep over log_buffer returns []</text>
+  <rect x="740.0" y="560.0" width="680.0" height="180.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="748.0" y="627.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Exit code</text>
+  <text x="748.0" y="644.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">0 → push proceeds, baseline auto-updates to current</text>
+  <text x="748.0" y="662.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">1 → push blocked; report printed to stderr;</text>
+  <text x="748.0" y="679.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">PR check (GHA mirror) goes red</text>
+  <rect x="60.0" y="560.0" width="640.0" height="180.0" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="68.0" y="618.5" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Compare current vs baseline</text>
+  <text x="68.0" y="635.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">regressed = any( baseline[r] - current[r] &gt; 0.05 )</text>
+  <text x="68.0" y="653.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">below_threshold = any( current[r] &lt; absolute_min[r] )</text>
+  <text x="68.0" y="670.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">phi_violation = current.no_phi_in_logs &lt; 1.00</text>
+  <text x="68.0" y="688.1" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">fail = regressed or below_threshold or phi_violation</text>
+  <rect x="740.0" y="320.0" width="360.0" height="200.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="748.0" y="405.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Aggregate over 50 fixtures</text>
+  <text x="748.0" y="423.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">current[rubric] = passed / total</text>
+  <text x="748.0" y="440.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Records per-rubric pass-rate, per-rubric failures by id</text>
+  <rect x="60.0" y="100.0" width="320.0" height="180.0" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="68.0" y="149.8" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Fixture (one of 50)</text>
+  <text x="68.0" y="167.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">{ id, doc_type, file_path,</text>
+  <text x="68.0" y="184.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">expected: { extracted, citations,</text>
+  <text x="68.0" y="202.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">rubrics: { schema_valid, citation_present,</text>
+  <text x="68.0" y="219.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">factually_consistent, safe_refusal,</text>
+  <text x="68.0" y="236.8" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">no_phi_in_logs } } }</text>
+  <rect x="780.0" y="100.0" width="320.0" height="180.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="788.0" y="167.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Run agent flow</text>
+  <text x="788.0" y="184.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Same supervisor → workers code path as runtime</text>
+  <text x="788.0" y="202.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Captures: extracted, citations, tool_sequence,</text>
+  <text x="788.0" y="219.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">refusal_reason, log_buffer</text>
+  <rect x="1140.0" y="320.0" width="280.0" height="200.0" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="1280.0" y="405.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">baseline.json</text>
+  <text x="1280.0" y="423.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">{ rubric: pass_rate } from last green commit</text>
+  <text x="1280.0" y="440.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Refreshed only on intentional regression resets</text>
+  <text x="740.0" y="44.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="bold" fill="#0f172a">Eval Rubric Data Flow — fixture → run → score → compare → exit code</text>
+  <rect x="420.0" y="100.0" width="320.0" height="100.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
+  <text x="580.0" y="135.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Mock OpenAI client</text>
+  <text x="580.0" y="153.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Returns the recorded VLM output for this fixture</text>
+  <text x="580.0" y="170.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">(deterministic — no live calls in CI)</text>
+  <line x1="220.0" y1="190.0" x2="580.0" y2="150.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="400.0" y="163.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#475569">load</text>
+  <line x1="580.0" y1="150.0" x2="940.0" y2="190.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="760.0" y="163.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#475569">invoke</text>
+  <line x1="940.0" y1="190.0" x2="380.0" y2="420.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="660.0" y="298.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#475569">ExtractionResult + log_buffer</text>
+  <line x1="380.0" y1="420.0" x2="920.0" y2="420.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="650.0" y="413.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#475569">rubric vector per fixture</text>
+  <line x1="1280.0" y1="420.0" x2="380.0" y2="650.0" stroke="#d97706" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#aa)"/>
+  <text x="830.0" y="528.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#d97706">read</text>
+  <line x1="920.0" y1="420.0" x2="380.0" y2="650.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
+  <text x="650.0" y="528.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#475569">current[rubric]</text>
+  <line x1="380.0" y1="650.0" x2="1080.0" y2="650.0" stroke="#7c3aed" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ap)"/>
+  <text x="730.0" y="643.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#7c3aed">bool</text>
+</svg>

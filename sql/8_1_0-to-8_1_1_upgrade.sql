@@ -121,11 +121,17 @@
 #IfNotTable form_upload_intake_form
 CREATE TABLE `form_upload_intake_form` (
   `id` INT NOT NULL AUTO_INCREMENT,
+  `date` DATETIME DEFAULT NULL,
   `pid` BIGINT NOT NULL,
   `encounter` BIGINT NOT NULL,
+  `user` VARCHAR(255) DEFAULT NULL,
+  `groupname` VARCHAR(255) DEFAULT NULL,
+  `authorized` TINYINT(4) DEFAULT 0,
+  `activity` TINYINT(4) DEFAULT 1,
   `form_type` ENUM('Demographics','MedicalHistory','Consent') NOT NULL,
   `document_id` INT NULL,
-  `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `inserted_row_id` INT NULL,
+  `diff_preview` LONGTEXT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_encounter` (`encounter`),
   KEY `idx_pid` (`pid`)

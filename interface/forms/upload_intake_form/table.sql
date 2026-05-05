@@ -1,5 +1,11 @@
 -- Schema for the Upload Intake Form encounter form.
 --
+-- This table is a standard OpenEMR form table (date/pid/encounter/user/
+-- groupname/authorized/activity) plus the intake-specific columns
+-- (form_type, document_id, inserted_row_id, diff_preview). Keeping the
+-- canonical columns lets formFetch / FormService::addForm and the encounter
+-- timeline operate on it without a special case.
+--
 -- The Doctrine migration for this form (see plan §3.8) is responsible for:
 --   1. Running the CREATE TABLE statement below.
 --   2. Inserting the registry row that lights up the menu entry under the
@@ -17,11 +23,19 @@
 --      project convention.
 
 CREATE TABLE IF NOT EXISTS `form_upload_intake_form` (
-    `id`          BIGINT(20)   NOT NULL AUTO_INCREMENT,
-    `pid`         BIGINT(20)   DEFAULT NULL,
-    `encounter`   BIGINT(20)   DEFAULT NULL,
-    `type`        ENUM('Auto-detect', 'Demographics', 'Medical History', 'Consent') NOT NULL DEFAULT 'Auto-detect',
-    `document_id` BIGINT(20)   DEFAULT NULL,
-    `created_at`  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (`id`)
+    `id`              INT          NOT NULL AUTO_INCREMENT,
+    `date`            DATETIME     DEFAULT NULL,
+    `pid`             BIGINT       NOT NULL,
+    `encounter`       BIGINT       NOT NULL,
+    `user`            VARCHAR(255) DEFAULT NULL,
+    `groupname`       VARCHAR(255) DEFAULT NULL,
+    `authorized`      TINYINT(4)   DEFAULT 0,
+    `activity`        TINYINT(4)   DEFAULT 1,
+    `form_type`       ENUM('Demographics', 'MedicalHistory', 'Consent') NOT NULL,
+    `document_id`     INT          DEFAULT NULL,
+    `inserted_row_id` INT          DEFAULT NULL,
+    `diff_preview`    LONGTEXT     DEFAULT NULL,
+    PRIMARY KEY (`id`),
+    KEY `idx_encounter` (`encounter`),
+    KEY `idx_pid` (`pid`)
 ) ENGINE=InnoDB;

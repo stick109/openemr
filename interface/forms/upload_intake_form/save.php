@@ -102,7 +102,10 @@ if (!is_int($size) || $size <= 0 || $size > UPLOAD_INTAKE_FORM_MAX_BYTES) {
 }
 
 // MIME / extension sanity check. Do not trust the browser-supplied type alone.
-$detectedMime = $uploadedFile->getMimeType();
+// `UploadedFile::getMimeType()` requires symfony/mime, which is not in the
+// production vendor tree; use the libmagic-backed builtin to match the rest
+// of this codebase (see interface/billing/edi_271.php).
+$detectedMime = mime_content_type($tmpPath);
 $extension = strtolower($uploadedFile->getClientOriginalExtension());
 if ($detectedMime !== 'application/pdf' || $extension !== 'pdf') {
     $renderFailure(xl('Only PDF files are accepted.'));

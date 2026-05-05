@@ -4,12 +4,13 @@
  * Upload Intake Form - save.php
  *
  * Handles the multipart upload from new.php. Validates CSRF, ACL and the
- * uploaded PDF, then hands the file off to IntakeFormIngestService which
- * does the OpenAI-backed extraction and writes the appropriate target rows
- * (patient_data, questionnaire_response, documents). The service is also
- * responsible for inserting the row into form_upload_intake_form and
- * returning that row's id so this script can register the form against
- * the encounter via FormService::addForm().
+ * uploaded PDF, then hands the file off to {@see IntakeFormIngestService}
+ * which does the OpenAI-backed extraction and writes the appropriate target
+ * rows (patient_data, questionnaire_response, documents). The service is
+ * also responsible for inserting the row into form_upload_intake_form and
+ * returning an {@see IngestResult} DTO whose `insertedRowId` identifies the
+ * row in form_upload_intake_form — that id is what FormService::addForm()
+ * needs to register the form against the encounter.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -27,8 +28,14 @@ use OpenEMR\BC\ServiceContainer;
 use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Core\OEEnvBag;
 use OpenEMR\Services\FormService;
-use OpenEMR\Services\IntakeFormIngestService;
+use OpenEMR\Services\Intake\Dispatcher\ConsentDispatcher;
+use OpenEMR\Services\Intake\Dispatcher\DemographicsDispatcher;
+use OpenEMR\Services\Intake\Dispatcher\MedicalHistoryDispatcher;
+use OpenEMR\Services\Intake\Exception\IntakeFormException;
+use OpenEMR\Services\Intake\IntakeFormIngestService;
+use OpenEMR\Services\Intake\OpenAi\OpenAIClient;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
 use Symfony\Component\HttpFoundation\Request;
 
@@ -43,10 +50,13 @@ if (!AclMain::aclCheckCore('admin', 'super')) {
 const UPLOAD_INTAKE_FORM_DIRECTORY = 'upload_intake_form';
 const UPLOAD_INTAKE_FORM_DISPLAY_NAME = 'Upload Intake Form';
 const UPLOAD_INTAKE_FORM_MAX_BYTES = 10 * 1024 * 1024;
+// The values that survive the round trip from the dropdown into the service.
+// `Auto` triggers the classifier; the other three are passed through verbatim.
+// Display labels live in new.php (option labels), not in these wire values.
 const UPLOAD_INTAKE_FORM_VALID_TYPES = [
-    'Auto-detect',
+    'Auto',
     'Demographics',
-    'Medical History',
+    'MedicalHistory',
     'Consent',
 ];
 
@@ -107,23 +117,25 @@ if ($pidInt <= 0 || $encounterInt <= 0) {
     $renderFailure(xl('No active patient or encounter context.'));
 }
 
-if (!class_exists(IntakeFormIngestService::class)) {
-    $logger->error('IntakeFormIngestService is not available; intake-form upload aborted.', [
-        'pid' => $pidInt,
-        'encounter' => $encounterInt,
-        'form_type' => $formType,
-    ]);
-    $renderFailure(xl('Service not yet wired: IntakeFormIngestService is not available.'));
-}
-
-// Contract: IntakeFormIngestService throws \RuntimeException (or a subclass)
-// for any recoverable failure - validation, OpenAI errors, downstream DB
-// problems. Anything outside that hierarchy (\Error, \TypeError, etc.) is
-// genuinely unexpected and is allowed to propagate to the global handler.
+// Contract: IntakeFormIngestService throws IntakeFormException (a
+// \RuntimeException subclass) for any recoverable failure — validation,
+// OpenAI errors, downstream DB problems. Anything outside that hierarchy
+// (\Error, \TypeError, etc.) is genuinely unexpected and is allowed to
+// propagate to the global handler. The service returns an IngestResult DTO;
+// `insertedRowId` is the form_upload_intake_form row id that
+// FormService::addForm() needs to wire the encounter timeline entry.
 try {
-    $service = new IntakeFormIngestService();
+    $service = new IntakeFormIngestService(
+        openAiClient: new OpenAIClient($logger, OEEnvBag::getInstance()),
+        logger: $logger,
+        clock: ServiceContainer::getClock(),
+        demographicsDispatcher: new DemographicsDispatcher($logger),
+        medicalHistoryDispatcher: new MedicalHistoryDispatcher($logger, ServiceContainer::getClock()),
+        consentDispatcher: new ConsentDispatcher(),
+        session: $session,
+    );
     $result = $service->ingest($pidInt, $encounterInt, $tmpPath, $formType);
-} catch (\RuntimeException $e) {
+} catch (IntakeFormException $e) {
     $logger->error('IntakeFormIngestService::ingest failed.', [
         'pid' => $pidInt,
         'encounter' => $encounterInt,
@@ -133,7 +145,7 @@ try {
     $renderFailure(xl('The intake form could not be processed. Please retry or contact support.'));
 }
 
-if (!is_array($result) || !isset($result['form_id']) || !is_int($result['form_id']) || $result['form_id'] <= 0) {
+if ($result->insertedRowId === null || $result->insertedRowId <= 0) {
     $logger->error('IntakeFormIngestService::ingest returned an invalid result.', [
         'pid' => $pidInt,
         'encounter' => $encounterInt,
@@ -146,7 +158,7 @@ $formService = new FormService();
 $formService->addForm(
     $encounterInt,
     UPLOAD_INTAKE_FORM_DISPLAY_NAME,
-    $result['form_id'],
+    $result->insertedRowId,
     UPLOAD_INTAKE_FORM_DIRECTORY,
     $pidInt,
     is_numeric($userauthorized ?? null) ? (int) $userauthorized : 0

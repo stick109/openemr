@@ -1547,6 +1547,11 @@ $ignoreErrors[] = [
     'path' => __DIR__ . '/../../interface/forms/treatment_plan/report.php',
 ];
 $ignoreErrors[] = [
+    'message' => '#^Function upload_intake_form_report may not be defined in the global namespace\\.$#',
+    'count' => 1,
+    'path' => __DIR__ . '/../../interface/forms/upload_intake_form/report.php',
+];
+$ignoreErrors[] = [
     'message' => '#^Function convertHeightToUs may not be defined in the global namespace\\.$#',
     'count' => 1,
     'path' => __DIR__ . '/../../interface/forms/vitals/growthchart/chart.php',

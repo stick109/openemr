@@ -51,7 +51,7 @@ final class IntakeFormIngestService
 {
     private const MAX_PDF_BYTES = 10 * 1024 * 1024;
     private const PDF_MAGIC = '%PDF-';
-    private const CLASSIFIER_THRESHOLD = 0.6;
+    private const CLASSIFIER_THRESHOLD = 0.7;
     private const DEFAULT_MODEL = 'gpt-4o-mini';
     private const CONSENT_CATEGORY_NAME = 'Consents';
     private const CONSENT_CATEGORY_PARENT_ID = 1;

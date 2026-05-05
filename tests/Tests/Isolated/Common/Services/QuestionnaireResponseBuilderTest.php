@@ -8,13 +8,8 @@
  * row) has the right shape: resourceType, status, subject reference, and a
  * non-empty list of items each carrying a linkId.
  *
- * The builder class is owned by the §3.4/3.5 sibling agent. While that work
- * is in progress this test skips with a clear message; once the class lands
- * the test starts asserting for real with no further changes.
- *
- * Resolution order:
- *   1. OpenEMR\Services\IntakeForm\QuestionnaireResponseBuilder->build($pid, $payload)
- *   2. OpenEMR\Services\IntakeForm\QuestionnaireResponseBuilder::fromMedicalHistory(...)
+ * Targets {@see QuestionnaireResponseBuilder} directly — the builder is a
+ * pure helper with no DB or HTTP dependencies.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -27,6 +22,7 @@ declare(strict_types=1);
 
 namespace OpenEMR\Tests\Isolated\Common\Services;
 
+use OpenEMR\Services\Intake\Fhir\QuestionnaireResponseBuilder;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 
@@ -34,38 +30,11 @@ use PHPUnit\Framework\TestCase;
 #[Group('intake-forms')]
 class QuestionnaireResponseBuilderTest extends TestCase
 {
-    /**
-     * @return class-string
-     */
-    private function builderFqcn(): string
-    {
-        // Built from parts via a runtime function so PHPStan does not
-        // eagerly resolve the symbol — the class lives in a sibling
-        // worktree and may not exist at analysis time.
-        $parts = ['OpenEMR', 'Services', 'IntakeForm', 'QuestionnaireResponseBuilder'];
-        return self::asClassString(implode('\\', $parts));
-    }
-
-    /**
-     * Identity wrapper that converts a runtime string into a class-string
-     * without PHPStan being able to fold it back to the literal value.
-     *
-     * @return class-string
-     */
-    private static function asClassString(string $fqcn): string
-    {
-        /** @var class-string */
-        return $fqcn;
-    }
+    private QuestionnaireResponseBuilder $builder;
 
     protected function setUp(): void
     {
-        if (!class_exists($this->builderFqcn())) {
-            $this->markTestSkipped(
-                'QuestionnaireResponseBuilder (intake-forms-plan.md §3.4) not yet '
-                . 'implemented; this test will run once the sibling work lands.'
-            );
-        }
+        $this->builder = new QuestionnaireResponseBuilder();
     }
 
     public function testBuiltResourceIsAFhirQuestionnaireResponse(): void
@@ -99,8 +68,7 @@ class QuestionnaireResponseBuilderTest extends TestCase
         $this->assertIsArray($subject);
         $reference = $subject['reference'] ?? null;
         $this->assertIsString($reference);
-        $this->assertStringStartsWith('Patient/', $reference);
-        $this->assertStringContainsString('4242', $reference);
+        $this->assertSame('Patient/4242', $reference);
     }
 
     public function testItemArrayContainsLinkIds(): void
@@ -143,6 +111,63 @@ class QuestionnaireResponseBuilderTest extends TestCase
         }
     }
 
+    public function testQuestionnaireReferenceUsesIntakeMedicalHistory(): void
+    {
+        $resource = $this->build();
+
+        $this->assertSame(
+            'Questionnaire/IntakeMedicalHistory',
+            $resource['questionnaire'] ?? null,
+        );
+    }
+
+    public function testEncounterReferenceIncludedWhenProvided(): void
+    {
+        $payload = $this->medicalHistoryPayload();
+        $resource = $this->builder->build(99, $payload, '2026-05-04T12:00:00Z', 7777);
+
+        $this->assertArrayHasKey('encounter', $resource);
+        $encounter = $resource['encounter'];
+        $this->assertIsArray($encounter);
+        $this->assertSame('Encounter/7777', $encounter['reference'] ?? null);
+    }
+
+    public function testEncounterReferenceOmittedWhenNotProvided(): void
+    {
+        $payload = $this->medicalHistoryPayload();
+        $resource = $this->builder->build(99, $payload);
+
+        $this->assertArrayNotHasKey('encounter', $resource);
+    }
+
+    public function testSocialItemsAreNestedUnderSocialLinkId(): void
+    {
+        $resource = $this->build();
+        $items = $resource['item'] ?? [];
+        $this->assertIsArray($items);
+
+        $social = null;
+        foreach ($items as $item) {
+            if (is_array($item) && ($item['linkId'] ?? null) === 'social') {
+                $social = $item;
+                break;
+            }
+        }
+        $this->assertIsArray($social);
+        $this->assertArrayHasKey('item', $social);
+        $this->assertIsArray($social['item']);
+
+        $childLinkIds = [];
+        foreach ($social['item'] as $child) {
+            $this->assertIsArray($child);
+            $childLinkIds[] = is_string($child['linkId'] ?? null) ? (string) $child['linkId'] : '';
+        }
+        $this->assertSame(
+            ['social.smoking', 'social.alcohol', 'social.drugs'],
+            $childLinkIds,
+        );
+    }
+
     public function testResourceCanBeRoundTrippedToJson(): void
     {
         $resource = $this->build();
@@ -154,49 +179,19 @@ class QuestionnaireResponseBuilderTest extends TestCase
         $this->assertSame('QuestionnaireResponse', $decoded['resourceType']);
     }
 
+    public function testEmptyPayloadProducesEmptyItemArray(): void
+    {
+        $resource = $this->builder->build(99, []);
+
+        $this->assertSame([], $resource['item'] ?? null);
+    }
+
     /**
      * @return array<string, mixed>
      */
     private function build(int $pid = 99): array
     {
-        $payload = $this->medicalHistoryPayload();
-        $fqcn = $this->builderFqcn();
-
-        $instanceCallable = [$fqcn, 'build'];
-        if (is_callable($instanceCallable)) {
-            $builder = $this->newBuilder();
-            $callable = [$builder, 'build'];
-            if (!is_callable($callable)) {
-                $this->fail("{$fqcn}::build is not callable on an instance");
-            }
-            $resource = $callable($pid, $payload);
-        } else {
-            $staticCallable = [$fqcn, 'fromMedicalHistory'];
-            if (!is_callable($staticCallable)) {
-                $this->fail("Neither {$fqcn}::build nor {$fqcn}::fromMedicalHistory is callable");
-            }
-            $resource = $staticCallable($pid, $payload);
-        }
-
-        $this->assertIsArray($resource);
-        $typed = [];
-        foreach ($resource as $key => $value) {
-            $this->assertIsString($key);
-            $typed[$key] = $value;
-        }
-        return $typed;
-    }
-
-    /**
-     * Instantiate the builder via reflection so PHPStan does not flag the
-     * (intentionally) missing class. setUp() skips the test entirely when
-     * the class is unavailable, so this code is only reached when the §3.4
-     * sibling work has landed.
-     */
-    private function newBuilder(): object
-    {
-        $reflection = new \ReflectionClass($this->builderFqcn());
-        return $reflection->newInstance();
+        return $this->builder->build($pid, $this->medicalHistoryPayload(), '2026-05-04T12:00:00Z');
     }
 
     /**

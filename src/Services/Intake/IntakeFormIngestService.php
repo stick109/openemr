@@ -116,7 +116,7 @@ final class IntakeFormIngestService
 
             $fileId = $this->openAiClient->uploadPdf(
                 $pdfPath,
-                $this->displayFilename($pdfPath, $requestedType)
+                $this->displayFilename($requestedType)
             );
 
             $resolvedType = $requestedType ?? $this->classify($fileId);
@@ -340,7 +340,7 @@ final class IntakeFormIngestService
         }
 
         $categoryId = $this->resolveCategoryId($type);
-        $filename = $this->displayFilename($sourcePath, $type);
+        $filename = $this->displayFilename($type);
 
         // The legacy Document::createDocument receives $data by reference and
         // mutates the foreign-id state of the Document instance on success.
@@ -507,9 +507,29 @@ final class IntakeFormIngestService
     }
 
     /**
+     * Build a stable, human-readable filename for the upload that ALWAYS ends
+     * with `.pdf`. This filename is used in two places:
+     *
+     *  - The multipart `filename=...` parameter sent to OpenAI's Files API.
+     *    OpenAI's Files API infers the file's stored MIME type from this name
+     *    rather than from the multipart `Content-Type` sub-header — if the
+     *    filename does not end with `.pdf`, OpenAI registers MIME as `None`
+     *    and the file_id is later rejected by `/v1/chat/completions` with
+     *    `400: Invalid file data: ... unsupported MIME type 'None'`.
+     *
+     *  - The filename stored against the row in OpenEMR's `documents` module
+     *    (see {@see IntakeFormIngestService::storeOriginalPdf()}).
+     *
+     * Earlier versions appended the basename of `$sourcePath`. That works for
+     * CLI smoke harnesses (paths like `/tmp/c3.pdf`) but breaks under the
+     * web-UI path: PHP/Symfony rename uploaded files to extensionless temp
+     * paths like `/tmp/phpXXXXXX`, so the basename has no `.pdf` and OpenAI
+     * mis-detects the MIME type. The source path's basename has no semantic
+     * value (it's a server-side temp), so we no longer reference it.
+     *
      * @return non-empty-string
      */
-    private function displayFilename(string $sourcePath, ?IntakeFormType $type): string
+    private function displayFilename(?IntakeFormType $type): string
     {
         $stem = match ($type) {
             IntakeFormType::Demographics => 'demographics',
@@ -518,12 +538,7 @@ final class IntakeFormIngestService
             null => 'intake',
         };
         $timestamp = $this->clock->now()->format('Ymd-His');
-        $original = pathinfo($sourcePath, PATHINFO_BASENAME);
-        $sanitised = preg_replace('/[^A-Za-z0-9._-]+/', '-', $original);
-        if (!is_string($sanitised) || $sanitised === '') {
-            $sanitised = 'upload.pdf';
-        }
 
-        return sprintf('intake-%s-%s-%s', $stem, $timestamp, $sanitised);
+        return sprintf('intake-%s-%s.pdf', $stem, $timestamp);
     }
 }

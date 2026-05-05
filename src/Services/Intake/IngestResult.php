@@ -24,12 +24,14 @@ final readonly class IngestResult
      *                         {@see IntakeFormType}'s case values.
      * @param int $documentId Foreign id into the `documents` table for the
      *                        original PDF (always saved, regardless of type).
-     * @param ?int $insertedRowId Primary id of the type-specific row that
-     *                            was created or updated:
-     *                            - Demographics: `patient_data.id`
-     *                            - MedicalHistory: `questionnaire_response.id`
-     *                            - Consent: same as `$documentId`
-     *                            Null when no row was created (Auto + reject).
+     * @param ?int $insertedRowId Primary id of the row inserted into
+     *                            `form_upload_intake_form` for this upload.
+     *                            This is what `FormService::addForm()` needs
+     *                            to wire the encounter-timeline entry: the
+     *                            `forms.form_id` column points at this row,
+     *                            and `formdir = 'upload_intake_form'`. Null
+     *                            only in the rare path where the timeline
+     *                            row could not be persisted.
      * @param list<array{field: string, old: ?string, new: ?string, applied: bool, reason: ?string}> $diffPreview
      *                            A field-level diff (one entry per field) the
      *                            UI can render to show what was applied vs

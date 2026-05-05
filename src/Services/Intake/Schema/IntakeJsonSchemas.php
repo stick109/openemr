@@ -26,26 +26,15 @@ namespace OpenEMR\Services\Intake\Schema;
 final class IntakeJsonSchemas
 {
     /**
+     * @deprecated Use {@see \OpenEMR\Services\Intake\Classifier\IntakeFormClassifierPrompt::classifierSchema()}
+     *             which is the canonical schema and uses snake_case `form_type`
+     *             matching the production classifier.
+     *
      * @return array<string, mixed>
      */
     public static function classifier(): array
     {
-        return [
-            'type' => 'object',
-            'additionalProperties' => false,
-            'required' => ['formType', 'confidence'],
-            'properties' => [
-                'formType' => [
-                    'type' => 'string',
-                    'enum' => ['Demographics', 'MedicalHistory', 'Consent', 'Unknown'],
-                ],
-                'confidence' => [
-                    'type' => 'number',
-                    'minimum' => 0,
-                    'maximum' => 1,
-                ],
-            ],
-        ];
+        return \OpenEMR\Services\Intake\Classifier\IntakeFormClassifierPrompt::classifierSchema();
     }
 
     /**

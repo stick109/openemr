@@ -29,8 +29,8 @@ namespace OpenEMR\Services\Intake;
 
 use JsonException;
 use OpenEMR\Common\Database\QueryUtils;
-use OpenEMR\Common\Database\SqlQueryException;
 use OpenEMR\Common\Session\SessionWrapperFactory;
+use OpenEMR\Services\Intake\Classifier\IntakeFormClassifierPrompt;
 use OpenEMR\Services\Intake\Dispatcher\ConsentDispatcher;
 use OpenEMR\Services\Intake\Dispatcher\DemographicsDispatcher;
 use OpenEMR\Services\Intake\Dispatcher\DiffEntry;
@@ -41,6 +41,7 @@ use OpenEMR\Services\Intake\Exception\IngestionFailedException;
 use OpenEMR\Services\Intake\Exception\InvalidUploadException;
 use OpenEMR\Services\Intake\OpenAi\OpenAIClient;
 use OpenEMR\Services\Intake\OpenAi\OpenAIStructuredRequest;
+use OpenEMR\Services\Intake\Schema\IntakeFormSchemaValidator;
 use OpenEMR\Services\Intake\Schema\IntakeJsonSchemas;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
@@ -55,6 +56,8 @@ final class IntakeFormIngestService
     private const CONSENT_CATEGORY_NAME = 'Consents';
     private const CONSENT_CATEGORY_PARENT_ID = 1;
 
+    private readonly IntakeFormSchemaValidator $schemaValidator;
+
     /**
      * @param non-empty-string $model
      */
@@ -68,7 +71,9 @@ final class IntakeFormIngestService
         private readonly ?SessionInterface $session = null,
         private readonly string $model = self::DEFAULT_MODEL,
         private readonly float $classifierThreshold = self::CLASSIFIER_THRESHOLD,
+        ?IntakeFormSchemaValidator $schemaValidator = null,
     ) {
+        $this->schemaValidator = $schemaValidator ?? new IntakeFormSchemaValidator();
     }
 
     /**
@@ -111,6 +116,7 @@ final class IntakeFormIngestService
         $resolvedType = $requestedType ?? $this->classify($fileId);
 
         $extracted = $this->extract($resolvedType, $fileId);
+        $this->validateExtracted($resolvedType, $extracted);
 
         $documentId = $this->storeOriginalPdf(
             $patientId,
@@ -131,7 +137,7 @@ final class IntakeFormIngestService
             IntakeFormType::Consent => $this->consentDispatcher->buildOutcome($documentId, $extracted),
         };
 
-        $this->recordUpload(
+        $intakeRowId = $this->recordUpload(
             patientId: $patientId,
             encounterId: $encounterId,
             authUserId: $authUserId,
@@ -145,13 +151,14 @@ final class IntakeFormIngestService
             'encounter_id' => $encounterId,
             'form_type' => $resolvedType->value,
             'document_id' => $documentId,
-            'inserted_row_id' => $outcome->insertedRowId,
+            'intake_row_id' => $intakeRowId,
+            'dispatcher_row_id' => $outcome->insertedRowId,
         ]);
 
         return new IngestResult(
             formType: $resolvedType->value,
             documentId: $documentId,
-            insertedRowId: $outcome->insertedRowId,
+            insertedRowId: $intakeRowId,
             diffPreview: array_map(static fn(DiffEntry $entry): array => $entry->toArray(), $outcome->diffPreview),
         );
     }
@@ -188,22 +195,25 @@ final class IntakeFormIngestService
 
     private function classify(string $fileId): IntakeFormType
     {
+        // Prompt construction is delegated to the pure
+        // IntakeFormClassifierPrompt helper so the prompt + schema can be
+        // exercised in isolated unit tests without touching the network.
         $request = new OpenAIStructuredRequest(
             model: $this->model,
-            systemPrompt: 'You classify clinical-intake PDF forms. Choose exactly one of: Demographics, MedicalHistory, Consent, Unknown. Return strict JSON.',
-            userPrompt: 'Identify the form type for the attached PDF. Provide a confidence score in [0, 1].',
+            systemPrompt: IntakeFormClassifierPrompt::SYSTEM_PROMPT,
+            userPrompt: IntakeFormClassifierPrompt::USER_PROMPT,
             fileIds: [$fileId],
-            schemaName: 'intake_form_classifier',
-            schema: IntakeJsonSchemas::classifier(),
+            schemaName: IntakeFormClassifierPrompt::SCHEMA_NAME,
+            schema: IntakeFormClassifierPrompt::classifierSchema(),
             maxTokens: 200,
         );
 
         $response = $this->openAiClient->complete($request);
 
         $confidence = $this->confidence($response);
-        $typeValue = $response['formType'] ?? null;
+        $typeValue = $response['form_type'] ?? null;
 
-        if (!is_string($typeValue) || $typeValue === 'Unknown' || $confidence < $this->classifierThreshold) {
+        if (!is_string($typeValue) || $confidence < $this->classifierThreshold) {
             throw new AmbiguousFormException(
                 'Unable to confidently classify the uploaded form.'
             );
@@ -274,6 +284,37 @@ final class IntakeFormIngestService
         };
 
         return $this->openAiClient->complete($request);
+    }
+
+    /**
+     * Confirm OpenAI's structured response actually has the required
+     * top-level fields the dispatcher expects. The strict response_format
+     * already pins this on the OpenAI side, but a sanity-check defends
+     * against schema drift and mocked clients in tests.
+     *
+     * @param array<array-key, mixed> $extracted
+     */
+    private function validateExtracted(IntakeFormType $type, array $extracted): void
+    {
+        $stringKeyed = [];
+        foreach ($extracted as $key => $value) {
+            if (is_string($key)) {
+                $stringKeyed[$key] = $value;
+            }
+        }
+
+        $errors = $this->schemaValidator->validate($type->value, $stringKeyed);
+        if ($errors === []) {
+            return;
+        }
+
+        $this->logger->warning('OpenAI extraction missing required fields', [
+            'form_type' => $type->value,
+            'missing_fields' => array_map(static fn(array $error): string => $error['field'], $errors),
+        ]);
+        throw new IngestionFailedException(
+            'OpenAI extraction did not satisfy required intake-form fields.'
+        );
     }
 
     private function storeOriginalPdf(
@@ -401,7 +442,7 @@ final class IntakeFormIngestService
         IntakeFormType $type,
         int $documentId,
         DispatchOutcome $outcome,
-    ): void {
+    ): int {
         try {
             $diffJson = json_encode(
                 array_map(static fn(DiffEntry $entry): array => $entry->toArray(), $outcome->diffPreview),
@@ -414,36 +455,29 @@ final class IntakeFormIngestService
             $diffJson = '[]';
         }
 
-        try {
-            $now = $this->clock->now()->format('Y-m-d H:i:s');
-            QueryUtils::sqlInsert(
-                'INSERT INTO `form_upload_intake_form`
-                    (`date`, `pid`, `encounter`, `user`, `groupname`, `authorized`, `activity`,
-                     `form_type`, `document_id`, `inserted_row_id`, `diff_preview`)
-                    VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?)',
-                [
-                    $now,
-                    $patientId,
-                    $encounterId,
-                    (string) $authUserId,
-                    'Default',
-                    $type->value,
-                    $documentId,
-                    $outcome->insertedRowId,
-                    $diffJson,
-                ]
-            );
-        } catch (SqlQueryException $exception) {
-            // The §3.8 migration creates this table; if it does not exist
-            // yet we still want the rest of the ingestion to count as a
-            // success. Log loudly and continue.
-            $this->logger->error('Failed to record intake upload row', [
-                'exception' => $exception,
-                'patient_id' => $patientId,
-                'encounter_id' => $encounterId,
-                'form_type' => $type->value,
-            ]);
-        }
+        // The schema (db/Migrations/Version20260504000001 + table.sql) is
+        // canonical now: failure to INSERT here means the ingestion is
+        // genuinely broken (missing migration, type mismatch, etc.). Let the
+        // exception propagate so the caller surfaces it instead of silently
+        // dropping the timeline row.
+        $now = $this->clock->now()->format('Y-m-d H:i:s');
+        return QueryUtils::sqlInsert(
+            'INSERT INTO `form_upload_intake_form`
+                (`date`, `pid`, `encounter`, `user`, `groupname`, `authorized`, `activity`,
+                 `form_type`, `document_id`, `inserted_row_id`, `diff_preview`)
+                VALUES (?, ?, ?, ?, ?, 1, 1, ?, ?, ?, ?)',
+            [
+                $now,
+                $patientId,
+                $encounterId,
+                (string) $authUserId,
+                'Default',
+                $type->value,
+                $documentId,
+                $outcome->insertedRowId,
+                $diffJson,
+            ]
+        );
     }
 
     private function resolveAuthUserId(): int

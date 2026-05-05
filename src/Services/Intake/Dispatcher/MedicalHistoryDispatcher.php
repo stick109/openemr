@@ -27,6 +27,7 @@ namespace OpenEMR\Services\Intake\Dispatcher;
 use JsonException;
 use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Services\Intake\Exception\IngestionFailedException;
+use OpenEMR\Services\Intake\Fhir\QuestionnaireResponseBuilder;
 use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
@@ -35,12 +36,16 @@ final class MedicalHistoryDispatcher
 {
     private const FORM_DIRECTORY = 'upload_intake_form';
     private const FORM_NAME = 'Medical History (Intake Upload)';
-    private const QUESTIONNAIRE_NAME = 'IntakeMedicalHistory';
+    private const QUESTIONNAIRE_NAME = QuestionnaireResponseBuilder::QUESTIONNAIRE_NAME;
+
+    private readonly QuestionnaireResponseBuilder $responseBuilder;
 
     public function __construct(
         private readonly LoggerInterface $logger,
         private readonly ClockInterface $clock,
+        ?QuestionnaireResponseBuilder $responseBuilder = null,
     ) {
+        $this->responseBuilder = $responseBuilder ?? new QuestionnaireResponseBuilder();
     }
 
     /**
@@ -56,7 +61,13 @@ final class MedicalHistoryDispatcher
         $responseId = $this->newResponseId();
 
         $questionnaireJson = $this->buildQuestionnaireDefinition();
-        $responseJson = $this->buildQuestionnaireResponse($responseId, $patientId, $encounterId, $extracted, $now->format(DATE_ATOM));
+        $responseJson = $this->responseBuilder->build(
+            patientId: $patientId,
+            payload: $extracted,
+            authoredAtIso: $now->format(DATE_ATOM),
+            encounterId: $encounterId,
+            responseId: $responseId,
+        );
 
         try {
             $questionnaireSerialised = json_encode($questionnaireJson, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
@@ -132,52 +143,6 @@ final class MedicalHistoryDispatcher
                 ['linkId' => 'social.alcohol', 'text' => 'Alcohol use', 'type' => 'string'],
                 ['linkId' => 'social.drugs', 'text' => 'Recreational drug use', 'type' => 'string'],
             ],
-        ];
-    }
-
-    /**
-     * @param array<array-key, mixed> $extracted
-     * @return array<string, mixed>
-     */
-    private function buildQuestionnaireResponse(
-        string $responseId,
-        int $patientId,
-        int $encounterId,
-        array $extracted,
-        string $authoredAtIso,
-    ): array {
-        $items = [];
-        foreach (['conditions', 'surgeries', 'medications', 'allergies', 'familyHistory'] as $key) {
-            $values = $this->stringList($extracted, $key);
-            if ($values !== []) {
-                $items[] = [
-                    'linkId' => $key,
-                    'answer' => array_map(
-                        static fn(string $value): array => ['valueString' => $value],
-                        $values
-                    ),
-                ];
-            }
-        }
-        foreach (['smoking', 'alcohol', 'drugs'] as $socialKey) {
-            $value = $this->scalarString($extracted, 'social.' . $socialKey);
-            if ($value !== null) {
-                $items[] = [
-                    'linkId' => 'social.' . $socialKey,
-                    'answer' => [['valueString' => $value]],
-                ];
-            }
-        }
-
-        return [
-            'resourceType' => 'QuestionnaireResponse',
-            'id' => $responseId,
-            'status' => 'completed',
-            'questionnaire' => 'Questionnaire/' . self::QUESTIONNAIRE_NAME,
-            'subject' => ['reference' => 'Patient/' . $patientId],
-            'encounter' => ['reference' => 'Encounter/' . $encounterId],
-            'authored' => $authoredAtIso,
-            'item' => $items,
         ];
     }
 

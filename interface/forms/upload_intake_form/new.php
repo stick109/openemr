@@ -34,11 +34,13 @@ $session = SessionWrapperFactory::getInstance()->getActiveSession();
 $rootDir = OEGlobalsBag::getInstance()->getString('rootdir');
 
 $formName = 'upload_intake_form';
+// Wire-level value => human display label. The wire-level value is what the
+// service expects (see IntakeFormType + save.php); the label is what users see.
 $formTypes = [
-    'Auto-detect',
-    'Demographics',
-    'Medical History',
-    'Consent',
+    'Auto'           => xl('Auto-detect'),
+    'Demographics'   => xl('Demographics'),
+    'MedicalHistory' => xl('Medical History'),
+    'Consent'        => xl('Consent'),
 ];
 ?>
 <html>
@@ -80,8 +82,8 @@ $formTypes = [
                             <?php echo xlt('Form type'); ?>
                         </label>
                         <select class="form-control" name="form_type" id="form_type">
-                            <?php foreach ($formTypes as $type) { ?>
-                                <option value="<?php echo attr($type); ?>"><?php echo xlt($type); ?></option>
+                            <?php foreach ($formTypes as $value => $label) { ?>
+                                <option value="<?php echo attr($value); ?>"><?php echo text($label); ?></option>
                             <?php } ?>
                         </select>
                         <small class="form-text text-muted">

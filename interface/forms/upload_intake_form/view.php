@@ -36,13 +36,13 @@ $row = $formRowId > 0
     ? formFetch('form_upload_intake_form', (string) $formRowId)
     : null;
 
-$type = is_array($row) && isset($row['type']) && is_string($row['type']) ? $row['type'] : '';
+$type = is_array($row) && isset($row['form_type']) && is_string($row['form_type']) ? $row['form_type'] : '';
 $documentId = is_array($row) && isset($row['document_id']) && is_numeric($row['document_id'])
     ? (int) $row['document_id']
     : 0;
 $patientId = is_array($row) && isset($row['pid']) && is_numeric($row['pid']) ? (int) $row['pid'] : 0;
-$createdAt = is_array($row) && isset($row['created_at']) && is_string($row['created_at'])
-    ? $row['created_at']
+$createdAt = is_array($row) && isset($row['date']) && is_string($row['date'])
+    ? $row['date']
     : '';
 
 $documentHref = '';

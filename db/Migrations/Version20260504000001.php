@@ -34,17 +34,42 @@ final class Version20260504000001 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
+        // Canonical OpenEMR form-table layout (date / pid / encounter / user /
+        // groupname / authorized / activity) plus the intake-specific columns
+        // (form_type / document_id / inserted_row_id / diff_preview). Keeping
+        // the canonical columns lets formFetch and FormService::addForm work
+        // out of the box, and lets the encounter timeline render the row
+        // without a special case.
         $table = new Table('form_upload_intake_form');
         $table->addColumn('id', Types::INTEGER, [
             'autoincrement' => true,
             'notnull' => true,
             'unsigned' => false,
         ]);
+        $table->addColumn('date', Types::DATETIME_MUTABLE, [
+            'notnull' => false,
+        ]);
         $table->addColumn('pid', Types::BIGINT, [
             'notnull' => true,
         ]);
         $table->addColumn('encounter', Types::BIGINT, [
             'notnull' => true,
+        ]);
+        $table->addColumn('user', Types::STRING, [
+            'length' => 255,
+            'notnull' => false,
+        ]);
+        $table->addColumn('groupname', Types::STRING, [
+            'length' => 255,
+            'notnull' => false,
+        ]);
+        $table->addColumn('authorized', Types::SMALLINT, [
+            'notnull' => false,
+            'default' => 0,
+        ]);
+        $table->addColumn('activity', Types::SMALLINT, [
+            'notnull' => false,
+            'default' => 1,
         ]);
         $table->addColumn('form_type', Types::STRING, [
             'length' => 32,
@@ -54,9 +79,12 @@ final class Version20260504000001 extends AbstractMigration
         $table->addColumn('document_id', Types::INTEGER, [
             'notnull' => false,
         ]);
-        $table->addColumn('created_at', Types::DATETIME_MUTABLE, [
-            'notnull' => true,
-            'default' => 'CURRENT_TIMESTAMP',
+        $table->addColumn('inserted_row_id', Types::INTEGER, [
+            'notnull' => false,
+        ]);
+        $table->addColumn('diff_preview', Types::TEXT, [
+            'notnull' => false,
+            'columnDefinition' => 'LONGTEXT DEFAULT NULL',
         ]);
         $this->addPrimaryKey($table, 'id');
         $table->addIndex(['encounter'], 'idx_encounter');

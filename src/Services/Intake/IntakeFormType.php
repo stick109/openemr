@@ -28,23 +28,19 @@ enum IntakeFormType: string
     /**
      * Parse a request-time form-type string into either a concrete
      * {@see IntakeFormType} (when the caller has chosen one explicitly) or
-     * `null` (when the caller has selected `Auto` and wants the classifier
-     * to decide). Anything else throws.
+     * `null` (when the caller selected `Auto` and wants the classifier to
+     * decide). The accepted vocabulary is exactly the four wire-level values
+     * `Auto`, `Demographics`, `MedicalHistory`, `Consent`. Display labels
+     * (e.g. "Medical History" with a space, "Auto-detect") live in the UI
+     * dropdown; they must never reach the service. Anything else throws.
      */
     public static function fromRequest(string $value): ?self
     {
-        $value = trim($value);
-        if ($value === '' || strcasecmp($value, 'Auto') === 0) {
+        if ($value === 'Auto') {
             return null;
         }
 
-        // Allow the values used in the UI dropdown that contain spaces.
-        $normalised = match (strcasecmp($value, 'Medical History') === 0) {
-            true => 'MedicalHistory',
-            false => $value,
-        };
-
-        $resolved = self::tryFrom($normalised);
+        $resolved = self::tryFrom($value);
         if ($resolved === null) {
             throw new InvalidFormTypeException('Unknown intake form type.');
         }

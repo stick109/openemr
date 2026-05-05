@@ -41,13 +41,13 @@ function upload_intake_form_report($pid, $encounter, $cols, $id): void
         return;
     }
 
-    $type = isset($row['type']) && is_string($row['type']) ? $row['type'] : '';
+    $type = isset($row['form_type']) && is_string($row['form_type']) ? $row['form_type'] : '';
     $documentId = isset($row['document_id']) && is_numeric($row['document_id'])
         ? (int) $row['document_id']
         : 0;
     $patientId = isset($row['pid']) && is_numeric($row['pid']) ? (int) $row['pid'] : 0;
-    $createdAt = isset($row['created_at']) && is_string($row['created_at'])
-        ? $row['created_at']
+    $createdAt = isset($row['date']) && is_string($row['date'])
+        ? $row['date']
         : '';
 
     echo '<table class="table table-sm border-0 mb-0"><tbody><tr>';

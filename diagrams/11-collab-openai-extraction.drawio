@@ -1,0 +1,185 @@
+<mxfile host="app.diagrams.net" modified="2026-05-05T00:00:00.000Z" agent="Claude Code" version="26.0.0" type="device">
+  <diagram id="w2-collab-openai-extraction" name="OpenAI Extraction Collaboration">
+    <mxGraphModel dx="1480" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="OpenAI Extraction Collaboration — Objects and Numbered Messages during Ingestion" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1400" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ========== OBJECTS ========== -->
+
+        <!-- save.php (PHP entry point) -->
+        <mxCell id="savephp" value="&lt;b&gt;:save.php&lt;/b&gt;&#xa;&#xa;CSRF + ACL gate&#xa;Copy PDF → /var/uploads&#xa;POST to agent-service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="200" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Supervisor -->
+        <mxCell id="supervisor" value="&lt;b&gt;:Supervisor&lt;/b&gt;&#xa;&#xa;T=0, deterministic&#xa;Routes: extract | retrieve&#xa;| finalize | refuse" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="40" y="480" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Extractor Worker -->
+        <mxCell id="extractor" value="&lt;b&gt;:Extractor&lt;/b&gt;&#xa;&#xa;LangGraph worker node&#xa;Orchestrates OpenAI calls&#xa;+ validation pipeline" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;fontStyle=0;" vertex="1" parent="1">
+          <mxGeometry x="440" y="340" width="200" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- OpenAI Files API -->
+        <mxCell id="filesapi" value="&lt;b&gt;:OpenAI Files API&lt;/b&gt;&#xa;&#xa;files.create()&#xa;Upload PDF for vision" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="780" y="140" width="180" height="90" as="geometry" />
+        </mxCell>
+
+        <!-- OpenAI Chat API -->
+        <mxCell id="chatapi" value="&lt;b&gt;:OpenAI Chat API&lt;/b&gt;&#xa;gpt-4o-mini&#xa;&#xa;Structured Outputs&#xa;response_format=json_schema&#xa;Returns strict JSON" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="780" y="340" width="200" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Pydantic Validator -->
+        <mxCell id="pydantic" value="&lt;b&gt;:PydanticValidator&lt;/b&gt;&#xa;&#xa;LabPdf.model_validate()&#xa;IntakeForm.model_validate()&#xa;Every leaf → Citation" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="780" y="540" width="200" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Bbox Verifier -->
+        <mxCell id="bboxverifier" value="&lt;b&gt;:BboxVerifier&lt;/b&gt;&#xa;&#xa;bbox ⊂ page, area &gt; 0&#xa;crop contains quote_or_value&#xa;Reject field on failure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#c2410c;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="440" y="620" width="200" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- OTel Span Recorder -->
+        <mxCell id="otel" value="&lt;b&gt;:OTelRecorder&lt;/b&gt;&#xa;&#xa;extractor.run span&#xa;tokens_in, tokens_out&#xa;cost_usd, latency_ms" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#64748b;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;" vertex="1" parent="1">
+          <mxGeometry x="1120" y="340" width="180" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- State (GraphState) -->
+        <mxCell id="state" value="&lt;b&gt;:GraphState&lt;/b&gt;&#xa;&#xa;patient_id, file_path&#xa;doc_type, trace_id&#xa;tool_sequence[]&#xa;extraction_result" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;fontColor=#0f172a;fontSize=12;arcSize=12;verticalAlign=top;spacingTop=4;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="160" y="720" width="200" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- ========== MESSAGES (numbered) ========== -->
+
+        <!-- 1. save.php → Supervisor: POST /api/agent/run -->
+        <mxCell id="msg1" value="1: POST /api/agent/run&#xa;{patient_id, file_path,&#xa; doc_type, encounter_id, trace_id}" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=10;strokeColor=#0284c7;entryX=0.5;entryY=0;exitX=0.5;exitY=1;curved=1;" edge="1" parent="1" source="savephp" target="supervisor">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 2. Supervisor → Extractor: route(extract) -->
+        <mxCell id="msg2" value="2: route(next_node=&quot;extract&quot;)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#16a34a;" edge="1" parent="1" source="supervisor" target="extractor">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 3. Extractor → Files API: upload PDF -->
+        <mxCell id="msg3" value="3: files.create(file=pdf_bytes)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#e11d48;" edge="1" parent="1" source="extractor" target="filesapi">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="260" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 4. Files API → Extractor: file_id -->
+        <mxCell id="msg4" value="4: {file_id}" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#e11d48;dashed=1;" edge="1" parent="1" source="filesapi" target="extractor">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="680" y="220" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 5. Extractor → Chat API: Structured Outputs call -->
+        <mxCell id="msg5" value="5: chat.completions.create(&#xa;  model=gpt-4o-mini,&#xa;  response_format=json_schema,&#xa;  file_id)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=10;strokeColor=#e11d48;align=left;" edge="1" parent="1" source="extractor" target="chatapi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 6. Chat API → Extractor: strict JSON response -->
+        <mxCell id="msg6" value="6: {strict JSON, usage}" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#e11d48;dashed=1;" edge="1" parent="1" source="chatapi" target="extractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint as="offset" y="20" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 7. Extractor → Pydantic: validate -->
+        <mxCell id="msg7" value="7: model_validate(json)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#7c3aed;" edge="1" parent="1" source="extractor" target="pydantic">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="700" y="560" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 8. Pydantic → Extractor: validated model -->
+        <mxCell id="msg8" value="8: Validated LabPdf | IntakeForm&#xa;   (every leaf has Citation)" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=10;strokeColor=#7c3aed;dashed=1;" edge="1" parent="1" source="pydantic" target="extractor">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="660" y="600" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 9. Extractor → BboxVerifier: verify -->
+        <mxCell id="msg9" value="9: verify_bboxes(citations, pdf)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#c2410c;" edge="1" parent="1" source="extractor" target="bboxverifier">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="440" y="520" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 10. BboxVerifier → Extractor: OK -->
+        <mxCell id="msg10" value="10: ✓ valid" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#c2410c;dashed=1;" edge="1" parent="1" source="bboxverifier" target="extractor">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="500" y="550" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 11. Extractor → OTel: record span -->
+        <mxCell id="msg11" value="11: record_span(extractor.run,&#xa;  tokens, cost, latency)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1;fontSize=10;strokeColor=#64748b;dashed=1;" edge="1" parent="1" source="extractor" target="otel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- 12. Extractor → Supervisor: return result + update state -->
+        <mxCell id="msg12" value="12: return ExtractionResult(payload, citations)" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#16a34a;dashed=1;" edge="1" parent="1" source="extractor" target="supervisor">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="440" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 13. Supervisor → State: append tool_sequence -->
+        <mxCell id="msg13" value="13: tool_sequence.append(&quot;extractor.run&quot;)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1;fontSize=10;strokeColor=#22c55e;dashed=1;" edge="1" parent="1" source="supervisor" target="state">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- RETRY path note -->
+        <mxCell id="retryNote" value="&lt;b&gt;Retry path (not shown):&lt;/b&gt;&#xa;If step 7 raises ValidationError,&#xa;Extractor retries step 5 once with&#xa;the validator's errors appended to the&#xa;prompt. Second failure → ErrorEvent&#xa;→ Supervisor routes to &quot;refuse&quot;." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#fef2f2;strokeColor=#dc2626;fontColor=#991b1b;fontSize=11;align=left;spacingLeft=8;spacingRight=8;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="560" width="280" height="110" as="geometry" />
+        </mxCell>
+
+        <!-- Mock boundary note -->
+        <mxCell id="mockNote" value="&lt;b&gt;CI / Eval boundary:&lt;/b&gt;&#xa;In eval mode, steps 3–6 hit a&#xa;mock OpenAI client that returns&#xa;recorded VLM output per fixture.&#xa;Same code path — mock plugs in&#xa;at the client boundary." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#fefce8;strokeColor=#ca8a04;fontColor=#713f12;fontSize=11;align=left;spacingLeft=8;spacingRight=8;" vertex="1" parent="1">
+          <mxGeometry x="1100" y="140" width="280" height="100" as="geometry" />
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f8fafc;strokeColor=#cbd5e1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="870" width="700" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="legTitle" value="&lt;b&gt;Legend&lt;/b&gt;" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;fontSize=12;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="55" y="875" width="60" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="legText" value="Blue = PHP boundary  |  Green = LangGraph internal  |  Red = OpenAI external  |  Purple = Pydantic  |  Orange = Bbox  |  Gray = Observability&#xa;Solid arrow = synchronous call  |  Dashed arrow = return / async" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;fontSize=10;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="55" y="900" width="680" height="40" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

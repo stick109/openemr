@@ -1,0 +1,196 @@
+<mxfile host="app.diagrams.net" modified="2026-05-05T00:00:00.000Z" agent="Claude Code" version="26.0.0" type="device">
+  <diagram id="w2-seq-openai-extraction" name="OpenAI Extraction Sequence">
+    <mxGraphModel dx="1480" dy="1200" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1400" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="OpenAI API Call Sequence — Extractor Worker during Document Ingestion" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1400" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- Lifelines -->
+        <mxCell id="lifeSupervisor" value="Supervisor&#xa;(LangGraph node)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="160" height="1260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lifeExtractor" value="Extractor Worker&#xa;(LangGraph node)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="290" y="80" width="180" height="1260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lifeFilesAPI" value="OpenAI Files API&#xa;(file upload)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="540" y="80" width="160" height="1260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lifeChatAPI" value="OpenAI Chat API&#xa;gpt-4o-mini&#xa;Structured Outputs" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="780" y="80" width="180" height="1260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lifePydantic" value="Pydantic v2&#xa;Schema Validator" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="80" width="160" height="1260" as="geometry" />
+        </mxCell>
+
+        <mxCell id="lifeBbox" value="Bbox Verifier&#xa;(page-crop check)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff7ed;strokeColor=#c2410c;fontColor=#0f172a;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1260" y="80" width="160" height="1260" as="geometry" />
+        </mxCell>
+
+        <!-- Messages -->
+        <!-- 1. Supervisor routes to Extractor -->
+        <mxCell id="m1" value="1. route(next_node=&quot;extract&quot;)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#16a34a;" edge="1" parent="1" source="lifeSupervisor" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="140" y="200" as="sourcePoint" />
+            <mxPoint x="380" y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 2. Extractor uploads PDF to Files API -->
+        <mxCell id="m2" value="2. files.create(file=pdf_bytes, purpose=&quot;assistants&quot;)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#e11d48;" edge="1" parent="1" source="lifeExtractor" target="lifeFilesAPI">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="260" as="sourcePoint" />
+            <mxPoint x="620" y="260" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 3. Files API returns file_id -->
+        <mxCell id="m3" value="3. {file_id: &quot;file-abc123&quot;}" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=12;strokeColor=#e11d48;dashed=1;" edge="1" parent="1" source="lifeFilesAPI" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="620" y="310" as="sourcePoint" />
+            <mxPoint x="380" y="310" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 4. Extractor calls Chat API with Structured Outputs -->
+        <mxCell id="m4" value="4. chat.completions.create(&#xa;   model=&quot;gpt-4o-mini&quot;,&#xa;   response_format={type: &quot;json_schema&quot;, schema: LabPdf|IntakeForm},&#xa;   messages=[{role:&quot;user&quot;, content:[{type:&quot;file&quot;, file_id}]}]&#xa;)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#e11d48;align=left;" edge="1" parent="1" source="lifeExtractor" target="lifeChatAPI">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="360" as="sourcePoint" />
+            <mxPoint x="870" y="360" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Note: Structured Outputs enforces strict JSON -->
+        <mxCell id="note1" value="Structured Outputs enforces strict JSON&#xa;schema — the API guarantees the shape&#xa;matches the Pydantic model or returns&#xa;a refusal." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#fefce8;strokeColor=#ca8a04;fontColor=#713f12;fontSize=11;align=left;spacingLeft=8;spacingRight=8;" vertex="1" parent="1">
+          <mxGeometry x="960" y="340" width="280" height="80" as="geometry" />
+        </mxCell>
+
+        <!-- 5. Chat API returns structured JSON -->
+        <mxCell id="m5" value="5. {choices: [{message: {content: &lt;strict JSON&gt;}}],&#xa;    usage: {prompt_tokens, completion_tokens}}" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#e11d48;dashed=1;align=left;" edge="1" parent="1" source="lifeChatAPI" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="480" as="sourcePoint" />
+            <mxPoint x="380" y="480" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 6. Extractor sends to Pydantic for validation -->
+        <mxCell id="m6" value="6. LabPdf.model_validate(json_payload)&#xa;   or IntakeForm.model_validate(json_payload)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#7c3aed;" edge="1" parent="1" source="lifeExtractor" target="lifePydantic">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="540" as="sourcePoint" />
+            <mxPoint x="1110" y="540" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ALT box: validation pass / fail -->
+        <mxCell id="alt1" value="alt" style="shape=umlFrame;whiteSpace=wrap;html=1;width=40;height=20;fillColor=none;strokeColor=#475569;fontColor=#475569;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="600" width="1200" height="460" as="geometry" />
+        </mxCell>
+        <mxCell id="alt1label" value="[schema_valid = true &amp;&amp; extraction_confidence ≥ threshold]" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=2;fontColor=#16a34a;" vertex="1" parent="1">
+          <mxGeometry x="300" y="600" width="500" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- 7a. Pydantic returns validated model -->
+        <mxCell id="m7a" value="7a. Validated LabPdf / IntakeForm&#xa;     (every leaf has source_citation: Citation)" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#16a34a;dashed=1;" edge="1" parent="1" source="lifePydantic" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1110" y="660" as="sourcePoint" />
+            <mxPoint x="380" y="660" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 8a. Bbox verification for PDF-derived fields -->
+        <mxCell id="m8a" value="8a. verify_bboxes(citations, pdf_pages)&#xa;     bbox ⊂ page, area &gt; 0, crop contains quote" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#c2410c;" edge="1" parent="1" source="lifeExtractor" target="lifeBbox">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="720" as="sourcePoint" />
+            <mxPoint x="1340" y="720" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 9a. Bbox OK -->
+        <mxCell id="m9a" value="9a. ✓ all bboxes valid" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=12;strokeColor=#16a34a;dashed=1;" edge="1" parent="1" source="lifeBbox" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1340" y="780" as="sourcePoint" />
+            <mxPoint x="380" y="780" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 10a. Return typed payload to Supervisor -->
+        <mxCell id="m10a" value="10a. return ExtractionResult(payload, citations, tool_sequence, tokens)" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#16a34a;dashed=1;" edge="1" parent="1" source="lifeExtractor" target="lifeSupervisor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="830" as="sourcePoint" />
+            <mxPoint x="140" y="830" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Divider line for alt -->
+        <mxCell id="altDiv" value="" style="line;strokeWidth=1;strokeColor=#94a3b8;dashed=1;" vertex="1" parent="1">
+          <mxGeometry x="250" y="870" width="1200" height="10" as="geometry" />
+        </mxCell>
+        <mxCell id="alt1else" value="[schema mismatch OR confidence &lt; threshold — retry once]" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=12;fontStyle=2;fontColor=#dc2626;" vertex="1" parent="1">
+          <mxGeometry x="300" y="870" width="500" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- 7b. Pydantic raises ValidationError -->
+        <mxCell id="m7b" value="7b. raise ValidationError(errors=[...])" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=12;strokeColor=#dc2626;dashed=1;" edge="1" parent="1" source="lifePydantic" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="1110" y="920" as="sourcePoint" />
+            <mxPoint x="380" y="920" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 8b. Retry with stricter prompt -->
+        <mxCell id="m8b" value="8b. chat.completions.create(&#xa;   model=&quot;gpt-4o-mini&quot;,&#xa;   messages=[...original, {role:&quot;user&quot;, content: validator_errors_str}],&#xa;   response_format={type: &quot;json_schema&quot;, ...}&#xa;)  [RETRY — stricter prompt with validator complaint]" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=10;strokeColor=#dc2626;align=left;" edge="1" parent="1" source="lifeExtractor" target="lifeChatAPI">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="970" as="sourcePoint" />
+            <mxPoint x="870" y="970" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 9b. Retry response or final failure -->
+        <mxCell id="m9b" value="9b. {choices: [{message: {content: &lt;corrected JSON&gt;}}]}" style="html=1;startArrow=none;endArrow=open;endFill=0;strokeWidth=2;fontSize=11;strokeColor=#dc2626;dashed=1;" edge="1" parent="1" source="lifeChatAPI" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="870" y="1040" as="sourcePoint" />
+            <mxPoint x="380" y="1040" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Note: if retry also fails -->
+        <mxCell id="note2" value="If retry also fails Pydantic validation,&#xa;Extractor raises ErrorEvent →&#xa;Supervisor routes to &quot;refuse&quot;.&#xa;No DB writes. Rubric safe_refusal = pass." style="shape=note;whiteSpace=wrap;html=1;backgroundOutline=1;size=15;fillColor=#fef2f2;strokeColor=#dc2626;fontColor=#991b1b;fontSize=11;align=left;spacingLeft=8;spacingRight=8;" vertex="1" parent="1">
+          <mxGeometry x="960" y="1000" width="280" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- Post-extraction: OTel span -->
+        <mxCell id="m11" value="11. Record OTel span: extractor.run&#xa;    {latency_ms, tokens_in, tokens_out, cost_usd, extraction_confidence}" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=1;fontSize=10;strokeColor=#6b7280;dashed=1;" edge="1" parent="1" source="lifeExtractor" target="lifeExtractor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="1120" as="sourcePoint" />
+            <mxPoint x="420" y="1120" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- 12. Supervisor appends to tool_sequence -->
+        <mxCell id="m12" value="12. state.tool_sequence.append(&quot;extractor.run&quot;)&#xa;    Supervisor decides next: retrieve | finalize | refuse" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=11;strokeColor=#16a34a;" edge="1" parent="1" source="lifeExtractor" target="lifeSupervisor">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint x="380" y="1180" as="sourcePoint" />
+            <mxPoint x="140" y="1180" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+
+        <!-- Legend -->
+        <mxCell id="legend" value="Legend" style="shape=mxgraph.basic.rect;fillColor=#f8fafc;strokeColor=#cbd5e1;fontColor=#0f172a;fontSize=13;fontStyle=1;rounded=1;arcSize=10;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1300" width="400" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="Green = LangGraph internal    Red = OpenAI external API    Purple = Pydantic validation    Orange = Bbox verification" style="text;html=1;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=11;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="55" y="1320" width="380" height="50" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

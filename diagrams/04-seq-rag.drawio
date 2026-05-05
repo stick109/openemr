@@ -1,0 +1,124 @@
+<mxfile host="app.diagrams.net" modified="2026-05-05T00:00:00.000Z" agent="Claude Code" version="26.0.0" type="device">
+  <diagram id="w2-seq-rag" name="W2 Hybrid RAG Sequence">
+    <mxGraphModel dx="1480" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Hybrid RAG — indexing (startup) and query (runtime)" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1400" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="bandIndex" value="Indexing — runs once at agent-service startup; cached on corpus hash" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0284c7;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#0c4a6e;" vertex="1" parent="1">
+          <mxGeometry x="60" y="80" width="1380" height="280" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeCorpus" value="agent-service/rag/corpus/&#xa;USPSTF · ADA · JNC · CDC&#xa;~50–100 markdown chunks" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="120" width="200" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeChunker" value="corpus_loader.py&#xa;chunker (~200–400 words)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="380" y="120" width="200" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeBm25" value="bm25_index.py&#xa;rank_bm25 in-memory" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="660" y="120" width="200" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeEmb" value="OpenAI&#xa;text-embedding-3-small" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="940" y="120" width="200" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeVec" value="vector_index.py&#xa;sqlite-vec ANN" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="120" width="200" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="i1" value="1. read MD chunks + metadata" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeCorpus" target="lifeChunker">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="200" as="sourcePoint" />
+            <mxPoint y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="i2" value="2. tokenize + register chunks" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeChunker" target="lifeBm25">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="240" as="sourcePoint" />
+            <mxPoint y="240" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="i3" value="3. embed batch" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#9f1239;" edge="1" parent="1" source="lifeChunker" target="lifeEmb">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="280" as="sourcePoint" />
+            <mxPoint y="280" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="i4" value="4. vectors" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#9f1239;" edge="1" parent="1" source="lifeEmb" target="lifeVec">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="320" as="sourcePoint" />
+            <mxPoint y="320" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="bandQuery" value="Query — runs per retriever invocation; deterministic for fixed corpus + query" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#16a34a;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#166534;" vertex="1" parent="1">
+          <mxGeometry x="60" y="380" width="1380" height="540" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeQuery" value="retriever.py&#xa;build_query(state)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="100" y="420" width="200" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeBm25Q" value="BM25 search&#xa;top-50" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="380" y="420" width="200" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeVecQ" value="dense ANN&#xa;top-50" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="660" y="420" width="200" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeRrf" value="RRF fuse&#xa;top-30" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="940" y="420" width="200" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeCohere" value="Cohere rerank&#xa;rerank-english-v3.0&#xa;(or cross-encoder)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1220" y="420" width="200" height="480" as="geometry" />
+        </mxCell>
+        <mxCell id="q1" value="1. build query string" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeQuery" target="lifeQuery">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="500" as="sourcePoint" />
+            <mxPoint x="270" y="500" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q2" value="2. BM25 search" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeQuery" target="lifeBm25Q">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="550" as="sourcePoint" />
+            <mxPoint y="550" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q3" value="3. dense search" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeQuery" target="lifeVecQ">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="600" as="sourcePoint" />
+            <mxPoint y="600" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q4" value="4. top-50 ids" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeBm25Q" target="lifeRrf">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="650" as="sourcePoint" />
+            <mxPoint y="650" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q5" value="5. top-50 ids" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeVecQ" target="lifeRrf">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="700" as="sourcePoint" />
+            <mxPoint y="700" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q6" value="6. RRF score → top-30" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeRrf" target="lifeCohere">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="750" as="sourcePoint" />
+            <mxPoint y="750" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q7" value="7. rerank → top-5 (with relevance scores)" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#9f1239;" edge="1" parent="1" source="lifeCohere" target="lifeQuery">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="800" as="sourcePoint" />
+            <mxPoint y="800" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="q8" value="8. attach Citation per chunk → return GuidelineSnippet[]" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeQuery" target="lifeQuery">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="850" as="sourcePoint" />
+            <mxPoint x="270" y="850" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note" value="Why hybrid + rerank?&#10;• BM25 alone: misses paraphrase ('hyperlipidemia' vs 'high cholesterol').&#10;• Dense alone: misses rare clinical tokens (LOINC codes, drug names) and is sensitive to query phrasing.&#10;• RRF fuses both robustly without tuning weights; rerank promotes the chunks that actually answer the query." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;fontSize=12;align=left;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="940" width="1380" height="120" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

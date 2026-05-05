@@ -1,0 +1,145 @@
+<mxfile host="app.diagrams.net" modified="2026-05-05T00:00:00.000Z" agent="Claude Code" version="26.0.0" type="device">
+  <diagram id="w2-seq-document-ingestion" name="W2 Document Ingestion Sequence">
+    <mxGraphModel dx="1480" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1320" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Document Ingestion Sequence — upload PDF → extracted JSON → FHIR/SQL writes" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1400" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeUser" value="Front-desk staff" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="160" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeForm" value="upload_intake_form/&#xa;new.php · save.php" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="280" y="80" width="180" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeSvc" value="IntakeFormIngest&#xa;Service (PHP proxy)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="80" width="180" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeAgent" value="agent-service&#xa;/api/agent/run" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="720" y="80" width="180" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeGraph" value="Supervisor +&#xa;Workers (LangGraph)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="940" y="80" width="180" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeOpenAI" value="OpenAI&#xa;(Files + chat)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="80" width="160" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeDb" value="OpenEMR DB / FHIR" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff7ed;strokeColor=#c2410c;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="80" width="120" height="1180" as="geometry" />
+        </mxCell>
+        <mxCell id="m1" value="1. Upload PDF + select doc_type" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeUser" target="lifeForm">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="200" as="sourcePoint" />
+            <mxPoint y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m2" value="2. CSRF + ACL + PDF magic + size cap" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeForm" target="lifeSvc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="240" as="sourcePoint" />
+            <mxPoint y="240" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m3" value="3. Copy file → /var/uploads (mounted in agent container)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeSvc" target="lifeSvc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="290" as="sourcePoint" />
+            <mxPoint x="690" y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m4" value="4. POST /api/agent/run {patient_id, file_path, doc_type, encounter_id, trace_id}" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f766e;" edge="1" parent="1" source="lifeSvc" target="lifeAgent">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="330" as="sourcePoint" />
+            <mxPoint y="330" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m5" value="5. Run LangGraph: state = {file, doc_type}" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeAgent" target="lifeGraph">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="380" as="sourcePoint" />
+            <mxPoint y="380" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m6" value="6. Supervisor decides: extract" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeGraph" target="lifeGraph">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="420" as="sourcePoint" />
+            <mxPoint x="1130" y="420" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m7" value="7. Files API upload + Structured Outputs call" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#9f1239;" edge="1" parent="1" source="lifeGraph" target="lifeOpenAI">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="470" as="sourcePoint" />
+            <mxPoint y="470" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m8" value="8. JSON-validated extraction with bbox per field" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#9f1239;" edge="1" parent="1" source="lifeOpenAI" target="lifeGraph">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="510" as="sourcePoint" />
+            <mxPoint y="510" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m9" value="9. Supervisor decides: retrieve (if guideline question)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeAgent" target="lifeGraph">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="560" as="sourcePoint" />
+            <mxPoint y="560" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m10" value="10. Hybrid retrieve + Cohere rerank → top-5 chunks (with citations)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeGraph" target="lifeGraph">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="610" as="sourcePoint" />
+            <mxPoint x="1130" y="610" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m11" value="11. Supervisor finalize: build {extracted, evidence, citations, cost, latency}" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeGraph" target="lifeGraph">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="660" as="sourcePoint" />
+            <mxPoint x="1130" y="660" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m12" value="12. Return ExtractionResult JSON" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#0f766e;" edge="1" parent="1" source="lifeAgent" target="lifeSvc">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="710" as="sourcePoint" />
+            <mxPoint y="710" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m13" value="13a. doc_type=lab_pdf → procedure_order/report/result rows + Observation FHIR" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#c2410c;" edge="1" parent="1" source="lifeSvc" target="lifeDb">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="770" as="sourcePoint" />
+            <mxPoint y="770" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m14" value="13b. doc_type=intake_form → patient_data merge / questionnaire_response / documents" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#c2410c;" edge="1" parent="1" source="lifeSvc" target="lifeDb">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="820" as="sourcePoint" />
+            <mxPoint y="820" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m15" value="14. INSERT form_upload_intake_form_citation rows (one per persisted field)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#c2410c;" edge="1" parent="1" source="lifeSvc" target="lifeDb">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="870" as="sourcePoint" />
+            <mxPoint y="870" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m16" value="15. INSERT form_upload_intake_form (timeline row, links to encounter)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#c2410c;" edge="1" parent="1" source="lifeSvc" target="lifeDb">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="920" as="sourcePoint" />
+            <mxPoint y="920" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m17" value="16. FormService::addForm() — appears in encounter timeline" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeSvc" target="lifeForm">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="970" as="sourcePoint" />
+            <mxPoint y="970" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m18" value="17. Render success page + click-to-source preview" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeForm" target="lifeUser">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="1020" as="sourcePoint" />
+            <mxPoint y="1020" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="note" value="Notes&#10;• trace_id is generated PHP-side and echoed everywhere → click-to-source can resolve overlays after navigation.&#10;• If extraction fails (schema-invalid / low-confidence), the supervisor returns a safe-refusal — no DB writes.&#10;• Each step emits an OTel span; PHI redactor strips raw text before export.&#10;• PDF bytes are written once and referenced by path; nothing copies the binary into the trace." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;fontSize=12;align=left;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="1080" width="1380" height="170" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

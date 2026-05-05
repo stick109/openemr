@@ -1,0 +1,103 @@
+<mxfile host="app.diagrams.net" modified="2026-05-05T00:00:00.000Z" agent="Claude Code" version="26.0.0" type="device">
+  <diagram id="w2-component-overview" name="W2 Component Overview">
+    <mxGraphModel dx="1480" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1080" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Week 2 Component Overview — OpenEMR + agent-service + RAG + Eval" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=24;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1400" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="subtitle" value="PHP-side stays thin. Multi-agent orchestration, RAG, and eval live in the new Python service. External APIs are clearly fenced off." style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=14;fontColor=#475569;" vertex="1" parent="1">
+          <mxGeometry x="40" y="60" width="1400" height="28" as="geometry" />
+        </mxCell>
+        <mxCell id="boundary-php" value="OpenEMR (PHP) — this repo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0284c7;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#0c4a6e;" vertex="1" parent="1">
+          <mxGeometry x="60" y="120" width="640" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="phUi" value="interface/forms/upload_intake_form/&#xa;new.php · save.php · view.php · report.php&#xa;CSRF + ACL + 10MB PDF cap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="90" y="170" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="phSvc" value="src/Services/Intake/&#xa;IntakeFormIngestService · Dispatchers&#xa;(Demographics · MedicalHistory · Consent)&#xa;Becomes a thin proxy in Week 2" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="390" y="170" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="phDb" value="MySQL (OpenEMR schema)&#xa;patient_data · insurance_data · documents&#xa;questionnaire_response · procedure_*&#xa;form_upload_intake_form (+ _citation new in W2)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="90" y="280" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="phFhir" value="FHIR write paths&#xa;(Patient · Observation · QuestionnaireResponse)&#xa;Surfaced through OpenEMR's existing FHIR layer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="390" y="280" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="phEv" value="Encounter timeline + click-to-source preview&#xa;(pdf.js renders the original; bbox overlays drawn from form_upload_intake_form_citation)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="90" y="400" width="580" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="boundary-py" value="agent-service/ (Python, FastAPI) — new in Week 2, this repo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#16a34a;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#166534;" vertex="1" parent="1">
+          <mxGeometry x="720" y="120" width="640" height="380" as="geometry" />
+        </mxCell>
+        <mxCell id="pyApi" value="POST /api/agent/run&#xa;{patient_id, file_path, doc_type, encounter_id, trace_id}&#xa;Auth: shared secret with PHP" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="750" y="170" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pyGraph" value="LangGraph StateGraph&#xa;Supervisor → Extractor → Retriever → Finalize&#xa;Deterministic supervisor (T=0)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="170" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pyExt" value="Extractor worker&#xa;OpenAI Files API + Structured Outputs&#xa;Pydantic v2 — strict schemas" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="750" y="280" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pyRet" value="Retriever worker&#xa;BM25 + dense (sqlite-vec) + RRF&#xa;Cohere rerank → top-5 chunks" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1050" y="280" width="280" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="pyEval" value="Eval harness — agent_service/eval/&#xa;50 cases · boolean rubrics · pre-push hook&#xa;Local SQLite report; no PHI on disk" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="750" y="400" width="580" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="boundary-ext" value="External services (only image bytes + queries leave the host)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#e11d48;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#9f1239;" vertex="1" parent="1">
+          <mxGeometry x="60" y="540" width="1300" height="180" as="geometry" />
+        </mxCell>
+        <mxCell id="extOpenAI" value="OpenAI API&#xa;Files API + chat.completions&#xa;gpt-4o-mini — vision extraction&#xa;text-embedding-3-small — embeddings" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="90" y="590" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="extCohere" value="Cohere API&#xa;rerank-english-v3.0&#xa;Cross-encoder fallback if no key" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="400" y="590" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="extOtel" value="OpenTelemetry → Honeycomb&#xa;Traces + spans, no PHI&#xa;Pre-emit redactor + Sanitized view" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="710" y="590" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="extDeploy" value="Render (agent-service) +&#xa;Cloudflare Tunnel (OpenEMR)&#xa;Public URLs for graders" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="590" width="280" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="e1" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#475569;" edge="1" parent="1" source="phUi" target="phSvc">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="HTTP POST" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#0f766e;fontSize=12;" edge="1" parent="1" source="phSvc" target="pyApi">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#475569;" edge="1" parent="1" source="pyApi" target="pyGraph">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#475569;" edge="1" parent="1" source="pyGraph" target="pyExt">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#475569;" edge="1" parent="1" source="pyGraph" target="pyRet">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="vision call" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#9f1239;fontSize=12;" edge="1" parent="1" source="pyExt" target="extOpenAI">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="rerank" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#9f1239;fontSize=12;" edge="1" parent="1" source="pyRet" target="extCohere">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e8" value="OTel spans" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#9f1239;dashed=1;fontSize=12;" edge="1" parent="1" source="pyApi" target="extOtel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e9" value="dispatch FHIR/SQL" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#0f766e;fontSize=12;" edge="1" parent="1" source="phSvc" target="phDb">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="surface as Observation, etc." style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#0f766e;fontSize=12;" edge="1" parent="1" source="phDb" target="phFhir">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e11" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#475569;" edge="1" parent="1" source="phSvc" target="phEv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e12" value="deploy" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#9f1239;dashed=1;fontSize=12;" edge="1" parent="1" source="pyApi" target="extDeploy">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

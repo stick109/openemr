@@ -39,6 +39,7 @@ use OpenEMR\Services\Intake\Dispatcher\MedicalHistoryDispatcher;
 use OpenEMR\Services\Intake\Exception\AmbiguousFormException;
 use OpenEMR\Services\Intake\Exception\IngestionFailedException;
 use OpenEMR\Services\Intake\Exception\InvalidUploadException;
+use OpenEMR\Services\Intake\OpenAi\Exception\OpenAIException;
 use OpenEMR\Services\Intake\OpenAi\OpenAIClient;
 use OpenEMR\Services\Intake\OpenAi\OpenAIStructuredRequest;
 use OpenEMR\Services\Intake\Schema\IntakeFormSchemaValidator;
@@ -104,47 +105,58 @@ final class IntakeFormIngestService
             throw new IngestionFailedException('Patient id must be positive.');
         }
 
-        $pdfPath = $this->validateUpload($uploadedPdfPath);
+        // Wrap the pipeline so OpenAIException (which lives outside the
+        // IntakeFormException hierarchy) reaches save.php as the documented
+        // IngestionFailedException — keeping the user-friendly error path
+        // and not bubbling a transport-level exception to the global handler.
+        try {
+            $pdfPath = $this->validateUpload($uploadedPdfPath);
 
-        $requestedType = IntakeFormType::fromRequest($formType);
+            $requestedType = IntakeFormType::fromRequest($formType);
 
-        $fileId = $this->openAiClient->uploadPdf(
-            $pdfPath,
-            $this->displayFilename($pdfPath, $requestedType)
-        );
+            $fileId = $this->openAiClient->uploadPdf(
+                $pdfPath,
+                $this->displayFilename($pdfPath, $requestedType)
+            );
 
-        $resolvedType = $requestedType ?? $this->classify($fileId);
+            $resolvedType = $requestedType ?? $this->classify($fileId);
 
-        $extracted = $this->extract($resolvedType, $fileId);
-        $this->validateExtracted($resolvedType, $extracted);
+            $extracted = $this->extract($resolvedType, $fileId);
+            $this->validateExtracted($resolvedType, $extracted);
 
-        $documentId = $this->storeOriginalPdf(
-            $patientId,
-            $pdfPath,
-            $resolvedType,
-        );
-
-        $authUserId = $this->resolveAuthUserId();
-
-        $outcome = match ($resolvedType) {
-            IntakeFormType::Demographics => $this->demographicsDispatcher->dispatch($patientId, $extracted),
-            IntakeFormType::MedicalHistory => $this->medicalHistoryDispatcher->dispatch(
+            $documentId = $this->storeOriginalPdf(
                 $patientId,
-                $encounterId,
-                $authUserId,
-                $extracted,
-            ),
-            IntakeFormType::Consent => $this->consentDispatcher->buildOutcome($documentId, $extracted),
-        };
+                $pdfPath,
+                $resolvedType,
+            );
 
-        $intakeRowId = $this->recordUpload(
-            patientId: $patientId,
-            encounterId: $encounterId,
-            authUserId: $authUserId,
-            type: $resolvedType,
-            documentId: $documentId,
-            outcome: $outcome,
-        );
+            $authUserId = $this->resolveAuthUserId();
+
+            $outcome = match ($resolvedType) {
+                IntakeFormType::Demographics => $this->demographicsDispatcher->dispatch($patientId, $extracted),
+                IntakeFormType::MedicalHistory => $this->medicalHistoryDispatcher->dispatch(
+                    $patientId,
+                    $encounterId,
+                    $authUserId,
+                    $extracted,
+                ),
+                IntakeFormType::Consent => $this->consentDispatcher->buildOutcome($documentId, $extracted),
+            };
+
+            $intakeRowId = $this->recordUpload(
+                patientId: $patientId,
+                encounterId: $encounterId,
+                authUserId: $authUserId,
+                type: $resolvedType,
+                documentId: $documentId,
+                outcome: $outcome,
+            );
+        } catch (OpenAIException $e) {
+            throw new IngestionFailedException(
+                'OpenAI extraction failed for intake form upload.',
+                $e
+            );
+        }
 
         $this->logger->info('Intake form ingested', [
             'patient_id' => $patientId,

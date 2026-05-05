@@ -25,7 +25,9 @@ param(
     [string]$ProjectName = "openemr",
     [string]$Model = "gpt-4o-mini",
     [string]$OutFile,
-    [int]$Seed
+    [int]$Seed,
+    [string]$ClinicName = "Maple Grove Primary Care",
+    [string]$ClinicAddress = "1820 N Walnut Ave, Springfield, IL 62702"
 )
 
 $ErrorActionPreference = "Stop"
@@ -160,9 +162,31 @@ WHERE pid = $PatientPid;
     }
 }
 
+function Get-InsuranceCarriers {
+    # Returns up to 25 active insurance-carrier names from the running OpenEMR
+    # install so generated forms reference real, ingestible carriers. Returns
+    # an empty array if the table is empty or the query fails — callers fall
+    # back to letting the LLM pick a well-known carrier name.
+    $sql = "SELECT name FROM insurance_companies WHERE inactive = 0 AND name IS NOT NULL AND name <> '' ORDER BY name LIMIT 25;"
+    $rawOutput = & docker compose --project-name $ProjectName exec -T mysql `
+        mariadb -uopenemr -popenemr openemr --batch --skip-column-names -e $sql 2>$null
+    if ($LASTEXITCODE -ne 0) {
+        return @()
+    }
+    return @($rawOutput | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
 # ----- Per-form-type schemas, prompts, and templates -----------------------
 
 function Get-DemographicsSchema {
+    param([string[]]$Carriers = @())
+
+    $carrierProp = if ($Carriers.Count -gt 0) {
+        @{ type = "string"; enum = $Carriers }
+    } else {
+        @{ type = "string" }
+    }
+
     return @{
         name   = "DemographicsForm"
         strict = $true
@@ -203,7 +227,7 @@ function Get-DemographicsSchema {
                     additionalProperties = $false
                     required             = @("carrier", "memberId", "group", "planType")
                     properties           = @{
-                        carrier  = @{ type = "string" }
+                        carrier  = $carrierProp
                         memberId = @{ type = "string" }
                         group    = @{ type = "string" }
                         planType = @{ type = "string"; enum = @("PPO", "HMO", "EPO", "POS", "HDHP", "Medicare", "Medicaid", "Self-Pay") }
@@ -316,12 +340,10 @@ function Get-ConsentSchema {
         schema = @{
             type                 = "object"
             additionalProperties = $false
-            required             = @("patientName", "signatureDate", "clinicName", "clinicAddress")
+            required             = @("patientName", "signatureDate")
             properties           = @{
                 patientName   = @{ type = "string" }
                 signatureDate = @{ type = "string" }
-                clinicName    = @{ type = "string" }
-                clinicAddress = @{ type = "string" }
             }
         }
     }
@@ -353,8 +375,8 @@ function Get-FormTypePrompt {
             return @{ system = $sys; user = $user }
         }
         'Consent' {
-            $sys = "You generate realistic but synthetic consent-form metadata for software demos. The boilerplate consent text is fixed and supplied by the renderer; you only produce the patient name (first + last), signature date (ISO-8601 YYYY-MM-DD within the last 30 days), and a fictional clinic name and full address. Clinic name should sound like a real US primary-care practice (e.g. 'Cedar Ridge Family Medicine'). Address should be plausible US format (street, city, state, ZIP)."
-            $user = "$base Generate a signed-consent envelope (patient name, signature date, clinic identity)."
+            $sys = "You generate realistic but synthetic consent-form metadata for software demos. The boilerplate consent text and the clinic identity are fixed and supplied by the renderer; you only produce the patient name (first + last) and signature date (ISO-8601 YYYY-MM-DD within the last 30 days)."
+            $user = "$base Generate a signed-consent envelope (patient name and signature date only)."
             return @{ system = $sys; user = $user }
         }
     }
@@ -363,10 +385,13 @@ function Get-FormTypePrompt {
 }
 
 function Get-SchemaForFormType {
-    param([Parameter(Mandatory)][string]$FormTypeName)
+    param(
+        [Parameter(Mandatory)][string]$FormTypeName,
+        [string[]]$Carriers = @()
+    )
 
     switch ($FormTypeName) {
-        'Demographics' { return Get-DemographicsSchema }
+        'Demographics' { return Get-DemographicsSchema -Carriers $Carriers }
         'MedicalHistory' { return Get-MedicalHistorySchema }
         'Consent' { return Get-ConsentSchema }
     }
@@ -381,11 +406,12 @@ function Invoke-OpenAIIntakeForm {
         [Parameter(Mandatory)][string]$Sex,
         [Parameter(Mandatory)][string]$FormTypeName,
         [int]$SeedHint,
-        [Parameter(Mandatory)][string]$ModelName
+        [Parameter(Mandatory)][string]$ModelName,
+        [string[]]$Carriers = @()
     )
 
     $prompt = Get-FormTypePrompt -FormTypeName $FormTypeName -Initials $Initials -Age $Age -Sex $Sex -SeedHint $SeedHint
-    $schema = Get-SchemaForFormType -FormTypeName $FormTypeName
+    $schema = Get-SchemaForFormType -FormTypeName $FormTypeName -Carriers $Carriers
 
     $body = @{
         model           = $ModelName
@@ -713,15 +739,17 @@ $familyRows
 
 function Format-ConsentHtml {
     param(
-        [Parameter(Mandatory)]$Form
+        [Parameter(Mandatory)]$Form,
+        [Parameter(Mandatory)][string]$ClinicName,
+        [Parameter(Mandatory)][string]$ClinicAddress
     )
 
     $styles = Get-CommonStyles
 
     $patientNameSafe = $Form.patientName | ConvertTo-HtmlSafe
     $signatureDateSafe = $Form.signatureDate | ConvertTo-HtmlSafe
-    $clinicNameSafe = $Form.clinicName | ConvertTo-HtmlSafe
-    $clinicAddressSafe = $Form.clinicAddress | ConvertTo-HtmlSafe
+    $clinicNameSafe = $ClinicName | ConvertTo-HtmlSafe
+    $clinicAddressSafe = $ClinicAddress | ConvertTo-HtmlSafe
 
     return @"
 <!DOCTYPE html>
@@ -788,13 +816,15 @@ $styles
 function Format-IntakeHtml {
     param(
         [Parameter(Mandatory)][string]$FormTypeName,
-        [Parameter(Mandatory)]$Form
+        [Parameter(Mandatory)]$Form,
+        [string]$ClinicName,
+        [string]$ClinicAddress
     )
 
     switch ($FormTypeName) {
         'Demographics' { return Format-DemographicsHtml -Form $Form }
         'MedicalHistory' { return Format-MedicalHistoryHtml -Form $Form }
-        'Consent' { return Format-ConsentHtml -Form $Form }
+        'Consent' { return Format-ConsentHtml -Form $Form -ClinicName $ClinicName -ClinicAddress $ClinicAddress }
     }
 
     throw "Unknown form type: $FormTypeName"
@@ -874,6 +904,16 @@ if ([string]::IsNullOrWhiteSpace($OutFile)) {
     $OutFile = Join-Path $reportsDir "intake-$FormType-$($patient.Pid)-$timestamp.pdf"
 }
 
+$carriers = @()
+if ($FormType -eq 'Demographics') {
+    $carriers = Get-InsuranceCarriers
+    if ($carriers.Count -gt 0) {
+        Write-Host "Constraining insurance carrier to one of $($carriers.Count) entries from insurance_companies."
+    } else {
+        Write-Host "insurance_companies is empty - LLM will pick a well-known carrier name."
+    }
+}
+
 Write-Host "Calling OpenAI ($Model) for synthetic $FormType intake form..."
 $form = Invoke-OpenAIIntakeForm `
     -Initials $patient.Initials `
@@ -881,10 +921,11 @@ $form = Invoke-OpenAIIntakeForm `
     -Sex $patient.Sex `
     -FormTypeName $FormType `
     -SeedHint $Seed `
-    -ModelName $Model
+    -ModelName $Model `
+    -Carriers $carriers
 
 Write-Host "Building HTML and rendering via mPDF inside the openemr container..."
-$html = Format-IntakeHtml -FormTypeName $FormType -Form $form
+$html = Format-IntakeHtml -FormTypeName $FormType -Form $form -ClinicName $ClinicName -ClinicAddress $ClinicAddress
 Invoke-MpdfRender -Html $html -OutputPath $OutFile
 
 Write-Host ""
@@ -904,6 +945,6 @@ switch ($FormType) {
         Write-Host "  Subject:  $cnt conditions, $med medications, $alg allergies"
     }
     'Consent' {
-        Write-Host "  Subject:  $($form.patientName) signed $($form.signatureDate) at $($form.clinicName)"
+        Write-Host "  Subject:  $($form.patientName) signed $($form.signatureDate) at $ClinicName"
     }
 }

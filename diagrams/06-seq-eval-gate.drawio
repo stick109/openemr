@@ -1,0 +1,118 @@
+<mxfile host="app.diagrams.net" modified="2026-05-05T00:00:00.000Z" agent="Claude Code" version="26.0.0" type="device">
+  <diagram id="w2-seq-eval-gate" name="W2 Eval Gate Sequence">
+    <mxGraphModel dx="1480" dy="1080" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1480" pageHeight="1100" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" value="Eval Gate — pre-push hook + GitHub Actions mirror; 50 fixtures + boolean rubrics" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+          <mxGeometry x="40" y="20" width="1400" height="36" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeDev" value="Developer&#xa;git push" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="80" y="80" width="160" height="980" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeHook" value=".git/hooks/pre-push&#xa;(invokes harness)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="280" y="80" width="180" height="980" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeHarness" value="agent_service.eval&#xa;rubric runner" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="500" y="80" width="180" height="980" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeFix" value="fixtures/&#xa;25 lab + 25 intake" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="720" y="80" width="180" height="980" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeGraph" value="LangGraph (mock&#xa;OpenAI client)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="940" y="80" width="180" height="980" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeBaseline" value="baseline.json&#xa;(committed)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1160" y="80" width="160" height="980" as="geometry" />
+        </mxCell>
+        <mxCell id="lifeRemote" value="git remote&#xa;(GitHub)" style="shape=umlLifeline;perimeter=lifelinePerimeter;whiteSpace=wrap;html=1;container=1;collapsible=0;recursiveResize=0;outlineConnect=0;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="1340" y="80" width="120" height="980" as="geometry" />
+        </mxCell>
+        <mxCell id="m1" value="1. git push origin master" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeDev" target="lifeHook">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="160" as="sourcePoint" />
+            <mxPoint y="160" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m2" value="2. exec python -m agent_service.eval --baseline baseline.json" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeHook" target="lifeHarness">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="200" as="sourcePoint" />
+            <mxPoint y="200" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m3" value="3. load 50 fixtures (frozen byte-identical inputs + expected rubric vector)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeHarness" target="lifeFix">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="240" as="sourcePoint" />
+            <mxPoint y="240" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m4" value="4. for each fixture: run supervisor flow against MOCK OpenAI client (recorded VLM output)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeHarness" target="lifeGraph">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="290" as="sourcePoint" />
+            <mxPoint y="290" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m5" value="5. ExtractionResult + tool_sequence" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeGraph" target="lifeHarness">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="340" as="sourcePoint" />
+            <mxPoint y="340" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m6" value="6. score boolean rubrics: schema_valid, citation_present, factually_consistent, safe_refusal, no_phi_in_logs" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeHarness" target="lifeHarness">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="390" as="sourcePoint" />
+            <mxPoint x="670" y="390" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m7" value="7. read baseline (rubric pass-rates from last green commit)" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#d97706;" edge="1" parent="1" source="lifeHarness" target="lifeBaseline">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="440" as="sourcePoint" />
+            <mxPoint y="440" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m8" value="8. compare current vs baseline:&#xa;  fail if any rubric regresses by &gt;5pp&#xa;  fail if any rubric falls below absolute threshold" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#0f172a;" edge="1" parent="1" source="lifeHarness" target="lifeHarness">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="490" as="sourcePoint" />
+            <mxPoint x="670" y="490" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m9a" value="9a. pass — exit 0; print summary table" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#16a34a;" edge="1" parent="1" source="lifeHarness" target="lifeHook">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="540" as="sourcePoint" />
+            <mxPoint y="540" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m10a" value="10a. push proceeds" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#16a34a;" edge="1" parent="1" source="lifeHook" target="lifeRemote">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="580" as="sourcePoint" />
+            <mxPoint y="580" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m9b" value="9b. fail — exit 1; print failing rubrics + per-fixture diffs" style="html=1;startArrow=none;endArrow=open;dashed=1;strokeWidth=2;fontSize=12;strokeColor=#e11d48;" edge="1" parent="1" source="lifeHarness" target="lifeHook">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="630" as="sourcePoint" />
+            <mxPoint y="630" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="m10b" value="10b. push BLOCKED" style="html=1;startArrow=none;endArrow=block;endFill=1;strokeWidth=2;fontSize=12;strokeColor=#e11d48;" edge="1" parent="1" source="lifeHook" target="lifeDev">
+          <mxGeometry relative="1" as="geometry">
+            <mxPoint y="670" as="sourcePoint" />
+            <mxPoint y="670" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="ghaBand" value="GitHub Actions mirror — same harness on PR; PR check fails red" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#e11d48;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#9f1239;" vertex="1" parent="1">
+          <mxGeometry x="60" y="730" width="1400" height="160" as="geometry" />
+        </mxCell>
+        <mxCell id="gha" value=".github/workflows/agent-eval.yml&#xa;Triggers on pull_request. Pulls fixtures + baseline, runs the same rubric runner.&#xa;Posts a check (success/failure) to the PR. Branch protection requires this check to be green before merge.&#xa;Net effect: even pushes from a clone that skipped the local hook are still gated." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=12;align=left;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="80" y="770" width="1360" height="100" as="geometry" />
+        </mxCell>
+        <mxCell id="thresholds" value="Pass thresholds (per week-2-plan §4.11)&#10;schema_valid ≥ 0.95 · citation_present ≥ 0.98 · factually_consistent ≥ 0.85 · safe_refusal ≥ 0.90 · no_phi_in_logs = 1.00" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fffbeb;strokeColor=#d97706;fontColor=#0f172a;fontSize=12;align=center;" vertex="1" parent="1">
+          <mxGeometry x="60" y="910" width="1400" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="injectNote" value="Grading scenario&#10;The grader introduces a small regression (e.g., delete the bbox attachment in extractor.py). The harness's&#10;factually_consistent + citation_present rubrics drop, comparison vs. baseline returns &gt;5pp delta, push is blocked." style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=12;align=left;spacing=10;" vertex="1" parent="1">
+          <mxGeometry x="60" y="990" width="1400" height="80" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

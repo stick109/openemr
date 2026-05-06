@@ -112,7 +112,7 @@ final class AgentSidecarConfig
     }
 
     // ------------------------------------------------------------------
-    // Private helpers (same pattern as AgentLlmConfig)
+    // Private helpers
     // ------------------------------------------------------------------
 
     private static function getString(OEEnvBag $env, string $name, string $default = ''): string

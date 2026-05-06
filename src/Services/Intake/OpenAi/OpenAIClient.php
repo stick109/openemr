@@ -19,13 +19,12 @@
  * did not satisfy the requested schema). All other errors surface as
  * {@see OpenAIRequestFailedException}.
  *
- * Note: this is a separate, scope-narrow client. The repo already contains
- * `OpenEMR\Services\Agent\Llm\OpenAiResponsesAgentLlmProvider`, but that
- * class targets the `responses` endpoint and is tightly coupled to the
- * Clinical Co-Pilot's request/response shape; it has no PDF Files-API
- * support. Extending it would either bend its public surface out of shape
- * or pull intake-form-specific concerns into the agent module, so a small
- * dedicated client is preferable.
+ * Note: this is a scope-narrow client used by the intake-form upload flow.
+ * Clinical Co-Pilot LLM calls now run inside the Python sidecar
+ * (``agent-service/agent_service``), so this client does not duplicate that
+ * agent path. It targets the OpenAI Files + Responses endpoints needed for
+ * intake-form ingestion; bending it into the chart copilot's request/
+ * response shape is out of scope for this module.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org

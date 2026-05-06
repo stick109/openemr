@@ -15,13 +15,13 @@ Fill these in before recording:
 |------|-------|
 | Railway app URL | `TODO_RAILWAY_APP_URL` |
 | GitLab repo URL | `TODO_GITLAB_REPO_URL` |
-| Terminal eval output | `TODO_EVAL_OUTPUT_PATH_OR_COMMAND` |
+| GitHub Actions or eval evidence URL | `TODO_CI_OR_EVAL_URL` |
 | Demo patient | `TODO_DEMO_PATIENT_NAME_OR_ID` |
 | Demo encounter | `TODO_DEMO_ENCOUNTER_DATE_OR_ID` |
 | Lab PDF fixture | `TODO_LAB_PDF_FIXTURE_PATH` |
 | Intake form fixture | `TODO_INTAKE_FORM_FIXTURE_PATH` |
 | Honeycomb trace URL | `TODO_HONEYCOMB_TRACE_URL` |
-| Regression-injection output, optional | `TODO_REGRESSION_OUTPUT_PATH` |
+| Eval command output path | `TODO_EVAL_OUTPUT_PATH_OR_COMMAND` |
 | Cost/latency report path | `TODO_COST_LATENCY_REPORT_PATH` |
 
 Confirm before capture:
@@ -32,8 +32,8 @@ Confirm before capture:
 - The lab PDF fixture and intake form fixture are synthetic/demo files.
 - The GitLab submission URL is ready; this is acceptable because the repo has
   both GitHub and GitLab remotes.
-- Live/dev retrieval uses Cohere Rerank. Local eval and test paths use the
-  deterministic fake reranker.
+- Live/dev retrieval uses Cohere Rerank. CI/tests use the deterministic fake
+  reranker.
 - Honeycomb is used only for sanitized demo traces.
 - Durable token, cost, latency, and eval records are stored in the existing
   OpenEMR MariaDB/MySQL database.
@@ -46,7 +46,8 @@ Confirm before capture:
 
 - Tab 1: Railway OpenEMR app at `TODO_RAILWAY_APP_URL`.
 - Tab 2: GitLab repo at `TODO_GITLAB_REPO_URL`.
-- Tab 3: terminal or saved output showing `TODO_EVAL_OUTPUT_PATH_OR_COMMAND`.
+- Tab 3: CI/eval evidence at `TODO_CI_OR_EVAL_URL`, or terminal with the eval
+  command output.
 - Tab 4: Honeycomb trace at `TODO_HONEYCOMB_TRACE_URL`.
 - Optional file window: fixture folder showing the lab PDF and intake form
   filenames only.
@@ -62,7 +63,7 @@ Screen: Railway OpenEMR login or already-authenticated dashboard.
 Narration:
 "This is the deployed Week 2 Clinical Co-Pilot running on Railway. I am using
 synthetic demo data only. The submission repo is in GitLab, with the matching
-GitHub remote still available as the working mirror."
+GitHub remote still available for CI checks."
 
 Operator actions:
 
@@ -141,8 +142,8 @@ Screen: co-pilot answer, evidence panel, or retrieval result.
 Narration:
 "For clinical guidance, the co-pilot separates patient facts from guideline
 evidence. Live and dev retrieval use Cohere Rerank over the candidate guideline
-chunks; the reproducible eval path uses a deterministic fake reranker so tests
-do not depend on an external API."
+chunks; CI uses a deterministic fake reranker so tests do not depend on an
+external API."
 
 Operator actions:
 
@@ -150,24 +151,24 @@ Operator actions:
 - Show at least one guideline citation.
 - Show enough source metadata to prove the citation is machine-readable.
 
-### 3:05-3:40 - Show Eval Gate And Terminal Output
+### 3:05-3:40 - Show Eval Gate And CI Evidence
 
-Screen: terminal or saved eval command output.
+Screen: CI/eval run or terminal output.
 
 Narration:
-"The assignment hard gate is eval-driven gating. This run scores 50 demo cases
-with boolean rubrics and blocks regressions through the local pre-push hook."
+"The assignment hard gate is eval-driven CI. This run scores 50 demo cases with
+boolean rubrics and blocks regressions through the pre-push hook and CI check."
 
 Operator actions:
 
-- Show the terminal or saved output for `TODO_EVAL_OUTPUT_PATH_OR_COMMAND`.
+- Open `TODO_CI_OR_EVAL_URL` or show `TODO_EVAL_OUTPUT_PATH_OR_COMMAND`.
 - Show the current rubric pass rates.
 - Point to thresholds:
   `schema_valid >= 0.90`, `citation_present >= 0.90`,
   `factually_consistent >= 0.80`, `safe_refusal >= 0.80`,
   `no_phi_in_logs = 1.00`.
-- Show a passing eval run and, if available, the saved
-  `TODO_REGRESSION_OUTPUT_PATH` failure proving the gate blocks bad changes.
+- Show either green CI or a saved regression-injection failure proving the gate
+  blocks bad changes.
 
 ### 3:40-4:20 - Show Sanitized Honeycomb Trace
 
@@ -211,7 +212,7 @@ Operator actions:
 | 5 | Click-to-source | PDF overlay or source panel | Real identity data |
 | 6 | Intake path | Intake upload or eval-backed intake evidence | Unsupported claims that intake is complete if it is not |
 | 7 | Evidence retrieval | Guideline citation and source metadata | Uncited clinical recommendation |
-| 8 | Eval gate | Terminal eval output, thresholds, blocking evidence | Test secrets or API keys |
+| 8 | Eval gate | 50-case run, thresholds, blocking evidence | Test secrets or API keys |
 | 9 | Honeycomb trace | Sanitized tool sequence, latency, retrieval hits, cost | Raw PHI, raw document text |
 | 10 | Submission artifacts | URLs and required files | Private tokens |
 
@@ -230,8 +231,8 @@ Operator actions:
 
 - Show the retrieval request failing over or show recorded retrieval output from
   the same fixture.
-- Narrate: "Live/dev retrieval normally uses Cohere Rerank. The local eval path
-  uses the deterministic fake reranker, so the gate remains reproducible even if
+- Narrate: "Live/dev retrieval normally uses Cohere Rerank. CI uses the
+  deterministic fake reranker, so the eval gate remains reproducible even if
   the live provider is unavailable."
 - Show the eval run proving retrieval citations still meet thresholds.
 
@@ -244,13 +245,12 @@ Operator actions:
 - Narrate that Honeycomb is for sanitized demo traces only and durable records
   remain in OpenEMR MariaDB/MySQL.
 
-### No Remote Pipeline Available
+### CI Link Unavailable
 
-- This is expected for this recording plan; use terminal output instead.
-- Show local pre-push hook or eval command output.
+- Show local pre-push hook or eval command output instead.
 - Use the exact command/output captured in `TODO_EVAL_OUTPUT_PATH_OR_COMMAND`.
-- Show both a passing run and, if available, the saved
-  `TODO_REGRESSION_OUTPUT_PATH` failure that blocks a push.
+- Show both a passing run and, if available, the saved regression-injection
+  failure that blocks a push.
 
 ## Final Capture Checklist
 
@@ -264,7 +264,7 @@ Before exporting the video, confirm the recording includes:
 - Intake form path or honest fallback evidence.
 - Evidence retrieval with guideline citation.
 - Eval results with the five thresholds.
-- Terminal eval output and local pre-push hook evidence.
+- PR-blocking CI or local pre-push hook evidence.
 - Honeycomb sanitized trace or fallback sanitized span output.
 - Statement that no raw PHI is logged and only synthetic/demo data is used.
 - Cost/latency report path.

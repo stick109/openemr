@@ -1,0 +1,58 @@
+##
+# OpenEMR Sidecar — agent eval gate.
+#
+# Runs the offline 50-case eval on every pull request and on every push to
+# master and codex/** branches. Mirrors the local pre-push hook installed
+# by scripts/install-eval-hook.{ps1,sh} so the gate is the same locally
+# and in CI.
+
+name: Agent Eval
+
+on:
+  push:
+    branches:
+    - master
+    - 'codex/**'
+  pull_request:
+    branches:
+    - master
+    - 'codex/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' && github.event.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  agent-eval:
+    name: Agent Eval (50-case)
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v6
+
+    - name: Set up Python
+      uses: actions/setup-python@v6
+      with:
+        python-version: '3.11'
+        cache: pip
+        cache-dependency-path: agent-service/pyproject.toml
+
+    - name: Install agent-service (with dev extras)
+      working-directory: agent-service
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[dev]"
+
+    - name: Run agent eval against baseline
+      working-directory: agent-service
+      env:
+        # Force the FakeLLMClient guard to allow construction. The eval
+        # runner sets EVAL_MODE=1 and uses recorded responses; CI must
+        # never reach the live OpenAI API.
+        OPENAI_API_KEY: ''
+      run: |
+        python -m agent_service.eval --baseline agent_service/eval/baseline.json

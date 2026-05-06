@@ -25,6 +25,7 @@ use OpenEMR\Services\Agent\Sidecar\CopilotRunRequestDto;
 use OpenEMR\Services\Agent\Sidecar\CopilotRunResponseDto;
 use OpenEMR\Services\Agent\Sidecar\CopilotSidecarClient;
 use OpenEMR\Services\Agent\Sidecar\CopilotSidecarException;
+use OpenEMR\Services\Agent\Sidecar\ShadowComparator;
 use Psr\Log\LoggerInterface;
 use Random\RandomException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -85,9 +86,16 @@ final class AgentIntentRestController
     private $sidecarProxyEnabled;
 
     /**
+     * @var callable(): bool
+     */
+    private $sidecarShadowEnabled;
+
+    /**
      * @var callable(): string
      */
     private $sharedSecretProvider;
+
+    private readonly ShadowComparator $shadowComparator;
 
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
@@ -99,11 +107,20 @@ final class AgentIntentRestController
         ?callable $sidecarProxyEnabled = null,
         ?callable $sharedSecretProvider = null,
         ?callable $clock = null,
+        ?callable $sidecarShadowEnabled = null,
+        ?ShadowComparator $shadowComparator = null,
     ) {
         $this->requestIdFactory = $requestIdFactory ?? static fn (): string => bin2hex(random_bytes(16));
         $this->clock = $clock ?? static fn (): int => time();
         $this->sidecarProxyEnabled = $sidecarProxyEnabled ?? static function (): bool {
             $flag = getenv('OPENEMR_COPILOT_SIDECAR_PROXY_ENABLED');
+            if (!is_string($flag) || $flag === '') {
+                return false;
+            }
+            return in_array(strtolower(trim($flag)), ['1', 'true', 'on', 'yes'], true);
+        };
+        $this->sidecarShadowEnabled = $sidecarShadowEnabled ?? static function (): bool {
+            $flag = getenv('OPENEMR_COPILOT_SIDECAR_SHADOW_ENABLED');
             if (!is_string($flag) || $flag === '') {
                 return false;
             }
@@ -117,6 +134,7 @@ final class AgentIntentRestController
             $fallback = getenv('AGENT_SHARED_SECRET');
             return is_string($fallback) ? $fallback : '';
         };
+        $this->shadowComparator = $shadowComparator ?? new ShadowComparator();
     }
 
     public function postIntent(HttpRestRequest $request): JsonResponse
@@ -240,6 +258,10 @@ final class AgentIntentRestController
             'citation_count' => $citationCount,
         ]);
 
+        if ($this->shouldShadowCompare()) {
+            $this->runShadowComparison($intent, $accessToken, $agentResponse, $requestId);
+        }
+
         return $this->jsonResponse([
             'validationErrors' => [],
             'internalErrors' => [],
@@ -262,6 +284,158 @@ final class AgentIntentRestController
         }
 
         return ($this->sidecarProxyEnabled)() === true;
+    }
+
+    private function shouldShadowCompare(): bool
+    {
+        if ($this->copilotSidecarClient === null) {
+            return false;
+        }
+
+        // Shadow comparison is irrelevant when the sidecar is already
+        // authoritative -- the user is seeing the sidecar response.
+        if (($this->sidecarProxyEnabled)() === true) {
+            return false;
+        }
+
+        return ($this->sidecarShadowEnabled)() === true;
+    }
+
+    /**
+     * @param array{
+     *     intent_id: string,
+     *     button_label: string,
+     *     prompt_text: string,
+     *     primary_users: list<string>,
+     *     use_case_traces: list<string>,
+     *     max_records: int,
+     *     max_documents: int,
+     *     lookback_days: int
+     * } $intent
+     * @param array<string, mixed> $phpResponse
+     */
+    private function runShadowComparison(
+        array $intent,
+        AgentAccessToken $accessToken,
+        array $phpResponse,
+        string $requestId
+    ): void {
+        if ($this->copilotSidecarClient === null) {
+            return;
+        }
+
+        try {
+            $sidecarRequest = $this->buildSidecarRequest($intent, $accessToken, $requestId);
+        } catch (\DomainException | \InvalidArgumentException | RandomException $e) {
+            $this->logger->warning('agent.copilot.sidecar.shadow_context_failed', [
+                'request_id' => $requestId,
+                'intent_id' => $intent['intent_id'],
+                'exception' => $e,
+            ]);
+            return;
+        }
+
+        try {
+            $sidecarResponse = $this->copilotSidecarClient->runCopilot($sidecarRequest);
+        } catch (CopilotSidecarException $e) {
+            $this->logger->warning('agent.copilot.sidecar.shadow_failed', [
+                'request_id' => $requestId,
+                'intent_id' => $intent['intent_id'],
+                'reason' => $e->reason,
+                'http_status' => $e->httpStatus,
+            ]);
+            return;
+        }
+
+        $record = $this->shadowComparator->compare(
+            $phpResponse,
+            $sidecarResponse,
+            $sidecarResponse->traceId !== '' ? $sidecarResponse->traceId : $requestId,
+            $intent['intent_id'],
+        );
+
+        $this->logger->info('Sidecar shadow comparison', [
+            'trace_id' => $record->traceId,
+            'intent_id' => $record->intentId,
+            'verification_status_match' => $record->verificationStatusMatch,
+            'cited_source_ids_match' => $record->citedSourceIdsMatch,
+            'php_cited_count' => $record->phpCitedCount,
+            'sidecar_cited_count' => $record->sidecarCitedCount,
+            'missingness_shape_match' => $record->missingnessShapeMatch,
+            'headings_match' => $record->headingsMatch,
+            'php_answer_block_headings' => $record->phpAnswerBlockHeadings,
+            'sidecar_answer_block_headings' => $record->sidecarAnswerBlockHeadings,
+        ]);
+    }
+
+    /**
+     * @param array{
+     *     intent_id: string,
+     *     button_label: string,
+     *     prompt_text: string,
+     *     primary_users: list<string>,
+     *     use_case_traces: list<string>,
+     *     max_records: int,
+     *     max_documents: int,
+     *     lookback_days: int
+     * } $intent
+     *
+     * @throws \DomainException
+     * @throws \InvalidArgumentException
+     * @throws RandomException
+     */
+    private function buildSidecarRequest(
+        array $intent,
+        AgentAccessToken $accessToken,
+        string $requestId
+    ): CopilotRunRequestDto {
+        $patientId = $accessToken->getPatientContext()->getPid();
+        $now = ($this->clock)();
+        $secret = ($this->sharedSecretProvider)();
+        if ($secret === '') {
+            throw new \DomainException('Sidecar shared secret is not configured.');
+        }
+
+        $intentId = $intent['intent_id'];
+        $allowedTools = $accessToken->getGrantedTools();
+        if ($allowedTools === []) {
+            throw new \DomainException('Access token does not grant any sidecar tools.');
+        }
+
+        $allowedSourceTypes = $accessToken->getGrantedDataClasses();
+        if ($allowedSourceTypes === []) {
+            $allowedSourceTypes = [$intentId];
+        }
+
+        $maxRows = max(1, $intent['max_records']);
+        $lookbackDays = max(1, $intent['lookback_days']);
+
+        $traceId = $this->generateUuidV4();
+        $minterRequestId = $this->generateUuidV4();
+        $userIdentity = $this->resolveUserIdentity($accessToken);
+
+        $claims = [
+            'user_id' => $userIdentity['user_id'],
+            'username' => $userIdentity['username'],
+            'patient_id' => $patientId,
+            'encounter_id' => null,
+            'allowed_tools' => $allowedTools,
+            'allowed_source_types' => $allowedSourceTypes,
+            'max_rows' => $maxRows,
+            'lookback_days' => $lookbackDays,
+            'expires_at' => $now + self::RUN_CONTEXT_TTL_SECONDS,
+            'request_id' => $minterRequestId,
+            'trace_id' => $traceId,
+        ];
+
+        $wireToken = CopilotRunContext::mint($claims, $secret, self::RUN_CONTEXT_KEY_VERSION);
+
+        return new CopilotRunRequestDto(
+            runContext: $wireToken,
+            intentId: $intentId,
+            userGoal: null,
+            requestId: $minterRequestId,
+        );
     }
 
     /**

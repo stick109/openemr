@@ -1,0 +1,781 @@
+"""Inspectable LLM tool-choice agent loop for the chart copilot (M13).
+
+This module is the central piece tying every other M-step together:
+
+* M5/M6 -- the tool registry + policy-enforced executor.
+* M7 -- the closed-set intent catalog.
+* M10/M11/M12 -- real evidence/source/document tools.
+* M14 -- the response builder.
+* M15 -- the answer verifier.
+
+The :class:`AgentLoop` accepts a verified
+:class:`agent_service.auth.copilot_run_context.CopilotRunContext`, asks the
+injected LLM client which tool to call (and in what order), funnels every
+call through :func:`agent_service.tools.executor.execute_tool`, and
+returns a verified :class:`agent_service.schemas.copilot.CopilotRunResponse`.
+
+Determinism
+-----------
+All non-determinism is injected:
+
+* The LLM client (real OpenAI client / fake replay client).
+* The wall-clock used for the time budget.
+* The structured logger used for PHI-safe trace spans.
+
+Tests therefore never observe real-time clocks, real LLM completions, or
+random ordering. The loop stops at one of the typed ``halt_reason``
+values defined on :class:`AgentLoopResult`; every stop is mapped into a
+deterministic :class:`CopilotRunResponse` so callers always see a well-
+formed envelope.
+
+Caps
+----
+The loop enforces three independent caps:
+
+* ``max_iterations`` -- model turns. The LLM client is called at most
+  ``max_iterations`` times.
+* ``max_wall_time_s`` -- elapsed time since the loop entered ``run``.
+  Checked at the top of every iteration.
+* ``max_tool_calls`` -- total successful and failed tool calls across
+  all turns combined. Defends against a model that loops on harmless
+  tools.
+
+Hitting any cap routes through :meth:`ResponseBuilder.build_refusal` with
+a generic ``tool_error`` reason and a non-PHI explanation, so the wire
+shape stays uniform whether the loop succeeded, was refused by the
+verifier, or simply ran out of budget.
+
+System prompt
+-------------
+The loop builds the system prompt from intent metadata only -- intent
+ID, label, goal template, and the fixed safety preamble. **Never** from
+the run context (which carries patient identifiers). This is a hard
+invariant: the M3 token's PHI surface (patient_id, encounter_id, MRN-
+adjacent IDs) must never reach the model's prompt or tool schemas.
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+import uuid
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal
+
+from agent_service.answer.builder import RefusalReason, ResponseBuilder
+from agent_service.auth.copilot_run_context import CopilotRunContext
+from agent_service.clients.tool_choice import (
+    LLMFinalMessage,
+    LLMToolCallChoice,
+    LLMToolChoiceClient,
+    LLMToolChoiceTurn,
+)
+from agent_service.intents.catalog import (
+    IntentCatalog,
+    IntentDefinition,
+    UnknownIntentError,
+)
+from agent_service.schemas.copilot import (
+    CopilotRunRequest,
+    CopilotRunResponse,
+    ToolCallRecord,
+)
+from agent_service.tools.executor import (
+    ToolCallOutcome,
+    ToolExecutionError,
+    execute_tool,
+)
+from agent_service.tools.registry import ToolRegistry
+from agent_service.verifier.answer_verifier import (
+    AnswerVerifier,
+    VerificationResult,
+)
+from agent_service.verifier import to_refusal_response
+
+
+__all__ = [
+    "AgentLoop",
+    "AgentLoopConfig",
+    "AgentLoopResult",
+    "HaltReason",
+    "RegistryBuilder",
+]
+
+
+_LOGGER = logging.getLogger("agent_service.loop.agent_loop")
+
+
+# ---------------------------------------------------------------------------
+# Public types
+# ---------------------------------------------------------------------------
+
+
+HaltReason = Literal[
+    "completed",
+    "max_iterations",
+    "wall_time",
+    "max_tool_calls",
+    "verifier_refused",
+    "model_error",
+    "tool_error",
+]
+"""Closed-set discriminator describing why the agent loop terminated."""
+
+
+@dataclass(frozen=True, slots=True)
+class AgentLoopConfig:
+    """Caps that bound a single :meth:`AgentLoop.run` invocation.
+
+    Defaults are conservative -- a 30-second wall clock and at most 8
+    model turns -- so a misbehaving model cannot blow the request budget.
+    Tests override these to exercise the cap branches directly.
+    """
+
+    max_iterations: int = 8
+    max_wall_time_s: float = 30.0
+    max_tool_calls: int = 12
+
+    def __post_init__(self) -> None:
+        if self.max_iterations <= 0:
+            raise ValueError("max_iterations must be > 0")
+        if self.max_wall_time_s <= 0:
+            raise ValueError("max_wall_time_s must be > 0")
+        if self.max_tool_calls <= 0:
+            raise ValueError("max_tool_calls must be > 0")
+
+
+@dataclass(frozen=True, slots=True)
+class AgentLoopResult:
+    """Inspectable result envelope from a single agent-loop run.
+
+    The :class:`CopilotRunResponse` carried under ``response`` is the
+    wire shape returned to the caller; the other fields are the same
+    data sliced for observability and tests.
+    """
+
+    response: CopilotRunResponse
+    tool_sequence: tuple[ToolCallRecord, ...]
+    cost_usd: float
+    latency_ms_per_step: dict[str, int]
+    halt_reason: HaltReason
+
+
+# Type alias: takes the verified run context, returns a fully-composed
+# tool registry.  Injection point so tests can inject a registry seeded
+# by patient_evidence_tool_registry / source_drilldown_tool_registry /
+# document_tool_registry, while also allowing a single-tool registry for
+# narrow unit tests.
+RegistryBuilder = Callable[[CopilotRunContext], ToolRegistry]
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers (kept module-private to constrain the public surface)
+# ---------------------------------------------------------------------------
+
+
+_REFUSAL_FOR_HALT: dict[HaltReason, RefusalReason] = {
+    "max_iterations": "tool_error",
+    "wall_time": "tool_error",
+    "max_tool_calls": "tool_error",
+    "model_error": "tool_error",
+    "tool_error": "tool_error",
+}
+
+
+_HALT_EXPLANATIONS: dict[HaltReason, str] = {
+    "max_iterations": (
+        "The clinical co-pilot exceeded its work budget; please try again."
+    ),
+    "wall_time": (
+        "The clinical co-pilot exceeded its work budget; please try again."
+    ),
+    "max_tool_calls": (
+        "The clinical co-pilot exceeded its work budget; please try again."
+    ),
+    "model_error": (
+        "The clinical co-pilot encountered an internal error; please try again."
+    ),
+    "tool_error": (
+        "An evidence tool was unavailable; please try again."
+    ),
+}
+
+
+_SYSTEM_PROMPT_PREAMBLE = (
+    "You are a clinical chart co-pilot assistant. Your role is to retrieve "
+    "and summarise bounded clinical evidence using ONLY the tools provided. "
+    "Cite every claim with the citation IDs returned by the tools. "
+    "Do not invent citations. Do not produce clinical recommendations or "
+    "orders. If evidence is missing, say so using the phrase 'not found in "
+    "checked evidence'. Patient identity, lookback windows, and row caps "
+    "are injected by the system; do not provide them in tool arguments."
+)
+
+
+def _build_system_prompt(intent: IntentDefinition | None) -> str:
+    """Compose a PHI-free system prompt from intent metadata only."""
+    if intent is None:
+        return _SYSTEM_PROMPT_PREAMBLE
+    return (
+        f"{_SYSTEM_PROMPT_PREAMBLE} "
+        f"Active intent: '{intent.intent_id}' ({intent.label}). "
+        f"Goal: {intent.goal_template}"
+    )
+
+
+def _build_user_prompt(
+    *,
+    request: CopilotRunRequest,
+    intent: IntentDefinition | None,
+) -> str:
+    """Compose the initial user prompt for the loop.
+
+    ``user_goal`` wins over the intent's ``goal_template`` when both are
+    present, but the loop still falls back to the template so an
+    intent-only request is well-formed.
+    """
+    if request.user_goal is not None and request.user_goal.strip():
+        return request.user_goal.strip()
+    if intent is not None:
+        return intent.goal_template
+    # CopilotRunRequest's model_validator already guarantees one of the
+    # two is present, but guard for completeness.
+    return ""  # pragma: no cover -- invariant of the request schema.
+
+
+def _record_from_outcome(outcome: ToolCallOutcome) -> ToolCallRecord:
+    """Convert a successful executor outcome to its wire-safe record.
+
+    The ``ToolCallOutcome.arguments_keys`` tuple is sorted by the
+    executor; we drop runtime-injected authority keys so the wire view
+    only carries keys the model genuinely supplied. This keeps the
+    ``ToolCallRecord`` PHI-safe and reproducible.
+    """
+    return ToolCallRecord(
+        tool_name=outcome.tool_name,
+        arguments_keys=sorted(_strip_authority_keys(outcome.arguments_keys)),
+        result_count=outcome.result_count,
+        latency_ms=outcome.latency_ms,
+        error_class=outcome.error_class,
+    )
+
+
+def _record_from_error(
+    *,
+    tool_name: str,
+    arguments_keys: Sequence[str],
+    error_class: str,
+    latency_ms: int,
+) -> ToolCallRecord:
+    """Build a wire-safe record for a rejected tool call."""
+    return ToolCallRecord(
+        tool_name=tool_name,
+        arguments_keys=sorted(_strip_authority_keys(arguments_keys)),
+        result_count=None,
+        latency_ms=latency_ms,
+        error_class=error_class,
+    )
+
+
+_AUTHORITY_KEYS = frozenset(
+    {
+        "patient_id",
+        "encounter_id",
+        "allowed_source_types",
+        "lookback_days",
+        "max_rows",
+    },
+)
+
+
+def _strip_authority_keys(keys: Sequence[str]) -> tuple[str, ...]:
+    """Drop authority-context keys injected by the executor."""
+    return tuple(k for k in keys if k not in _AUTHORITY_KEYS)
+
+
+def _trace_id_for(context: CopilotRunContext) -> str:
+    """Pick the trace ID for the response.
+
+    The run context carries the upstream trace ID minted by PHP; we
+    reuse it so logs / observability spans correlate across services.
+    Fallback to a fresh UUID4 only if the token is missing the field
+    (defensive -- the M3 verifier already requires it).
+    """
+    return context.trace_id or str(uuid.uuid4())
+
+
+def _serialise_tool_call(call: LLMToolCallChoice) -> dict[str, Any]:
+    """Render a tool call into a dict suitable for the next-turn message."""
+    return {
+        "id": call.call_id,
+        "tool_name": call.tool_name,
+        "arguments_keys": sorted(call.arguments.keys()),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Loop
+# ---------------------------------------------------------------------------
+
+
+class AgentLoop:
+    """Inspectable LLM tool-choice loop.
+
+    Construction takes every collaborator as a constructor parameter so
+    tests can inject deterministic doubles. ``run`` is the only public
+    entry point; the loop is stateless across invocations.
+    """
+
+    def __init__(
+        self,
+        *,
+        intent_catalog: IntentCatalog,
+        registry_builder: RegistryBuilder,
+        response_builder: ResponseBuilder,
+        verifier: AnswerVerifier,
+        llm_client: LLMToolChoiceClient,
+        config: AgentLoopConfig | None = None,
+        clock: Callable[[], float] | None = None,
+        logger: logging.Logger | None = None,
+    ) -> None:
+        self._intent_catalog = intent_catalog
+        self._registry_builder = registry_builder
+        self._response_builder = response_builder
+        self._verifier = verifier
+        self._llm_client = llm_client
+        self._config = config if config is not None else AgentLoopConfig()
+        self._clock = clock if clock is not None else time.monotonic
+        self._logger = logger if logger is not None else _LOGGER
+
+    # -- public entry point -------------------------------------------------
+
+    def run(
+        self,
+        *,
+        request: CopilotRunRequest,
+        context: CopilotRunContext,
+    ) -> AgentLoopResult:
+        """Execute the loop and return an :class:`AgentLoopResult`.
+
+        Implementation outline:
+
+        1. Resolve the active intent (if any) from ``request.intent_id``.
+        2. Build the registry via ``registry_builder(context)`` and
+           filter to ``context.allowed_tools`` intersected with the
+           intent's ``allowed_tools``.
+        3. Compose the initial messages from a PHI-free system prompt
+           and the request's goal.
+        4. Iterate up to ``max_iterations`` calling the LLM client.
+           Forward every tool call request to ``execute_tool`` -- the
+           executor enforces every authority/scoping rule on its own.
+        5. On a final assistant message: verify and return.
+        6. Map any cap miss / executor failure / model error into a
+           deterministic refusal envelope.
+        """
+        trace_id = _trace_id_for(context)
+        started_at = self._clock()
+        latency_ms_per_step: dict[str, int] = {}
+        tool_sequence: list[ToolCallRecord] = []
+        cost_usd = 0.0  # M13 does not estimate cost; left as a hook for M16.
+
+        # 1. Resolve intent.
+        intent = self._resolve_intent(request)
+        if intent is None and request.intent_id is not None:
+            # The request named an intent but the catalog did not know it.
+            # Treat as out-of-scope -- emit a refusal with a precise reason.
+            return self._refusal(
+                halt_reason="model_error",
+                tool_sequence=tool_sequence,
+                cost_usd=cost_usd,
+                latency_ms_per_step=latency_ms_per_step,
+                trace_id=trace_id,
+                started_at=started_at,
+            )
+
+        # 2. Build registry and compute the per-run allowed-tools set.
+        registry = self._registry_builder(context)
+        allowed_tools = self._effective_allowed_tools(
+            context=context,
+            intent=intent,
+            registry=registry,
+        )
+        tool_schemas = registry.model_facing_schemas(allowed=allowed_tools)
+
+        # 3. Prepare messages and per-step latency bookkeeping.
+        messages: list[Mapping[str, Any]] = self._initial_messages(
+            request=request,
+            intent=intent,
+        )
+        if request.conversation_state:
+            messages.append(
+                {
+                    "role": "system",
+                    "name": "conversation_state",
+                    "content": request.conversation_state,
+                },
+            )
+
+        iterations = 0
+
+        # 4. Main loop.
+        while True:
+            # Cap: max iterations.
+            if iterations >= self._config.max_iterations:
+                latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+                return self._refusal(
+                    halt_reason="max_iterations",
+                    tool_sequence=tool_sequence,
+                    cost_usd=cost_usd,
+                    latency_ms_per_step=latency_ms_per_step,
+                    trace_id=trace_id,
+                    started_at=started_at,
+                )
+
+            # Cap: wall-time.
+            if (self._clock() - started_at) >= self._config.max_wall_time_s:
+                latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+                return self._refusal(
+                    halt_reason="wall_time",
+                    tool_sequence=tool_sequence,
+                    cost_usd=cost_usd,
+                    latency_ms_per_step=latency_ms_per_step,
+                    trace_id=trace_id,
+                    started_at=started_at,
+                )
+
+            iterations += 1
+            iter_started = self._clock()
+            try:
+                turn = self._llm_client.tool_call_completion(
+                    messages=messages,
+                    tools=tool_schemas,
+                )
+            except Exception as exc:  # noqa: BLE001 -- intentional broad catch
+                self._logger.error(
+                    "agent loop model error",
+                    extra={
+                        "trace_id": trace_id,
+                        "iteration": iterations,
+                        "error_class": type(exc).__name__,
+                    },
+                )
+                latency_ms_per_step.setdefault(
+                    f"llm_call_{iterations}_ms",
+                    self._delta_ms(iter_started),
+                )
+                latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+                return self._refusal(
+                    halt_reason="model_error",
+                    tool_sequence=tool_sequence,
+                    cost_usd=cost_usd,
+                    latency_ms_per_step=latency_ms_per_step,
+                    trace_id=trace_id,
+                    started_at=started_at,
+                )
+
+            latency_ms_per_step[f"llm_call_{iterations}_ms"] = self._delta_ms(
+                iter_started,
+            )
+
+            if turn.tool_calls:
+                # Cap: max total tool calls.
+                if (
+                    len(tool_sequence) + len(turn.tool_calls)
+                    > self._config.max_tool_calls
+                ):
+                    latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(
+                        started_at,
+                    )
+                    return self._refusal(
+                        halt_reason="max_tool_calls",
+                        tool_sequence=tool_sequence,
+                        cost_usd=cost_usd,
+                        latency_ms_per_step=latency_ms_per_step,
+                        trace_id=trace_id,
+                        started_at=started_at,
+                    )
+
+                # Append an assistant turn describing the tool requests so
+                # the model has a faithful record on the next iteration.
+                messages.append(
+                    {
+                        "role": "assistant",
+                        "tool_calls": [
+                            _serialise_tool_call(c) for c in turn.tool_calls
+                        ],
+                    },
+                )
+
+                # Execute each tool call sequentially. Failures append a
+                # ``tool_error`` message so the model can react on the
+                # next turn (e.g. switch tools or refuse).
+                for call in turn.tool_calls:
+                    record = self._execute_one(
+                        call=call,
+                        context=context,
+                        registry=registry,
+                        trace_id=trace_id,
+                    )
+                    tool_sequence.append(record)
+                    messages.append(
+                        self._tool_result_message(
+                            call=call,
+                            record=record,
+                        ),
+                    )
+                continue  # next iteration
+
+            # 5. Final assistant message: verify and emit.
+            final_message = turn.final_message
+            assert final_message is not None  # turn invariant
+            response = self._build_final_response(
+                final_message=final_message,
+                tool_sequence=tool_sequence,
+                cost_usd=cost_usd,
+                latency_ms_per_step=latency_ms_per_step,
+                trace_id=trace_id,
+                started_at=started_at,
+            )
+            verification = self._verify(
+                response=response,
+                tool_sequence=tool_sequence,
+            )
+            if verification.status == "refused":
+                refused = to_refusal_response(
+                    builder=self._response_builder,
+                    result=verification,
+                    tool_sequence=tool_sequence,
+                    cost_usd=cost_usd,
+                    latency_ms_per_step=latency_ms_per_step,
+                    trace_id=trace_id,
+                )
+                latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(
+                    started_at,
+                )
+                return AgentLoopResult(
+                    response=refused,
+                    tool_sequence=tuple(tool_sequence),
+                    cost_usd=cost_usd,
+                    latency_ms_per_step=dict(latency_ms_per_step),
+                    halt_reason="verifier_refused",
+                )
+
+            latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+            return AgentLoopResult(
+                response=response,
+                tool_sequence=tuple(tool_sequence),
+                cost_usd=cost_usd,
+                latency_ms_per_step=dict(latency_ms_per_step),
+                halt_reason="completed",
+            )
+
+    # -- private helpers ----------------------------------------------------
+
+    def _resolve_intent(
+        self,
+        request: CopilotRunRequest,
+    ) -> IntentDefinition | None:
+        if not request.intent_id:
+            return None
+        try:
+            return self._intent_catalog.get(request.intent_id)
+        except UnknownIntentError:
+            return None
+
+    def _effective_allowed_tools(
+        self,
+        *,
+        context: CopilotRunContext,
+        intent: IntentDefinition | None,
+        registry: ToolRegistry,
+    ) -> tuple[str, ...]:
+        """Compute the per-run tool-name allow-list.
+
+        Order of restriction (most permissive first):
+        1. Tools registered in ``registry``.
+        2. Tools the run context allows.
+        3. Tools the resolved intent allows (when present).
+        """
+        registered = set(registry.list_names())
+        allowed = registered & set(context.allowed_tools)
+        if intent is not None:
+            allowed &= set(intent.allowed_tools)
+        return tuple(sorted(allowed))
+
+    def _initial_messages(
+        self,
+        *,
+        request: CopilotRunRequest,
+        intent: IntentDefinition | None,
+    ) -> list[Mapping[str, Any]]:
+        return [
+            {
+                "role": "system",
+                "content": _build_system_prompt(intent),
+            },
+            {
+                "role": "user",
+                "content": _build_user_prompt(request=request, intent=intent),
+            },
+        ]
+
+    def _execute_one(
+        self,
+        *,
+        call: LLMToolCallChoice,
+        context: CopilotRunContext,
+        registry: ToolRegistry,
+        trace_id: str,
+    ) -> ToolCallRecord:
+        try:
+            outcome = execute_tool(
+                context,
+                call.tool_name,
+                call.arguments,
+                registry=registry,
+                logger=self._logger,
+            )
+        except ToolExecutionError as exc:
+            error_class = exc.reason
+            self._logger.warning(
+                "agent loop tool rejected",
+                extra={
+                    "trace_id": trace_id,
+                    "tool_name": call.tool_name,
+                    "reason": error_class,
+                },
+            )
+            return _record_from_error(
+                tool_name=call.tool_name,
+                arguments_keys=tuple(sorted(call.arguments.keys())),
+                error_class=error_class,
+                latency_ms=0,
+            )
+        return _record_from_outcome(outcome)
+
+    def _tool_result_message(
+        self,
+        *,
+        call: LLMToolCallChoice,
+        record: ToolCallRecord,
+    ) -> Mapping[str, Any]:
+        if record.error_class is not None:
+            return {
+                "role": "tool",
+                "tool_call_id": call.call_id,
+                "tool_name": record.tool_name,
+                "status": "error",
+                "error_class": record.error_class,
+            }
+        return {
+            "role": "tool",
+            "tool_call_id": call.call_id,
+            "tool_name": record.tool_name,
+            "status": "ok",
+            "result_count": record.result_count,
+        }
+
+    def _verify(
+        self,
+        *,
+        response: CopilotRunResponse,
+        tool_sequence: Sequence[ToolCallRecord],
+    ) -> VerificationResult:
+        # ``known_citation_ids`` is the set of citation source_ids the
+        # tools actually returned -- the verifier rejects any cited ID
+        # the model invented.
+        known_ids: set[str] = {c.source_id for c in response.citations}
+        all_succeeded = all(r.error_class is None for r in tool_sequence)
+        return self._verifier.verify(
+            response=response,
+            known_citation_ids=known_ids,
+            tool_call_succeeded=all_succeeded,
+        )
+
+    def _build_final_response(
+        self,
+        *,
+        final_message: LLMFinalMessage,
+        tool_sequence: Sequence[ToolCallRecord],
+        cost_usd: float,
+        latency_ms_per_step: Mapping[str, int],
+        trace_id: str,
+        started_at: float,
+    ) -> CopilotRunResponse:
+        # Only the fake's structured-response path is supported in M13.
+        # When ``parsed_response`` is set, we copy the wire shape back
+        # with the real loop-side metadata (tool_sequence, latency,
+        # trace_id) so the caller observes accurate observability data
+        # regardless of what the LLM client packed into the response.
+        if final_message.parsed_response is None:
+            # Construct a deterministic refusal -- the loop cannot ship
+            # a wire response built out of un-parsed assistant text. The
+            # M16 milestone replaces this with structured-output parsing.
+            return self._response_builder.build_refusal(
+                reason="tool_error",
+                explanation=(
+                    "The clinical co-pilot returned an unparseable response."
+                ),
+                tool_sequence=tool_sequence,
+                cost_usd=cost_usd,
+                latency_ms_per_step={
+                    **latency_ms_per_step,
+                    "loop_total_ms": self._elapsed_ms(started_at),
+                },
+                trace_id=trace_id,
+            )
+
+        parsed = final_message.parsed_response
+        # Rebuild with loop-owned bookkeeping fields so they are always
+        # accurate regardless of what the model side put in.
+        return parsed.model_copy(
+            update={
+                "tool_sequence": list(tool_sequence),
+                "cost_usd": cost_usd,
+                "latency_ms_per_step": {
+                    **latency_ms_per_step,
+                    "loop_total_ms": self._elapsed_ms(started_at),
+                },
+                "trace_id": trace_id,
+            },
+        )
+
+    def _refusal(
+        self,
+        *,
+        halt_reason: HaltReason,
+        tool_sequence: Sequence[ToolCallRecord],
+        cost_usd: float,
+        latency_ms_per_step: Mapping[str, int],
+        trace_id: str,
+        started_at: float,
+    ) -> AgentLoopResult:
+        merged_latency = dict(latency_ms_per_step)
+        merged_latency.setdefault(
+            "loop_total_ms",
+            self._elapsed_ms(started_at),
+        )
+        response = self._response_builder.build_refusal(
+            reason=_REFUSAL_FOR_HALT[halt_reason],
+            explanation=_HALT_EXPLANATIONS[halt_reason],
+            tool_sequence=tool_sequence,
+            cost_usd=cost_usd,
+            latency_ms_per_step=merged_latency,
+            trace_id=trace_id,
+        )
+        return AgentLoopResult(
+            response=response,
+            tool_sequence=tuple(tool_sequence),
+            cost_usd=cost_usd,
+            latency_ms_per_step=merged_latency,
+            halt_reason=halt_reason,
+        )
+
+    # -- timing helpers -----------------------------------------------------
+
+    def _delta_ms(self, started: float) -> int:
+        return max(0, int((self._clock() - started) * 1000))
+
+    def _elapsed_ms(self, started_at: float) -> int:
+        return max(0, int((self._clock() - started_at) * 1000))

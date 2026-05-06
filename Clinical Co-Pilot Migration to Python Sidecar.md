@@ -54,11 +54,11 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M10 | Implement read-only patient evidence tools | Done | M7, M8, M9 | M11 |
 | M11 | Implement source drilldown tool | Done | M8, M9 | M10 |
 | M12 | Implement document/lab/intake tools in same registry | Done | Sidecar S9-S11, M6 | M10-M11 |
-| M13 | Implement LLM tool-choice agent loop | Not started | M6, M10, M11 | M14, M15 |
+| M13 | Implement LLM tool-choice agent loop | Done | M6, M10, M11 | M14, M15 |
 | M14 | Port answer schema and response shaping | Done | M8 | M13, M15 |
 | M15 | Port verifier/refusal rules to Python | Done | M8, M14 | M13 |
 | M16 | Add PHI-safe sidecar observability for tool calls | Not started | M6, M13 | M17 |
-| M17 | Add PHP thin proxy to sidecar copilot endpoint | Not started | M2-M4 | M13-M16 |
+| M17 | Add PHP thin proxy to sidecar copilot endpoint | Done | M2-M4 | M13-M16 |
 | M18 | Add shadow mode comparing PHP and Python outputs | Not started | M13-M17 | M19 |
 | M19 | Add per-intent cutover feature flags | Not started | M18 | M20 |
 | M20 | Cut over read-only intents one by one | Not started | M18, M19 | M21 |
@@ -502,9 +502,9 @@ Pass criteria:
 
 ## M13 - Implement LLM Tool-Choice Agent Loop
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M6, M10, M11  
 **Can run in parallel with:** M14, M15
 
@@ -630,9 +630,9 @@ Pass criteria:
 
 ## M17 - Add PHP Thin Proxy to Sidecar Copilot Endpoint
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M2-M4  
 **Can run in parallel with:** M13-M16
 

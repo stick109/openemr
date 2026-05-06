@@ -2,9 +2,11 @@
 
 These tests exercise only schema validation and round-trip serialization.
 They deliberately do **not** decode the ``run_context`` token (that is the
-M3 / M4 verifier's job) and do **not** hit the agent loop (M13).  The
-endpoint stub is also smoke-tested to confirm the route is wired and
-returns HTTP 501 when given a syntactically valid request.
+M3 / M4 verifier's job) and do **not** hit the agent loop (M13). The
+endpoint is also smoke-tested to confirm the route is wired and returns
+the expected fail-closed HTTP error codes when the request body or auth
+context is invalid (the success path is exercised in
+``tests/test_copilot_auth.py``).
 """
 
 from __future__ import annotations
@@ -400,8 +402,8 @@ class TestCopilotEndpointStub:
     def test_unsigned_request_returns_401(self, client: TestClient) -> None:
         # M4 wires the signed-context verifier into the route. A request
         # with a placeholder token now fails closed at 401 before it can
-        # reach the M13 stub body. The "valid signed request reaches the
-        # 501 stub" path is exercised in tests/test_copilot_auth.py
+        # reach the M13 agent loop body. The "valid signed request flows
+        # through the loop" path is exercised in tests/test_copilot_auth.py
         # where tokens are minted with the test secret.
         resp = client.post("/api/copilot/run", json=_valid_request_payload())
 
@@ -411,7 +413,7 @@ class TestCopilotEndpointStub:
 
     def test_invalid_request_returns_422(self, client: TestClient) -> None:
         # Missing both intent_id and user_goal -- should fail validation
-        # before reaching the stub body.
+        # before reaching the loop body.
         payload = _valid_request_payload(intent_id=None, user_goal=None)
 
         resp = client.post("/api/copilot/run", json=payload)

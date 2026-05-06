@@ -139,7 +139,7 @@ CREATE TABLE `form_upload_intake_form` (
   `groupname` VARCHAR(255) DEFAULT NULL,
   `authorized` TINYINT(4) DEFAULT 0,
   `activity` TINYINT(4) DEFAULT 1,
-  `form_type` ENUM('Demographics','MedicalHistory','Consent') NOT NULL,
+  `form_type` ENUM('Demographics','MedicalHistory','Consent','lab_pdf') NOT NULL,
   `document_id` INT NULL,
   `inserted_row_id` INT NULL,
   `diff_preview` LONGTEXT NULL,
@@ -149,13 +149,34 @@ CREATE TABLE `form_upload_intake_form` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 #EndIf
 
-#IfNotRow2D registry directory upload_intake_form name Upload Intake Form
+--
+-- Extend form_type ENUM with lab_pdf for sidecar lab-report uploads (S14).
+-- Existing installs that already ran the CREATE TABLE above need the ALTER.
+--
+
+#IfNotColumnType form_upload_intake_form form_type enum('Demographics','MedicalHistory','Consent','lab_pdf')
+ALTER TABLE `form_upload_intake_form`
+  MODIFY `form_type` ENUM('Demographics','MedicalHistory','Consent','lab_pdf') NOT NULL;
+#EndIf
+
+--
+-- Update registry row name from "Upload Intake Form" to "Upload Document
+-- (Co-Pilot)" so the encounter menu reflects the broader scope.
+--
+
+#IfRow2D registry directory upload_intake_form name Upload Intake Form
+UPDATE `registry`
+  SET `name` = 'Upload Document (Co-Pilot)'
+  WHERE `directory` = 'upload_intake_form' AND `name` = 'Upload Intake Form';
+#EndIf
+
+#IfNotRow2D registry directory upload_intake_form name Upload Document (Co-Pilot)
 INSERT INTO `registry`
   (`name`, `state`, `directory`, `sql_run`, `unpackaged`, `date`, `priority`,
    `category`, `nickname`, `patient_encounter`, `therapy_group_encounter`,
    `aco_spec`, `form_foreign_id`)
 VALUES
-  ('Upload Intake Form', 1, 'upload_intake_form', 1, 1, NOW(), 0,
+  ('Upload Document (Co-Pilot)', 1, 'upload_intake_form', 1, 1, NOW(), 0,
    'Administrative', '', 1, 0, 'admin|super', NULL);
 #EndIf
 

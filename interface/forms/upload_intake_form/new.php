@@ -1,12 +1,12 @@
 <?php
 
 /**
- * Upload Intake Form - new.php
+ * Upload Document (Co-Pilot) - new.php
  *
- * Encounter-form upload UI for ingesting completed intake-form PDFs.
- * Front-desk staff pick a PDF (Demographics, Medical History, or Consent),
- * optionally let the system auto-classify it, and submit. The PDF is then
- * dispatched to the IntakeFormIngestService for OpenAI-backed extraction.
+ * Encounter-form upload UI for ingesting completed intake-form and lab-report
+ * PDFs. Front-desk staff pick a PDF (Demographics, Medical History, Consent,
+ * or Lab Report), optionally let the system auto-classify it, and submit.
+ * The PDF is then dispatched for AI-backed extraction.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -41,20 +41,21 @@ $formTypes = [
     'Demographics'   => xl('Demographics'),
     'MedicalHistory' => xl('Medical History'),
     'Consent'        => xl('Consent'),
+    'lab_pdf'        => xl('Lab Report'),
 ];
 ?>
 <html>
 <head>
-    <title><?php echo xlt('Upload Intake Form'); ?></title>
+    <title><?php echo xlt('Upload Document (Co-Pilot)'); ?></title>
     <?php Header::setupHeader(); ?>
 </head>
 <body>
 <div class="container mt-3">
     <div class="row">
         <div class="col-12">
-            <h2><?php echo xlt('Upload Intake Form'); ?></h2>
+            <h2><?php echo xlt('Upload Document (Co-Pilot)'); ?></h2>
             <p class="text-muted">
-                <?php echo xlt('Upload a completed intake-form PDF (Demographics, Medical History, or Consent). Maximum size 10 MB.'); ?>
+                <?php echo xlt('Upload a PDF document (Demographics, Medical History, Consent, or Lab Report). Maximum size 10 MB.'); ?>
             </p>
         </div>
     </div>

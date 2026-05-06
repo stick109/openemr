@@ -41,7 +41,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | S11 | Implement LangGraph supervisor flow | Not started | S9, S10 | S12-S15 |
 | S12 | Add OpenEMR sidecar config/env vars | Not started | S1 | S7-S11 |
 | S13 | Add shared upload path/volume | Not started | S12 | S14, S15 |
-| S14 | Extend upload UI for Lab Report | Not started | S12 | S13, S15 |
+| S14 | Extend upload UI for Lab Report | Done | S12 | S13, S15 |
 | S15 | Replace PHP extraction path with sidecar proxy | Not started | S3, S4, S12, S13 | S14, S16 |
 | S16 | Add lab PDF dispatch to OpenEMR lab tables | Not started | S5, S15 | S17, S18 |
 | S17 | Add citation table and persistence | Not started | S5, S15 | S16, S18 |
@@ -478,7 +478,7 @@ Pass criteria:
 
 ## S14 - Extend Upload UI for Lab Report
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** S12  
 **Can run in parallel with:** S13, S15 prep
 

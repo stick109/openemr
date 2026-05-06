@@ -56,14 +56,14 @@ if ($documentId > 0 && $patientId > 0) {
 ?>
 <html>
 <head>
-    <title><?php echo xlt('Upload Intake Form'); ?></title>
+    <title><?php echo xlt('Upload Document (Co-Pilot)'); ?></title>
     <?php Header::setupHeader(); ?>
 </head>
 <body>
 <div class="container mt-3">
     <div class="row">
         <div class="col-12">
-            <h2><?php echo xlt('Upload Intake Form'); ?></h2>
+            <h2><?php echo xlt('Upload Document (Co-Pilot)'); ?></h2>
         </div>
     </div>
 

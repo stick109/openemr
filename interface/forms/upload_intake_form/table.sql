@@ -16,7 +16,7 @@
 --         `category`, `nickname`, `patient_encounter`, `therapy_group_encounter`,
 --         `aco_spec`, `form_foreign_id`)
 --      VALUES
---        ('Upload Intake Form', 1, 'upload_intake_form', 1, 1, NOW(), 0,
+--        ('Upload Document (Co-Pilot)', 1, 'upload_intake_form', 1, 1, NOW(), 0,
 --         'Administrative', '', 1, 0, 'admin|super', NULL);
 --
 --   3. The accompanying upgrade SQL file should mirror both statements per
@@ -31,7 +31,7 @@ CREATE TABLE IF NOT EXISTS `form_upload_intake_form` (
     `groupname`       VARCHAR(255) DEFAULT NULL,
     `authorized`      TINYINT(4)   DEFAULT 0,
     `activity`        TINYINT(4)   DEFAULT 1,
-    `form_type`       ENUM('Demographics', 'MedicalHistory', 'Consent') NOT NULL,
+    `form_type`       ENUM('Demographics', 'MedicalHistory', 'Consent', 'lab_pdf') NOT NULL,
     `document_id`     INT          DEFAULT NULL,
     `inserted_row_id` INT          DEFAULT NULL,
     `diff_preview`    LONGTEXT     DEFAULT NULL,

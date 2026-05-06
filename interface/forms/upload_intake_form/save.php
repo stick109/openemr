@@ -48,16 +48,18 @@ if (!AclMain::aclCheckCore('admin', 'super')) {
 }
 
 const UPLOAD_INTAKE_FORM_DIRECTORY = 'upload_intake_form';
-const UPLOAD_INTAKE_FORM_DISPLAY_NAME = 'Upload Intake Form';
+const UPLOAD_INTAKE_FORM_DISPLAY_NAME = 'Upload Document (Co-Pilot)';
 const UPLOAD_INTAKE_FORM_MAX_BYTES = 10 * 1024 * 1024;
 // The values that survive the round trip from the dropdown into the service.
-// `Auto` triggers the classifier; the other three are passed through verbatim.
-// Display labels live in new.php (option labels), not in these wire values.
+// `Auto` triggers the classifier; the other three intake types are passed
+// through verbatim. `lab_pdf` is the wire value for lab-report uploads
+// (see agent-service contract). Display labels live in new.php, not here.
 const UPLOAD_INTAKE_FORM_VALID_TYPES = [
     'Auto',
     'Demographics',
     'MedicalHistory',
     'Consent',
+    'lab_pdf',
 ];
 
 $logger = ServiceContainer::getLogger();

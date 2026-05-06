@@ -198,3 +198,31 @@ VALUES
    60, 'auditLogPurgeServiceRun', '/library/audit_log_purge.php', 200);
 #EndIf
 
+--
+-- Citation persistence for upload_intake_form (S17).
+-- One row per Citation returned by the agent-service sidecar.
+-- See interface/forms/upload_intake_form/table.sql and
+-- src/Services/Agent/Sidecar/CitationPersistenceService.php.
+--
+
+#IfNotTable form_upload_intake_form_citation
+CREATE TABLE `form_upload_intake_form_citation` (
+  `id` BIGINT NOT NULL AUTO_INCREMENT,
+  `form_id` BIGINT NOT NULL,
+  `source_type` ENUM('pdf_bbox','guideline') NOT NULL,
+  `field_name` VARCHAR(255) DEFAULT NULL,
+  `page` INT DEFAULT NULL,
+  `bbox_x0` DECIMAL(10, 4) DEFAULT NULL,
+  `bbox_y0` DECIMAL(10, 4) DEFAULT NULL,
+  `bbox_x1` DECIMAL(10, 4) DEFAULT NULL,
+  `bbox_y1` DECIMAL(10, 4) DEFAULT NULL,
+  `chunk_id` VARCHAR(255) DEFAULT NULL,
+  `source_url` TEXT DEFAULT NULL,
+  `snippet` TEXT DEFAULT NULL,
+  `section` VARCHAR(255) DEFAULT NULL,
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idx_form_id` (`form_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+#EndIf
+

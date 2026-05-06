@@ -39,6 +39,7 @@ use OpenEMR\Services\Agent\Sidecar\AgentRunResult;
 use OpenEMR\Services\Agent\Sidecar\AgentServiceClient;
 use OpenEMR\Services\Agent\Sidecar\AgentServiceException;
 use OpenEMR\Services\Agent\Sidecar\AgentSidecarConfig;
+use OpenEMR\Services\Agent\Sidecar\CitationPersistenceService;
 use OpenEMR\Services\Agent\Sidecar\SharedUploadManager;
 use OpenEMR\Services\FormService;
 use OpenEMR\Services\Intake\Dispatcher\ConsentDispatcher;
@@ -228,6 +229,25 @@ if ($useSidecar) {
             ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
         ]
     );
+
+    // -- Citation persistence (S17) ---------------------------------------
+    // Citations are best-effort metadata for downstream UX. The lab data
+    // (which a parallel sidecar workstream persists to procedure_order /
+    // procedure_report / procedure_result) is the primary value of this
+    // upload — a failure to persist citations must not unwind the whole
+    // submission. Log and continue.
+    try {
+        $citationService = new CitationPersistenceService($logger);
+        $citationService->persist((int) $insertedRowId, $sidecarResult->citations);
+    } catch (\Throwable $citationException) {
+        $logger->error('Citation persistence failed; continuing.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'form_id' => $insertedRowId,
+            'trace_id' => $traceId,
+            'exception' => $citationException,
+        ]);
+    }
 
     $result = new \OpenEMR\Services\Intake\IngestResult(
         formType: $formType,

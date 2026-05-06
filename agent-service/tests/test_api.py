@@ -90,15 +90,39 @@ class TestAuth:
         assert body["error"] == "forbidden"
 
     def test_correct_secret_returns_200(self, client: TestClient) -> None:
-        resp = client.post(
-            "/api/agent/run",
-            json=_VALID_BODY,
-            headers={"X-Agent-Secret": SHARED_SECRET},
-        )
+        fake_result = {
+            "extracted": {"results": []},
+            "evidence": [],
+            "answer": "test answer",
+            "citations": [],
+            "cost_usd": 0.0,
+            "latency_ms_per_step": {},
+            "tool_sequence": ["extract", "retrieve", "finalize"],
+            "extraction_confidence": 0.9,
+            "status": "completed",
+            "trace_id": _VALID_BODY["trace_id"],
+        }
+
+        class _FakeGraph:
+            def invoke(self, state: dict) -> dict:  # type: ignore[type-arg]
+                return {**state, **fake_result}
+
+        with mock.patch(
+            "agent_service.main._resolve_dependencies",
+            return_value=(None, None),
+        ), mock.patch(
+            "agent_service.graph.build_graph",
+            return_value=_FakeGraph(),
+        ):
+            resp = client.post(
+                "/api/agent/run",
+                json=_VALID_BODY,
+                headers={"X-Agent-Secret": SHARED_SECRET},
+            )
         assert resp.status_code == 200
         body = resp.json()
         assert "answer" in body
-        assert body["trace_id"] == _VALID_BODY["trace_id"]
+        assert body["tool_sequence"] == ["extract", "retrieve", "finalize"]
 
 
 # ---------------------------------------------------------------------------

@@ -11,7 +11,7 @@
  *
  * Manual DB verification (run from the project root):
  *   docker compose --project-name openemr exec -T mysql \
- *     mysql -uroot -proot openemr \
+ *     mariadb -uroot -proot openemr \
  *     -e "DESCRIBE form_upload_intake_form_citation;"
  *
  * @package   OpenEMR

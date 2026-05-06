@@ -567,7 +567,7 @@ vendor\bin\phpunit tests\Tests\Unit --filter LabPdf
 Manual DB check after uploading one lab fixture:
 
 ```powershell
-docker compose --project-name openemr exec -T mysql mysql -uroot -proot openemr -e "SELECT COUNT(*) FROM procedure_result;"
+docker compose --project-name openemr exec -T mysql mariadb -uroot -proot openemr -e "SELECT COUNT(*) FROM procedure_result;"
 ```
 
 Pass criteria:
@@ -599,7 +599,7 @@ vendor\bin\phpunit tests\Tests\Unit --filter Citation
 Manual DB check:
 
 ```powershell
-docker compose --project-name openemr exec -T mysql mysql -uroot -proot openemr -e "DESCRIBE form_upload_intake_form_citation;"
+docker compose --project-name openemr exec -T mysql mariadb -uroot -proot openemr -e "DESCRIBE form_upload_intake_form_citation;"
 ```
 
 Pass criteria:

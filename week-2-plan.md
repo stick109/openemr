@@ -638,7 +638,7 @@ checkpoint down into per-day tasks.
 
 | #  | Question                                                                                              | Owner   | Resolved? |
 |----|-------------------------------------------------------------------------------------------------------|---------|-----------|
-| Q1 | The assignment says "GitLab Repository" but the project is on GitHub — is GitHub OK?                  | User    | No        |
+| Q1 | The assignment says "GitLab Repository" but the project is on GitHub — is GitHub OK?                  | User    | **Yes** — the repo has two remotes: one GitHub remote and one GitLab remote. Submission can point to GitLab while keeping GitHub as the working mirror. |
 | Q2 | Pass thresholds in §4.11 — are the proposed values acceptable, or should they come from the Week-1 baseline once measured? | User    | No        |
 | Q3 | Demographics-merge: is "fill-only-empty" the right Week-2 default, or should we always require user confirmation? | User    | No        |
 | Q4 | Cohere API key — do we have one, or should we go straight to the cross-encoder fallback?              | User    | No        |

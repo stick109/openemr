@@ -43,6 +43,8 @@ from pydantic import ValidationError
 
 from agent_service.clients.openai_client import FakeLLMClient
 from agent_service.graph import build_graph
+from agent_service.observability.run_record import RunRecord
+from agent_service.observability.storage import RunRecordStorage
 from agent_service.rag.bm25_index import BM25Index
 from agent_service.rag.corpus_loader import GuidelineChunk, load_corpus
 from agent_service.rag.dense_index import DenseIndex, fake_embed
@@ -91,6 +93,22 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
 
 REGRESSION_TOLERANCE: float = 0.05
 """Maximum tolerated drop relative to the recorded baseline (5 percentage points)."""
+
+SUPPORTED_REGRESSIONS: tuple[str, ...] = (
+    "drop-citations",
+    "wrong-value",
+    "flip-abnormal-flags",
+)
+"""Names of every regression hook recognised by the runner."""
+
+# Counter-flips for the abnormal-flag regression.  The mapping is symmetric
+# so applying it twice would round-trip back to the original value.
+_FLAG_FLIPS: dict[str, str] = {
+    "high": "low",
+    "low": "high",
+    "critical_high": "critical_low",
+    "critical_low": "critical_high",
+}
 
 
 # Regex patterns used by the PHI scanner.  These intentionally err on the
@@ -284,19 +302,38 @@ def _maybe_inject_regression(
 ) -> dict[str, Any]:
     """Apply a regression hook to a recorded extraction response.
 
-    Currently supported:
+    Supported regressions (all deterministic -- no random state):
 
     * ``"drop-citations"`` -- strips ``source_citation`` from each lab
-      result row and empties ``source_citations`` on intake forms.
-    * ``"wrong-value"`` -- (S22 placeholder) currently a no-op stub so the
-      CLI accepts the flag without crashing; full implementation lands in
-      the regression-test step.
+      result row and empties ``source_citations`` on intake forms.  Drives
+      ``citation_present`` below threshold.
+    * ``"wrong-value"`` -- mutates one important extracted field per case
+      so it no longer matches the fixture's expected output.  For lab PDFs
+      we corrupt the *first* result row's numeric ``value`` and flip its
+      ``abnormal_flag``; for intake forms we rewrite ``chief_concern``.
+      The schema still validates -- only the factual content drifts -- so
+      this targets ``factually_consistent``.
+    * ``"flip-abnormal-flags"`` -- swaps ``high`` <-> ``low`` (and
+      ``critical_high`` <-> ``critical_low``) on every lab result row.
+      A bigger-blast version of ``wrong-value`` that breaks
+      ``factually_consistent`` across most lab fixtures.  No-op for
+      intake forms because they do not carry abnormal flags.
     """
     if regression is None:
         return extracted
 
+    if regression not in SUPPORTED_REGRESSIONS:
+        raise ValueError(
+            f"Unknown regression type: {regression!r}. "
+            f"Supported: {', '.join(SUPPORTED_REGRESSIONS)}."
+        )
+
+    # Always work on a deep copy: the eval runner reuses the same loaded
+    # fixture objects across runs, and accidental mutation would poison
+    # subsequent invocations within the same Python process.
+    cloned = json.loads(json.dumps(extracted))
+
     if regression == "drop-citations":
-        cloned = json.loads(json.dumps(extracted))
         # Lab PDF shape
         if isinstance(cloned.get("results"), list):
             for row in cloned["results"]:
@@ -308,14 +345,69 @@ def _maybe_inject_regression(
         return cloned
 
     if regression == "wrong-value":
-        # Stub for S22 -- accept the flag but make no changes here.  The
-        # full regression implementation lives in the regression-test step.
-        return extracted
+        # Lab PDF: bump the first result's numeric value by a fixed delta
+        # and flip its abnormal flag.  Both the ``value`` and
+        # ``abnormal_flag`` checks in ``_score_factually_consistent``
+        # will then disagree with ``expected_extracted``.
+        if isinstance(cloned.get("results"), list) and cloned["results"]:
+            first_row = cloned["results"][0]
+            if isinstance(first_row, dict):
+                original_value = str(first_row.get("value", ""))
+                first_row["value"] = _bump_value(original_value)
+                flag = str(first_row.get("abnormal_flag", "") or "")
+                if flag in _FLAG_FLIPS:
+                    first_row["abnormal_flag"] = _FLAG_FLIPS[flag]
+                elif flag == "normal":
+                    first_row["abnormal_flag"] = "high"
+        # Intake form: rewrite the chief concern with a sentinel string.
+        # No fixture uses this exact phrasing, so factually_consistent
+        # will reliably fail for every intake case.
+        if "chief_concern" in cloned:
+            cloned["chief_concern"] = "REGRESSION: wrong-value injected"
+        return cloned
 
-    raise ValueError(
+    if regression == "flip-abnormal-flags":
+        # Lab PDF only.  Intake forms have no abnormal flags to flip.
+        if isinstance(cloned.get("results"), list):
+            for row in cloned["results"]:
+                if not isinstance(row, dict):
+                    continue
+                flag = str(row.get("abnormal_flag", "") or "")
+                if flag in _FLAG_FLIPS:
+                    row["abnormal_flag"] = _FLAG_FLIPS[flag]
+        return cloned
+
+    # SUPPORTED_REGRESSIONS check at the top covers everything; this
+    # final raise is a defensive fall-through for type-checker clarity.
+    raise ValueError(  # pragma: no cover
         f"Unknown regression type: {regression!r}. "
-        "Supported: drop-citations, wrong-value."
+        f"Supported: {', '.join(SUPPORTED_REGRESSIONS)}."
     )
+
+
+def _bump_value(original: str) -> str:
+    """Deterministically corrupt a numeric lab value while preserving shape.
+
+    Returns a non-empty string so the schema validator (which requires
+    ``min_length=1``) still accepts the row -- only
+    ``factually_consistent`` should notice the difference.
+
+    * Numbers parse and get a fixed ``+99.0`` bump (preserving fractional
+      vs. integer formatting where possible).
+    * Non-numeric / blank strings get a fixed sentinel suffix instead.
+    """
+    stripped = original.strip()
+    if not stripped:
+        return "REGRESSION-WRONG-VALUE"
+    try:
+        as_float = float(stripped)
+    except ValueError:
+        return f"{stripped}-REGRESSION"
+    bumped = as_float + 99.0
+    # Preserve "looks like an int" formatting where possible.
+    if "." not in stripped and bumped.is_integer():
+        return str(int(bumped))
+    return f"{bumped:.1f}"
 
 
 def _build_initial_state(request: AgentRunRequest) -> dict[str, Any]:
@@ -608,6 +700,8 @@ def run_eval(
     fixtures: list[FixtureCase] | None = None,
     rag_pipeline: RAGPipeline | None = None,
     inject_regression: str | None = None,
+    record_storage: RunRecordStorage | None = None,
+    record_model_name: str = "fake-fixture-model",
 ) -> EvalReport:
     """Run the eval over every fixture and return the aggregate report.
 
@@ -622,6 +716,15 @@ def run_eval(
     inject_regression:
         Optional regression hook applied to every fixture's recorded
         extraction response.  See :func:`_maybe_inject_regression`.
+    record_storage:
+        Optional :class:`RunRecordStorage` to receive a sanitized
+        :class:`RunRecord` for each fixture run.  When ``None`` (the
+        default) no records are emitted, preserving the historical
+        behaviour for callers that do not opt in.
+    record_model_name:
+        Model identifier persisted on each :class:`RunRecord`.  The
+        eval uses :class:`FakeLLMClient`, so the default is a synthetic
+        ``"fake-fixture-model"`` token rather than a real model name.
     """
     if fixtures is None:
         fixtures = load_fixtures()
@@ -641,11 +744,83 @@ def run_eval(
             with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
                 final_state = graph.invoke(initial_state)
 
-            result = score_case(case, dict(final_state), captured.getvalue())
+            final_state_dict = dict(final_state)
+            result = score_case(case, final_state_dict, captured.getvalue())
             results.append(result)
+
+            if record_storage is not None:
+                record = _build_run_record(
+                    case=case,
+                    request=request,
+                    final_state=final_state_dict,
+                    model_name=record_model_name,
+                )
+                record_storage.append(record)
 
     pass_rates = _compute_pass_rates(results)
     return EvalReport(cases=results, pass_rates=pass_rates, total=len(results))
+
+
+def _build_run_record(
+    *,
+    case: FixtureCase,
+    request: AgentRunRequest,
+    final_state: dict[str, Any],
+    model_name: str,
+) -> RunRecord:
+    """Build a sanitized :class:`RunRecord` from a fixture run.
+
+    The record carries only metrics derived from the LangGraph state --
+    no ``extracted`` payload, no file path, and no patient identifiers
+    -- so it survives the :class:`RunRecord` PHI validator unchanged.
+
+    Token counts are estimates because :class:`FakeLLMClient` does not
+    surface real usage data; they default to ``0`` so callers reading
+    the eval-generated store do not mistake fixture runs for live
+    token spend.
+    """
+    latency_per_step_int: dict[str, int] = dict(final_state.get("latency_ms_per_step", {}))
+    latency_per_step: dict[str, float] = {
+        step: float(value) for step, value in latency_per_step_int.items()
+    }
+    total_latency_ms = sum(latency_per_step.values())
+
+    raw_status = str(final_state.get("status", "")).lower()
+    if raw_status == "completed":
+        status = "success"
+    elif raw_status == "refused":
+        status = "refused"
+    else:
+        status = "error"
+
+    evidence = final_state.get("evidence") or []
+    retrieval_hit_count = len(evidence) if isinstance(evidence, list) else 0
+
+    extraction_confidence_raw = final_state.get("extraction_confidence")
+    if isinstance(extraction_confidence_raw, (int, float)):
+        # Clamp into [0, 1] so the validator never sees an out-of-range value;
+        # graph nodes occasionally emit confidences that overshoot 1.0 due to
+        # rounding when no real LLM is in the loop.
+        extraction_confidence = max(0.0, min(1.0, float(extraction_confidence_raw)))
+    else:
+        extraction_confidence = 0.0
+
+    cost_usd_raw = final_state.get("cost_usd")
+    cost_usd = float(cost_usd_raw) if isinstance(cost_usd_raw, (int, float)) else 0.0
+
+    return RunRecord(
+        trace_id=request.trace_id,
+        doc_type=case.doc_type,
+        latency_ms_per_step=latency_per_step,
+        total_latency_ms=float(total_latency_ms),
+        tokens_in=0,
+        tokens_out=0,
+        model=model_name,
+        cost_usd=cost_usd,
+        retrieval_hit_count=retrieval_hit_count,
+        extraction_confidence=extraction_confidence,
+        status=status,
+    )
 
 
 def _compute_pass_rates(results: list[CaseResult]) -> dict[str, float]:
@@ -722,6 +897,90 @@ def compare_to_baseline(
                 )
 
     return (not failures), failures
+
+
+def affected_fixtures(report: EvalReport, rubric_name: str) -> list[str]:
+    """Return the case IDs that failed *rubric_name* in *report*, in order.
+
+    Useful for surfacing which specific fixtures dragged a rubric below
+    threshold during a regression run -- the demo-friendly counterpart
+    to :func:`compare_to_baseline`.
+    """
+    return [
+        case.case_id
+        for case in report.cases
+        if not case.rubrics.get(rubric_name, False)
+    ]
+
+
+def format_failure_summary(
+    report: EvalReport,
+    baseline: dict[str, float] | None,
+    thresholds: dict[str, float] | None = None,
+    *,
+    max_fixtures_listed: int = 10,
+) -> str:
+    """Render a structured summary of regressed rubrics + affected fixtures.
+
+    Names every failing rubric, the delta vs. baseline (when supplied),
+    the threshold breached, and the case IDs of the affected fixtures.
+    The output mirrors the format requested in the S22 spec, e.g.::
+
+        FAIL: 2 rubric(s) regressed
+        - citation_present: 1.00 -> 0.12 (delta -88pp, threshold 0.95)
+          affected fixtures: lab_001, lab_002, ...
+    """
+    thresholds = dict(thresholds or DEFAULT_THRESHOLDS)
+
+    failing_rubrics: list[str] = []
+    for name in RUBRIC_NAMES:
+        observed = report.pass_rates.get(name, 0.0)
+        threshold = thresholds.get(name, 0.0)
+        threshold_breach = observed + 1e-9 < threshold
+        regression_breach = False
+        if baseline is not None:
+            previous = baseline.get(name, 0.0)
+            regression_breach = (
+                previous - observed > REGRESSION_TOLERANCE + 1e-9
+            )
+        if threshold_breach or regression_breach:
+            failing_rubrics.append(name)
+
+    if not failing_rubrics:
+        return "PASS: every rubric meets its threshold."
+
+    lines = [f"FAIL: {len(failing_rubrics)} rubric(s) regressed"]
+    for name in failing_rubrics:
+        observed = report.pass_rates.get(name, 0.0)
+        threshold = thresholds.get(name, 0.0)
+        previous = baseline.get(name, 0.0) if baseline is not None else None
+
+        if previous is not None:
+            delta_pp = (observed - previous) * 100.0
+            sign = "+" if delta_pp >= 0 else "-"
+            lines.append(
+                f"- {name}: {previous:.2f} -> {observed:.2f} "
+                f"(delta {sign}{abs(delta_pp):.0f}pp, "
+                f"threshold {threshold:.2f})"
+            )
+        else:
+            lines.append(
+                f"- {name}: {observed:.2f} below threshold {threshold:.2f}"
+            )
+
+        affected = affected_fixtures(report, name)
+        if affected:
+            shown = affected[:max_fixtures_listed]
+            suffix = ""
+            if len(affected) > max_fixtures_listed:
+                suffix = f", ... ({len(affected) - max_fixtures_listed} more)"
+            lines.append(
+                f"  affected fixtures: {', '.join(shown)}{suffix}"
+            )
+        else:
+            lines.append("  affected fixtures: (none)")
+
+    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

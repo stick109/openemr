@@ -46,7 +46,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M2 | Define sidecar copilot run contract | Done | M0 | M1, M3 |
 | M3 | Define signed `CopilotRunContext` | Done | M0 | M2 |
 | M4 | Add sidecar context verification | Not started | M2, M3 | M5, M6 |
-| M5 | Add Python tool registry primitives | Not started | M2 | M4, M6 |
+| M5 | Add Python tool registry primitives | Done | M2 | M4, M6 |
 | M6 | Add policy-enforced tool executor | Not started | M3, M5 | M4 |
 | M7 | Port intent catalog and capability caps to Python | Not started | M5, M6 | M8, M9 |
 | M8 | Port evidence schemas and citation models | Not started | M5 | M7, M9 |
@@ -253,9 +253,9 @@ Pass criteria:
 
 ## M5 - Add Python Tool Registry Primitives
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M2  
 **Can run in parallel with:** M4, M6
 

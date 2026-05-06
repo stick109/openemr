@@ -49,7 +49,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M5 | Add Python tool registry primitives | Done | M2 | M4, M6 |
 | M6 | Add policy-enforced tool executor | Done | M3, M5 | M4 |
 | M7 | Port intent catalog and capability caps to Python | Not started | M5, M6 | M8, M9 |
-| M8 | Port evidence schemas and citation models | Not started | M5 | M7, M9 |
+| M8 | Port evidence schemas and citation models | Done | M5 | M7, M9 |
 | M9 | Add Python OpenEMR read repository | Not started | M3, M8 | M7, M10 |
 | M10 | Implement read-only patient evidence tools | Not started | M7, M8, M9 | M11 |
 | M11 | Implement source drilldown tool | Not started | M8, M9 | M10 |
@@ -347,9 +347,9 @@ Pass criteria:
 
 ## M8 - Port Evidence Schemas and Citation Models
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M5  
 **Can run in parallel with:** M7, M9
 

@@ -52,7 +52,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M8 | Port evidence schemas and citation models | Done | M5 | M7, M9 |
 | M9 | Add Python OpenEMR read repository | Done | M3, M8 | M7, M10 |
 | M10 | Implement read-only patient evidence tools | Not started | M7, M8, M9 | M11 |
-| M11 | Implement source drilldown tool | Not started | M8, M9 | M10 |
+| M11 | Implement source drilldown tool | Done | M8, M9 | M10 |
 | M12 | Implement document/lab/intake tools in same registry | Done | Sidecar S9-S11, M6 | M10-M11 |
 | M13 | Implement LLM tool-choice agent loop | Not started | M6, M10, M11 | M14, M15 |
 | M14 | Port answer schema and response shaping | Done | M8 | M13, M15 |
@@ -443,9 +443,9 @@ Pass criteria:
 
 ## M11 - Implement Source Drilldown Tool
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M8, M9  
 **Can run in parallel with:** M10
 

@@ -53,7 +53,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M9 | Add Python OpenEMR read repository | Not started | M3, M8 | M7, M10 |
 | M10 | Implement read-only patient evidence tools | Not started | M7, M8, M9 | M11 |
 | M11 | Implement source drilldown tool | Not started | M8, M9 | M10 |
-| M12 | Implement document/lab/intake tools in same registry | Not started | Sidecar S9-S11, M6 | M10-M11 |
+| M12 | Implement document/lab/intake tools in same registry | Done | Sidecar S9-S11, M6 | M10-M11 |
 | M13 | Implement LLM tool-choice agent loop | Not started | M6, M10, M11 | M14, M15 |
 | M14 | Port answer schema and response shaping | Not started | M8 | M13, M15 |
 | M15 | Port verifier/refusal rules to Python | Not started | M8, M14 | M13 |
@@ -471,9 +471,9 @@ Pass criteria:
 
 ## M12 - Implement Document/Lab/Intake Tools in Same Registry
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** Sidecar S9-S11, M6  
 **Can run in parallel with:** M10-M11
 

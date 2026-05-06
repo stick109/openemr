@@ -35,9 +35,23 @@ from agent_service.tools.registry import (
 )
 from agent_service.tools.stubs import STUB_TOOLS, build_stub_tools
 
+# M12 document/lab/intake tools.  Imported at the bottom so the M5
+# surface above stays untouched -- the agent loop (M13) is the place
+# that composes the patient-evidence registry with the document tool
+# registry returned by ``document_tool_registry``.
+from agent_service.schemas.proposals import WriteProposal
+from agent_service.tools.document_tools import (
+    DOCUMENT_TOOL_NAMES,
+    CitationLookup,
+    build_document_tools,
+    document_tool_registry,
+)
+
 __all__ = [
+    "DOCUMENT_TOOL_NAMES",
     "FORBIDDEN_INPUT_KEYS",
     "STUB_TOOLS",
+    "CitationLookup",
     "ToolCallOutcome",
     "ToolDefinition",
     "ToolDefinitionError",
@@ -45,7 +59,10 @@ __all__ = [
     "ToolNotFoundError",
     "ToolRegistry",
     "ToolRegistryError",
+    "WriteProposal",
+    "build_document_tools",
     "build_stub_tools",
     "default_registry",
+    "document_tool_registry",
     "execute_tool",
 ]

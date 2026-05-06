@@ -11,14 +11,17 @@ when any of these are missing or empty.
     OPENEMR_DB_PASS_RO   -- read-only password (secret)
 
 Optional env vars:
-    OPENAI_API_KEY       -- OpenAI API key (required for LLM workers)
-    COHERE_API_KEY       -- Cohere API key (required for RAG reranking)
-    HONEYCOMB_API_KEY    -- Honeycomb API key (observability)
-    AGENT_DEBUG          -- enable debug mode (default: false)
-    AGENT_LOG_LEVEL      -- log level (default: INFO)
-    OPENEMR_DB_HOST      -- DB host (default: localhost)
-    OPENEMR_DB_PORT      -- DB port (default: 3306)
-    OPENEMR_DB_TIMEOUT_S -- connect timeout in seconds (default: 5)
+    OPENAI_API_KEY               -- OpenAI API key (required for LLM workers)
+    COHERE_API_KEY               -- Cohere API key (required for RAG reranking)
+    HONEYCOMB_API_KEY            -- Honeycomb API key (observability)
+    AGENT_DEBUG                  -- enable debug mode (default: false)
+    AGENT_LOG_LEVEL              -- log level (default: INFO)
+    OPENEMR_DB_HOST              -- DB host (default: localhost)
+    OPENEMR_DB_PORT              -- DB port (default: 3306)
+    OPENEMR_DB_TIMEOUT_S         -- connect timeout in seconds (default: 5)
+    OBSERVABILITY_EVENTS_PATH    -- M16 per-tool-call event JSONL path.  Unset
+                                    means events are dropped on the floor
+                                    (NullEventRecorder).
 """
 
 from __future__ import annotations
@@ -26,6 +29,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 
 
 def _require_env(name: str) -> str:
@@ -99,6 +103,14 @@ class Settings:
     openemr_db_pass_ro: str
     openemr_db_timeout_s: int
 
+    # M16: optional path for per-tool-call observability events.  ``None``
+    # routes events through ``NullEventRecorder`` -- the agent loop still
+    # builds them (so the PHI scan still runs) but they are dropped.
+    # Default to ``None`` so existing test fixtures that construct
+    # ``Settings`` positionally without naming this field continue to
+    # compile.
+    observability_events_path: Path | None = None
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
@@ -107,6 +119,9 @@ def get_settings() -> Settings:
     Raises ``RuntimeError`` with a descriptive message when a required
     variable is missing or empty.
     """
+    raw_events_path = _optional_env("OBSERVABILITY_EVENTS_PATH").strip()
+    events_path: Path | None = Path(raw_events_path) if raw_events_path else None
+
     return Settings(
         agent_shared_secret=_require_env("AGENT_SHARED_SECRET"),
         openai_api_key=_optional_env("OPENAI_API_KEY"),
@@ -120,4 +135,5 @@ def get_settings() -> Settings:
         openemr_db_user_ro=_optional_env("OPENEMR_DB_USER_RO"),
         openemr_db_pass_ro=_optional_env("OPENEMR_DB_PASS_RO"),
         openemr_db_timeout_s=_int_env("OPENEMR_DB_TIMEOUT_S", 5),
+        observability_events_path=events_path,
     )

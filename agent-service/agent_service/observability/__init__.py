@@ -1,17 +1,38 @@
 """Observability primitives for the agent sidecar.
 
-Captures sanitized per-run metrics (latency, cost, retrieval hits,
-extraction confidence) into append-only run records and aggregates them
-into Markdown cost/latency reports for the development team.
+Two layers of capture are provided:
 
-The records are designed to be PHI-free: every string field is checked
-against SSN-like patterns and ``Patient: <name>`` markers before being
-persisted, and the report generator runs the same scan over the
-generated Markdown before returning it.
+* Per-run :class:`RunRecord` documents (S25) -- one summary record per
+  graph invocation, persisted via :class:`JSONLStorage` /
+  :class:`SQLiteStorage` and aggregated into Markdown cost/latency
+  reports.
+
+* Per-tool-call :class:`RunEvent` documents (M16) -- structured event
+  spans for each phase of the agent loop (run.received, model turns,
+  tool started/finished, verifier, response.returned), persisted via
+  :class:`JsonlEventRecorder` (or routed through
+  :class:`NullEventRecorder` in tests that don't observe events).
+
+Both layers share a single PHI scanner exposed via
+:func:`observability._phi_scanner.scan_for_phi` (and its event-level
+extension :func:`scan_event_field_for_phi`).  Every string field is
+checked against SSN-like patterns, ``Patient: <name>`` markers, and --
+for events -- email / phone / address heuristics before being persisted.
 """
 
 from __future__ import annotations
 
+from agent_service.observability.events import (
+    EventType,
+    RunEvent,
+    RunEventPhiError,
+    VerifierOutcome,
+)
+from agent_service.observability.recorder import (
+    EventRecorder,
+    JsonlEventRecorder,
+    NullEventRecorder,
+)
 from agent_service.observability.run_record import RunRecord
 from agent_service.observability.storage import (
     JSONLStorage,
@@ -20,8 +41,15 @@ from agent_service.observability.storage import (
 )
 
 __all__ = [
+    "EventRecorder",
+    "EventType",
+    "JSONLStorage",
+    "JsonlEventRecorder",
+    "NullEventRecorder",
+    "RunEvent",
+    "RunEventPhiError",
     "RunRecord",
     "RunRecordStorage",
-    "JSONLStorage",
     "SQLiteStorage",
+    "VerifierOutcome",
 ]

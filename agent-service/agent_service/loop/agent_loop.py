@@ -61,6 +61,7 @@ import time
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from agent_service.answer.builder import RefusalReason, ResponseBuilder
@@ -76,6 +77,8 @@ from agent_service.intents.catalog import (
     IntentDefinition,
     UnknownIntentError,
 )
+from agent_service.observability.events import EventType, RunEvent
+from agent_service.observability.recorder import EventRecorder, NullEventRecorder
 from agent_service.schemas.copilot import (
     CopilotRunRequest,
     CopilotRunResponse,
@@ -314,6 +317,17 @@ def _serialise_tool_call(call: LLMToolCallChoice) -> dict[str, Any]:
     }
 
 
+def _utc_now() -> datetime:
+    """Return the current time as a timezone-aware UTC ``datetime``.
+
+    Used to stamp ``occurred_at`` on :class:`RunEvent` documents.  Wall-
+    clock time is intentionally separate from the monotonic ``clock``
+    used for latency math so the event log records when things happened
+    while the loop's cap arithmetic stays drift-free.
+    """
+    return datetime.now(tz=timezone.utc)
+
+
 # ---------------------------------------------------------------------------
 # Loop
 # ---------------------------------------------------------------------------
@@ -338,6 +352,8 @@ class AgentLoop:
         config: AgentLoopConfig | None = None,
         clock: Callable[[], float] | None = None,
         logger: logging.Logger | None = None,
+        event_recorder: EventRecorder | None = None,
+        wall_clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._intent_catalog = intent_catalog
         self._registry_builder = registry_builder
@@ -347,6 +363,17 @@ class AgentLoop:
         self._config = config if config is not None else AgentLoopConfig()
         self._clock = clock if clock is not None else time.monotonic
         self._logger = logger if logger is not None else _LOGGER
+        # M16: per-event observability sink.  Defaults to a no-op so unit
+        # tests that only care about the wire envelope are not forced to
+        # construct a real recorder.  ``wall_clock`` stamps event UTC
+        # timestamps and is injected separately from the monotonic
+        # ``clock`` used for latency math.
+        self._events: EventRecorder = (
+            event_recorder if event_recorder is not None else NullEventRecorder()
+        )
+        self._wall_clock: Callable[[], datetime] = (
+            wall_clock if wall_clock is not None else _utc_now
+        )
 
     # -- public entry point -------------------------------------------------
 
@@ -378,6 +405,10 @@ class AgentLoop:
         latency_ms_per_step: dict[str, int] = {}
         tool_sequence: list[ToolCallRecord] = []
         cost_usd = 0.0  # M13 does not estimate cost; left as a hook for M16.
+
+        # M16: emit the run.received span so downstream observability can
+        # correlate the rest of the events with this trace.
+        self._emit_event(event_type="run.received", trace_id=trace_id)
 
         # 1. Resolve intent.
         intent = self._resolve_intent(request)
@@ -446,25 +477,39 @@ class AgentLoop:
 
             iterations += 1
             iter_started = self._clock()
+            self._emit_event(
+                event_type="model.turn.started",
+                trace_id=trace_id,
+            )
             try:
                 turn = self._llm_client.tool_call_completion(
                     messages=messages,
                     tools=tool_schemas,
                 )
             except Exception as exc:  # noqa: BLE001 -- intentional broad catch
+                error_class = type(exc).__name__
                 self._logger.error(
                     "agent loop model error",
                     extra={
                         "trace_id": trace_id,
                         "iteration": iterations,
-                        "error_class": type(exc).__name__,
+                        "error_class": error_class,
                     },
                 )
+                turn_latency_ms = self._delta_ms(iter_started)
                 latency_ms_per_step.setdefault(
                     f"llm_call_{iterations}_ms",
-                    self._delta_ms(iter_started),
+                    turn_latency_ms,
                 )
                 latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+                # Emit a model.turn.finished event with the failure class
+                # so observers can attribute the refusal to the model.
+                self._emit_event(
+                    event_type="model.turn.finished",
+                    trace_id=trace_id,
+                    latency_ms=turn_latency_ms,
+                    error_class=error_class,
+                )
                 return self._refusal(
                     halt_reason="model_error",
                     tool_sequence=tool_sequence,
@@ -474,8 +519,12 @@ class AgentLoop:
                     started_at=started_at,
                 )
 
-            latency_ms_per_step[f"llm_call_{iterations}_ms"] = self._delta_ms(
-                iter_started,
+            turn_latency_ms = self._delta_ms(iter_started)
+            latency_ms_per_step[f"llm_call_{iterations}_ms"] = turn_latency_ms
+            self._emit_event(
+                event_type="model.turn.finished",
+                trace_id=trace_id,
+                latency_ms=turn_latency_ms,
             )
 
             if turn.tool_calls:
@@ -511,6 +560,11 @@ class AgentLoop:
                 # ``tool_error`` message so the model can react on the
                 # next turn (e.g. switch tools or refuse).
                 for call in turn.tool_calls:
+                    self._emit_event(
+                        event_type="tool.started",
+                        trace_id=trace_id,
+                        tool_name=call.tool_name,
+                    )
                     record = self._execute_one(
                         call=call,
                         context=context,
@@ -518,6 +572,14 @@ class AgentLoop:
                         trace_id=trace_id,
                     )
                     tool_sequence.append(record)
+                    self._emit_event(
+                        event_type="tool.finished",
+                        trace_id=trace_id,
+                        tool_name=record.tool_name,
+                        result_count=record.result_count,
+                        latency_ms=record.latency_ms,
+                        error_class=record.error_class,
+                    )
                     messages.append(
                         self._tool_result_message(
                             call=call,
@@ -537,11 +599,19 @@ class AgentLoop:
                 trace_id=trace_id,
                 started_at=started_at,
             )
+            verifier_started = self._clock()
             verification = self._verify(
                 response=response,
                 tool_sequence=tool_sequence,
             )
             if verification.status == "refused":
+                self._emit_event(
+                    event_type="verifier.finished",
+                    trace_id=trace_id,
+                    latency_ms=self._delta_ms(verifier_started),
+                    verifier_outcome="refused",
+                    refusal_reason=verification.refusal_reason,
+                )
                 refused = to_refusal_response(
                     builder=self._response_builder,
                     result=verification,
@@ -553,6 +623,13 @@ class AgentLoop:
                 latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(
                     started_at,
                 )
+                self._emit_event(
+                    event_type="response.returned",
+                    trace_id=trace_id,
+                    latency_ms=latency_ms_per_step["loop_total_ms"],
+                    refusal_reason=verification.refusal_reason,
+                    cost_usd_delta=cost_usd,
+                )
                 return AgentLoopResult(
                     response=refused,
                     tool_sequence=tuple(tool_sequence),
@@ -561,7 +638,19 @@ class AgentLoop:
                     halt_reason="verifier_refused",
                 )
 
+            self._emit_event(
+                event_type="verifier.finished",
+                trace_id=trace_id,
+                latency_ms=self._delta_ms(verifier_started),
+                verifier_outcome="passed",
+            )
             latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+            self._emit_event(
+                event_type="response.returned",
+                trace_id=trace_id,
+                latency_ms=latency_ms_per_step["loop_total_ms"],
+                cost_usd_delta=cost_usd,
+            )
             return AgentLoopResult(
                 response=response,
                 tool_sequence=tuple(tool_sequence),
@@ -756,13 +845,21 @@ class AgentLoop:
             "loop_total_ms",
             self._elapsed_ms(started_at),
         )
+        refusal_reason = _REFUSAL_FOR_HALT[halt_reason]
         response = self._response_builder.build_refusal(
-            reason=_REFUSAL_FOR_HALT[halt_reason],
+            reason=refusal_reason,
             explanation=_HALT_EXPLANATIONS[halt_reason],
             tool_sequence=tool_sequence,
             cost_usd=cost_usd,
             latency_ms_per_step=merged_latency,
             trace_id=trace_id,
+        )
+        self._emit_event(
+            event_type="response.returned",
+            trace_id=trace_id,
+            latency_ms=merged_latency["loop_total_ms"],
+            refusal_reason=refusal_reason,
+            cost_usd_delta=cost_usd,
         )
         return AgentLoopResult(
             response=response,
@@ -779,3 +876,67 @@ class AgentLoop:
 
     def _elapsed_ms(self, started_at: float) -> int:
         return max(0, int((self._clock() - started_at) * 1000))
+
+    # -- event emission -----------------------------------------------------
+
+    def _emit_event(
+        self,
+        *,
+        event_type: EventType,
+        trace_id: str,
+        latency_ms: int | None = None,
+        tool_name: str | None = None,
+        result_count: int | None = None,
+        token_usage_input: int | None = None,
+        token_usage_output: int | None = None,
+        cost_usd_delta: float | None = None,
+        refusal_reason: str | None = None,
+        verifier_outcome: Literal["passed", "refused"] | None = None,
+        error_class: str | None = None,
+    ) -> None:
+        """Build a :class:`RunEvent` and hand it to the injected sink.
+
+        Construction runs the PHI scanner; if a caller smuggles a
+        PHI-bearing string into ``tool_name`` / ``error_class`` etc. we
+        log the rejection at ERROR level and drop the event rather than
+        crashing the run.  The caller is the agent loop itself so this
+        is purely a defence-in-depth path; under normal operation the
+        scanner never trips.
+        """
+        try:
+            event = RunEvent(
+                trace_id=trace_id,
+                event_type=event_type,
+                occurred_at=self._wall_clock(),
+                latency_ms=latency_ms,
+                tool_name=tool_name,
+                result_count=result_count,
+                token_usage_input=token_usage_input,
+                token_usage_output=token_usage_output,
+                cost_usd_delta=cost_usd_delta,
+                refusal_reason=refusal_reason,
+                verifier_outcome=verifier_outcome,
+                error_class=error_class,
+            )
+        except Exception as exc:  # noqa: BLE001 -- defence in depth
+            self._logger.error(
+                "agent loop event rejected by PHI scanner",
+                extra={
+                    "trace_id": trace_id,
+                    "event_type": event_type,
+                    "error_class": type(exc).__name__,
+                },
+            )
+            return
+
+        try:
+            self._events.record(event)
+        except Exception as exc:  # noqa: BLE001 -- recorder must not break run
+            self._logger.error(
+                "agent loop event recorder failed",
+                extra={
+                    "trace_id": trace_id,
+                    "event_type": event_type,
+                    "error_class": type(exc).__name__,
+                },
+            )

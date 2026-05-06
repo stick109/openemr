@@ -351,6 +351,15 @@ $env:SKIP_EVAL_HOOK = "1"; git push; Remove-Item Env:SKIP_EVAL_HOOK
 This is for emergencies only. The CI gate is not bypassable, so any push
 that would have failed the local hook will still be caught before merge.
 
+### 7.4 Proving the gate actually catches regressions
+
+The `--inject-regression` flag deliberately introduces controlled
+failures to demonstrate the eval gate is not a no-op. See
+[`EVAL_REGRESSION_PROOF.md`](EVAL_REGRESSION_PROOF.md) for copy-paste
+demo commands covering the three supported regressions
+(`drop-citations`, `wrong-value`, `flip-abnormal-flags`) and their
+expected output.
+
 ---
 
 ## 8. Cross-references

@@ -34,8 +34,14 @@ from agent_service.clients.tool_choice import (
     LLMToolChoiceClient,
     LLMToolChoiceTurn,
 )
+from agent_service.config import Settings, get_settings
 from agent_service.intents import IntentCatalog, default_catalog
 from agent_service.loop import AgentLoop, AgentLoopConfig, RegistryBuilder
+from agent_service.observability.recorder import (
+    EventRecorder,
+    JsonlEventRecorder,
+    NullEventRecorder,
+)
 from agent_service.schemas.copilot import CopilotRunRequest, CopilotRunResponse
 from agent_service.tools.registry import ToolRegistry, default_registry
 from agent_service.verifier import AnswerVerifier
@@ -127,6 +133,29 @@ def get_registry_builder() -> RegistryBuilder:
     return _build
 
 
+def get_event_recorder() -> EventRecorder:
+    """Return the per-tool-call observability sink for the agent loop (M16).
+
+    When ``OBSERVABILITY_EVENTS_PATH`` is configured, returns a
+    :class:`JsonlEventRecorder` writing to that path.  Otherwise events
+    are dropped through a :class:`NullEventRecorder`.
+
+    Tests override this dependency directly when they want to capture
+    events for inspection -- the per-request resolution model means a
+    fresh recorder is composed for every request.
+    """
+    try:
+        settings: Settings = get_settings()
+    except RuntimeError:
+        # ``get_settings`` raises when ``AGENT_SHARED_SECRET`` is unset
+        # in a test environment. The agent loop already routes through a
+        # NullEventRecorder by default so this is a safe fallback.
+        return NullEventRecorder()
+    if settings.observability_events_path is None:
+        return NullEventRecorder()
+    return JsonlEventRecorder(path=settings.observability_events_path)
+
+
 def get_agent_loop(
     intent_catalog: Annotated[IntentCatalog, Depends(get_intent_catalog)],
     response_builder: Annotated[ResponseBuilder, Depends(get_response_builder)],
@@ -140,6 +169,7 @@ def get_agent_loop(
         Depends(get_registry_builder),
     ],
     config: Annotated[AgentLoopConfig, Depends(get_agent_loop_config)],
+    event_recorder: Annotated[EventRecorder, Depends(get_event_recorder)],
 ) -> AgentLoop:
     """Compose an :class:`AgentLoop` for a single request.
 
@@ -153,6 +183,7 @@ def get_agent_loop(
         verifier=verifier,
         llm_client=llm_client,
         config=config,
+        event_recorder=event_recorder,
     )
 
 
@@ -210,6 +241,7 @@ __all__ = [
     "get_agent_loop",
     "get_agent_loop_config",
     "get_answer_verifier",
+    "get_event_recorder",
     "get_intent_catalog",
     "get_llm_tool_choice_client",
     "get_registry_builder",

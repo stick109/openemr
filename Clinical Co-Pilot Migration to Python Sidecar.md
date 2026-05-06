@@ -57,7 +57,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M13 | Implement LLM tool-choice agent loop | Done | M6, M10, M11 | M14, M15 |
 | M14 | Port answer schema and response shaping | Done | M8 | M13, M15 |
 | M15 | Port verifier/refusal rules to Python | Done | M8, M14 | M13 |
-| M16 | Add PHI-safe sidecar observability for tool calls | Not started | M6, M13 | M17 |
+| M16 | Add PHI-safe sidecar observability for tool calls | Done | M6, M13 | M17 |
 | M17 | Add PHP thin proxy to sidecar copilot endpoint | Done | M2-M4 | M13-M16 |
 | M18 | Add shadow mode comparing PHP and Python outputs | Not started | M13-M17 | M19 |
 | M19 | Add per-intent cutover feature flags | Not started | M18 | M20 |
@@ -599,9 +599,9 @@ Pass criteria:
 
 ## M16 - Add PHI-Safe Sidecar Observability for Tool Calls
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M6, M13  
 **Can run in parallel with:** M17
 

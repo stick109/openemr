@@ -15,7 +15,6 @@ escaped the sanitised path.
 
 from __future__ import annotations
 
-import re
 from datetime import datetime, timezone
 from typing import Any, ClassVar
 
@@ -28,42 +27,23 @@ from pydantic import (
     model_validator,
 )
 
-
-# ---------------------------------------------------------------------------
-# PHI patterns (kept in sync with eval/runner.py and report.py)
-# ---------------------------------------------------------------------------
-
-
-_SSN_PATTERN: re.Pattern[str] = re.compile(r"\b\d{3}-\d{2}-\d{4}\b")
-"""Matches XXX-XX-XXXX strings that look like US Social Security Numbers."""
-
-_PATIENT_NAME_PATTERN: re.Pattern[str] = re.compile(
-    r"\bPatient\s*[:=]\s*[A-Z][a-zA-Z'\-]+(?:\s+[A-Z][a-zA-Z'\-]+)+",
-)
-"""Matches ``Patient: Jane Doe`` / ``Patient = First Last`` markers."""
+# The scanner used to live at module scope in this file.  M16 lifted it
+# into ``observability/_phi_scanner.py`` so the new ``RunEvent`` model can
+# reuse the same primitive without copy-pasting the regexes.  The public
+# name is re-exported here for backwards compatibility -- callers (the
+# eval runner, the report generator, downstream tests) still import
+# ``scan_for_phi`` from ``run_record``.
+from agent_service.observability._phi_scanner import scan_for_phi
 
 
 _ALLOWED_STATUSES: frozenset[str] = frozenset({"success", "refused", "error"})
 """Closed set of run statuses persisted in the observability store."""
 
 
-def scan_for_phi(*texts: str) -> list[str]:
-    """Return human-readable descriptions of any PHI hits in *texts*.
-
-    Empty / falsy strings are skipped.  The returned list is empty when
-    the inputs are PHI-clean.  This helper is shared between the record
-    validator and the report generator so both layers reject the same
-    patterns.
-    """
-    hits: list[str] = []
-    for text in texts:
-        if not text:
-            continue
-        for match in _SSN_PATTERN.finditer(text):
-            hits.append(f"ssn-like: {match.group(0)}")
-        for match in _PATIENT_NAME_PATTERN.finditer(text):
-            hits.append(f"patient-name: {match.group(0)}")
-    return hits
+__all__ = [
+    "RunRecord",
+    "scan_for_phi",
+]
 
 
 # ---------------------------------------------------------------------------

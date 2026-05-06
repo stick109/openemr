@@ -43,7 +43,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | --- | --- | --- | --- | --- |
 | M0 | Confirm migration target and PHP boundary | Done | Sidecar S3-S4 | M1 |
 | M1 | Inventory current PHP behavior and build parity fixtures | Done | none | M0, M2 |
-| M2 | Define sidecar copilot run contract | Not started | M0 | M1, M3 |
+| M2 | Define sidecar copilot run contract | Done | M0 | M1, M3 |
 | M3 | Define signed `CopilotRunContext` | Not started | M0 | M2 |
 | M4 | Add sidecar context verification | Not started | M2, M3 | M5, M6 |
 | M5 | Add Python tool registry primitives | Not started | M2 | M4, M6 |
@@ -150,9 +150,9 @@ Pass criteria:
 
 ## M2 - Define Sidecar Copilot Run Contract
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M0  
 **Can run in parallel with:** M1, M3
 

@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
 
+from agent_service.api import copilot_router
 from agent_service.config import get_settings
 from agent_service.schemas.api import (
     AgentErrorResponse,
@@ -23,6 +24,10 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url=None,
 )
+
+# Mount route modules.  The chart-copilot router covers POST /api/copilot/run
+# (stubbed in M2; real handler arrives in M4/M13).
+app.include_router(copilot_router, prefix="/api/copilot")
 
 
 # ---------------------------------------------------------------------------

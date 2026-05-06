@@ -54,9 +54,11 @@ PS> Invoke-WebRequest http://localhost:8300/ -MaximumRedirection 0
 
 ## 2. Eval gate (S20, S22)
 
-Always unset `OPENAI_API_KEY` for eval/test runs - the `FakeLLMClient` refuses
-to construct while it is set, as a safety guard against accidental real-API
-calls.
+Unset `OPENAI_API_KEY` for direct eval/test invocations - the `FakeLLMClient`
+refuses to construct while it is set, as a safety guard against accidental
+real-API calls. The pre-push hook unsets it automatically in its own
+subshell, so `git push` works regardless of whether the key is exported in
+your shell.
 
 ```powershell
 $env:OPENAI_API_KEY = $null
@@ -294,10 +296,14 @@ through the form so the sidecar runs the full pipeline.
 
 ## 7. Known issues / caveats
 
-- **`OPENAI_API_KEY` must be unset** for `py -m agent_service.eval` and
-  `py -m pytest`. The `FakeLLMClient` raises by design if the env var is
-  set, to prevent real-API calls. PowerShell pattern:
+- **`OPENAI_API_KEY` must be unset** for direct invocations of
+  `py -m agent_service.eval` and `py -m pytest`. The `FakeLLMClient` raises
+  by design if the env var is set, to prevent real-API calls. PowerShell
+  pattern:
   `$env:OPENAI_API_KEY = $null; <command>; $env:OPENAI_API_KEY = "<your-key>"`.
+  The pre-push hook (`scripts/hooks/pre-push`) handles this automatically -
+  it unsets `OPENAI_API_KEY` in its own subshell before running the eval,
+  so `git push` does not require the manual workaround.
 - **`mysql` client is not in the MySQL container's `$PATH`.** Use
   `docker compose ... exec -T mysql mariadb ...` (the image is MariaDB
   11.8.6). The wrapper `mysql` binary is not installed.

@@ -3,6 +3,26 @@
 /**
  * AgentIntentRestController
  *
+ * Sidecar-authoritative entry point for the Clinical Co-Pilot REST API
+ * (``POST /api/agent/intent``).
+ *
+ * After M24, the PHP layer is a thin trust boundary in front of the
+ * Python agent-service sidecar. This controller is responsible only for:
+ *
+ *   - CSRF check + cataloged intent_id validation (inputs from the UI),
+ *   - ACL/access-broker authorization,
+ *   - minting a short-lived {@see CopilotRunContext} (HMAC-signed),
+ *   - calling the sidecar over HTTP and returning its already-shaped
+ *     answer to the UI.
+ *
+ * All clinical answer generation, verification, and evidence assembly
+ * lives in the Python sidecar (see ``agent-service/agent_service/answer/builder.py``,
+ * ``agent_service/verifier/answer_verifier.py`` and
+ * ``agent_service/tools/patient_evidence_tools.py``). The legacy PHP
+ * orchestrator/verifier/response-builder/evidence-toolset chain that
+ * existed prior to M24 has been removed; the sidecar is now the single
+ * source of truth for chart copilot behavior.
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -17,17 +37,13 @@ use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Services\Agent\AgentAccessBroker;
 use OpenEMR\Services\Agent\AgentAccessDecision;
 use OpenEMR\Services\Agent\AgentAccessToken;
-use OpenEMR\Services\Agent\AgentEvidenceResponseBuilder;
 use OpenEMR\Services\Agent\AgentIntentCatalog;
 use OpenEMR\Services\Agent\Copilot\CopilotRunContext;
-use OpenEMR\Services\Agent\Evidence\AgentEvidenceAccessException;
+use OpenEMR\Services\Agent\Sidecar\AgentSidecarConfig;
 use OpenEMR\Services\Agent\Sidecar\CopilotRunRequestDto;
 use OpenEMR\Services\Agent\Sidecar\CopilotRunResponseDto;
 use OpenEMR\Services\Agent\Sidecar\CopilotSidecarClient;
 use OpenEMR\Services\Agent\Sidecar\CopilotSidecarException;
-use OpenEMR\Services\Agent\Sidecar\CopilotSidecarRouting;
-use OpenEMR\Services\Agent\Sidecar\IntentMode;
-use OpenEMR\Services\Agent\Sidecar\ShadowComparator;
 use Psr\Log\LoggerInterface;
 use Random\RandomException;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -83,57 +99,23 @@ final class AgentIntentRestController
     private $clock;
 
     /**
-     * @var callable(): bool
-     */
-    private $sidecarProxyEnabled;
-
-    /**
-     * @var callable(): bool
-     */
-    private $sidecarShadowEnabled;
-
-    /**
      * @var callable(): string
      */
     private $sharedSecretProvider;
 
-    /**
-     * @var callable(): CopilotSidecarRouting
-     */
-    private $routingProvider;
-
-    private readonly ShadowComparator $shadowComparator;
+    private readonly CopilotSidecarClient $copilotSidecarClient;
 
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
         private readonly AgentAccessBroker $accessBroker = new AgentAccessBroker(),
-        private readonly AgentEvidenceResponseBuilder $responseBuilder = new AgentEvidenceResponseBuilder(),
         private readonly LoggerInterface $logger = new SystemLogger(),
         ?callable $requestIdFactory = null,
-        private readonly ?CopilotSidecarClient $copilotSidecarClient = null,
-        ?callable $sidecarProxyEnabled = null,
+        ?CopilotSidecarClient $copilotSidecarClient = null,
         ?callable $sharedSecretProvider = null,
         ?callable $clock = null,
-        ?callable $sidecarShadowEnabled = null,
-        ?ShadowComparator $shadowComparator = null,
-        ?callable $routingProvider = null,
     ) {
         $this->requestIdFactory = $requestIdFactory ?? static fn (): string => bin2hex(random_bytes(16));
         $this->clock = $clock ?? static fn (): int => time();
-        $this->sidecarProxyEnabled = $sidecarProxyEnabled ?? static function (): bool {
-            $flag = getenv('OPENEMR_COPILOT_SIDECAR_PROXY_ENABLED');
-            if (!is_string($flag) || $flag === '') {
-                return false;
-            }
-            return in_array(strtolower(trim($flag)), ['1', 'true', 'on', 'yes'], true);
-        };
-        $this->sidecarShadowEnabled = $sidecarShadowEnabled ?? static function (): bool {
-            $flag = getenv('OPENEMR_COPILOT_SIDECAR_SHADOW_ENABLED');
-            if (!is_string($flag) || $flag === '') {
-                return false;
-            }
-            return in_array(strtolower(trim($flag)), ['1', 'true', 'on', 'yes'], true);
-        };
         $this->sharedSecretProvider = $sharedSecretProvider ?? static function (): string {
             $secret = getenv('OPENEMR_AGENT_SIDECAR_SECRET');
             if (is_string($secret) && $secret !== '') {
@@ -142,49 +124,11 @@ final class AgentIntentRestController
             $fallback = getenv('AGENT_SHARED_SECRET');
             return is_string($fallback) ? $fallback : '';
         };
-        $this->shadowComparator = $shadowComparator ?? new ShadowComparator();
 
-        if ($routingProvider !== null) {
-            $this->routingProvider = $routingProvider;
-        } else {
-            $proxyEnabledRef = $this->sidecarProxyEnabled;
-            $shadowEnabledRef = $this->sidecarShadowEnabled;
-            $this->routingProvider = static function () use ($proxyEnabledRef, $shadowEnabledRef): CopilotSidecarRouting {
-                // M19: when no explicit routing is wired in, derive it from
-                // the M17/M18 boolean callables. This preserves the
-                // contract for existing tests and call-sites that still
-                // pass ``sidecarProxyEnabled`` / ``sidecarShadowEnabled``.
-                $env = [];
-                if ($proxyEnabledRef() === true) {
-                    $env['OPENEMR_COPILOT_SIDECAR_PROXY_ENABLED'] = '1';
-                }
-                if ($shadowEnabledRef() === true) {
-                    $env['OPENEMR_COPILOT_SIDECAR_SHADOW_ENABLED'] = '1';
-                }
-                $emergency = getenv('OPENEMR_COPILOT_EMERGENCY_DISABLE');
-                if (is_string($emergency) && $emergency !== '') {
-                    $env['OPENEMR_COPILOT_EMERGENCY_DISABLE'] = $emergency;
-                }
-                $explicitDefault = getenv('OPENEMR_COPILOT_DEFAULT_MODE');
-                if (is_string($explicitDefault) && $explicitDefault !== '') {
-                    $env['OPENEMR_COPILOT_DEFAULT_MODE'] = $explicitDefault;
-                }
-                $processEnv = getenv();
-                if (is_array($processEnv)) {
-                    foreach ($processEnv as $key => $value) {
-                        if (
-                            is_string($key)
-                            && is_string($value)
-                            && $value !== ''
-                            && str_starts_with($key, 'OPENEMR_COPILOT_INTENT_MODE_')
-                        ) {
-                            $env[$key] = $value;
-                        }
-                    }
-                }
-                return CopilotSidecarRouting::fromEnv($env);
-            };
-        }
+        $this->copilotSidecarClient = $copilotSidecarClient ?? new CopilotSidecarClient(
+            AgentSidecarConfig::fromEnvironment(),
+            $this->logger,
+        );
     }
 
     public function postIntent(HttpRestRequest $request): JsonResponse
@@ -266,379 +210,7 @@ final class AgentIntentRestController
             return $this->evidenceDenied('Agent access token was not available.', $requestId);
         }
 
-        $mode = $this->resolveIntentMode($intent['intent_id']);
-
-        return match ($mode) {
-            IntentMode::Sidecar => $this->handleSidecarProxy(
-                $intent,
-                $accessToken,
-                $conversationId,
-                $requestId,
-            ),
-            IntentMode::Shadow => $this->handleShadow(
-                $intent,
-                $accessToken,
-                $payload,
-                $conversationId,
-                $requestId,
-                $request,
-            ),
-            IntentMode::Php => $this->handleLegacy(
-                $intent,
-                $accessToken,
-                $payload,
-                $conversationId,
-                $requestId,
-                $request,
-            ),
-        };
-    }
-
-    /**
-     * Resolve the routing mode for an intent, falling back to the legacy
-     * PHP path whenever the sidecar client is not wired in.
-     */
-    private function resolveIntentMode(string $intentId): IntentMode
-    {
-        if ($this->copilotSidecarClient === null) {
-            return IntentMode::Php;
-        }
-
-        $routing = ($this->routingProvider)();
-        return $routing->modeFor($intentId);
-    }
-
-    /**
-     * Handler for the legacy PHP path -- builds the deterministic
-     * verified-fallback response with no sidecar interaction.
-     *
-     * @param array{
-     *     intent_id: string,
-     *     button_label: string,
-     *     prompt_text: string,
-     *     primary_users: list<string>,
-     *     use_case_traces: list<string>,
-     *     max_records: int,
-     *     max_documents: int,
-     *     lookback_days: int
-     * } $intent
-     * @param array<mixed> $payload
-     */
-    private function handleLegacy(
-        array $intent,
-        AgentAccessToken $accessToken,
-        array $payload,
-        ?string $conversationId,
-        string $requestId,
-        HttpRestRequest $request,
-    ): JsonResponse {
-        $agentResponseOrError = $this->buildLegacyResponse($intent, $accessToken, $payload, $request, $requestId);
-        if ($agentResponseOrError instanceof JsonResponse) {
-            return $agentResponseOrError;
-        }
-
-        return $this->renderLegacyResponse(
-            $intent,
-            $agentResponseOrError,
-            $conversationId,
-            $requestId,
-        );
-    }
-
-    /**
-     * Handler for shadow mode -- legacy PHP serves the user-visible
-     * response, plus a parallel sidecar call drives sanitized
-     * comparison logging.
-     *
-     * @param array{
-     *     intent_id: string,
-     *     button_label: string,
-     *     prompt_text: string,
-     *     primary_users: list<string>,
-     *     use_case_traces: list<string>,
-     *     max_records: int,
-     *     max_documents: int,
-     *     lookback_days: int
-     * } $intent
-     * @param array<mixed> $payload
-     */
-    private function handleShadow(
-        array $intent,
-        AgentAccessToken $accessToken,
-        array $payload,
-        ?string $conversationId,
-        string $requestId,
-        HttpRestRequest $request,
-    ): JsonResponse {
-        $agentResponseOrError = $this->buildLegacyResponse($intent, $accessToken, $payload, $request, $requestId);
-        if ($agentResponseOrError instanceof JsonResponse) {
-            return $agentResponseOrError;
-        }
-
-        $this->runShadowComparison($intent, $accessToken, $agentResponseOrError, $requestId);
-
-        return $this->renderLegacyResponse(
-            $intent,
-            $agentResponseOrError,
-            $conversationId,
-            $requestId,
-        );
-    }
-
-    /**
-     * Handler for the sidecar-authoritative path. Delegates to the
-     * existing M17 implementation and returns the sidecar response
-     * directly to the caller.
-     *
-     * @param array{
-     *     intent_id: string,
-     *     button_label: string,
-     *     prompt_text: string,
-     *     primary_users: list<string>,
-     *     use_case_traces: list<string>,
-     *     max_records: int,
-     *     max_documents: int,
-     *     lookback_days: int
-     * } $intent
-     */
-    private function handleSidecarProxy(
-        array $intent,
-        AgentAccessToken $accessToken,
-        ?string $conversationId,
-        string $requestId,
-    ): JsonResponse {
         return $this->proxyIntentToSidecar($intent, $accessToken, $conversationId, $requestId);
-    }
-
-    /**
-     * Build the legacy PHP response or short-circuit with an error.
-     *
-     * @param array{
-     *     intent_id: string,
-     *     button_label: string,
-     *     prompt_text: string,
-     *     primary_users: list<string>,
-     *     use_case_traces: list<string>,
-     *     max_records: int,
-     *     max_documents: int,
-     *     lookback_days: int
-     * } $intent
-     * @param array<mixed> $payload
-     *
-     * @return array<string, mixed>|JsonResponse
-     */
-    private function buildLegacyResponse(
-        array $intent,
-        AgentAccessToken $accessToken,
-        array $payload,
-        HttpRestRequest $request,
-        string $requestId,
-    ): array|JsonResponse {
-        try {
-            $agentResponse = $this->responseBuilder->build(
-                $intent['intent_id'],
-                $accessToken,
-                $this->sourceIdFromPayload($payload),
-                $requestId
-            );
-            $request->attributes->set('agentAnonymizedPayloadLog', $this->responseBuilder->getLastLogPayload());
-        } catch (AgentEvidenceAccessException $exception) {
-            $this->logger->warning('agent.intent.evidence_denied', [
-                'request_id' => $requestId,
-                'intent_id' => $intent['intent_id'],
-                'reason_code' => $exception->getReasonCode(),
-            ]);
-            return $this->evidenceDenied($exception->getPublicMessage(), $requestId);
-        }
-
-        $claimCount = $this->countClaims($agentResponse);
-        $citationCount = is_array($agentResponse['citations'] ?? null) ? count($agentResponse['citations']) : 0;
-        $this->logger->info('agent.intent.completed', [
-            'request_id' => $requestId,
-            'intent_id' => $intent['intent_id'],
-            'status' => is_string($agentResponse['status'] ?? null) ? $agentResponse['status'] : 'unknown',
-            'citation_count' => $citationCount,
-            'claim_count' => $claimCount,
-        ]);
-        $this->logger->info('agent.response.rendered', [
-            'request_id' => $requestId,
-            'intent_id' => $intent['intent_id'],
-            'answer_block_count' => $this->countAnswerBlocks($agentResponse),
-            'citation_count' => $citationCount,
-        ]);
-
-        return $agentResponse;
-    }
-
-    /**
-     * @param array{
-     *     intent_id: string,
-     *     button_label: string,
-     *     prompt_text: string,
-     *     primary_users: list<string>,
-     *     use_case_traces: list<string>,
-     *     max_records: int,
-     *     max_documents: int,
-     *     lookback_days: int
-     * } $intent
-     * @param array<string, mixed> $agentResponse
-     */
-    private function renderLegacyResponse(
-        array $intent,
-        array $agentResponse,
-        ?string $conversationId,
-        string $requestId,
-    ): JsonResponse {
-        return $this->jsonResponse([
-            'validationErrors' => [],
-            'internalErrors' => [],
-            'data' => array_merge([
-                'intent_id' => $intent['intent_id'],
-                'button_label' => $intent['button_label'],
-                'trace' => [
-                    'request_id' => $requestId,
-                    'conversation_id' => $conversationId,
-                    'response_payload_logging' => 'anonymized_or_disabled',
-                ],
-            ], $agentResponse),
-        ], Response::HTTP_OK, $requestId);
-    }
-
-    /**
-     * @param array{
-     *     intent_id: string,
-     *     button_label: string,
-     *     prompt_text: string,
-     *     primary_users: list<string>,
-     *     use_case_traces: list<string>,
-     *     max_records: int,
-     *     max_documents: int,
-     *     lookback_days: int
-     * } $intent
-     * @param array<string, mixed> $phpResponse
-     */
-    private function runShadowComparison(
-        array $intent,
-        AgentAccessToken $accessToken,
-        array $phpResponse,
-        string $requestId
-    ): void {
-        if ($this->copilotSidecarClient === null) {
-            return;
-        }
-
-        try {
-            $sidecarRequest = $this->buildSidecarRequest($intent, $accessToken, $requestId);
-        } catch (\DomainException | \InvalidArgumentException | RandomException $e) {
-            $this->logger->warning('agent.copilot.sidecar.shadow_context_failed', [
-                'request_id' => $requestId,
-                'intent_id' => $intent['intent_id'],
-                'exception' => $e,
-            ]);
-            return;
-        }
-
-        try {
-            $sidecarResponse = $this->copilotSidecarClient->runCopilot($sidecarRequest);
-        } catch (CopilotSidecarException $e) {
-            $this->logger->warning('agent.copilot.sidecar.shadow_failed', [
-                'request_id' => $requestId,
-                'intent_id' => $intent['intent_id'],
-                'reason' => $e->reason,
-                'http_status' => $e->httpStatus,
-            ]);
-            return;
-        }
-
-        $record = $this->shadowComparator->compare(
-            $phpResponse,
-            $sidecarResponse,
-            $sidecarResponse->traceId !== '' ? $sidecarResponse->traceId : $requestId,
-            $intent['intent_id'],
-        );
-
-        $this->logger->info('Sidecar shadow comparison', [
-            'trace_id' => $record->traceId,
-            'intent_id' => $record->intentId,
-            'verification_status_match' => $record->verificationStatusMatch,
-            'cited_source_ids_match' => $record->citedSourceIdsMatch,
-            'php_cited_count' => $record->phpCitedCount,
-            'sidecar_cited_count' => $record->sidecarCitedCount,
-            'missingness_shape_match' => $record->missingnessShapeMatch,
-            'headings_match' => $record->headingsMatch,
-            'php_answer_block_headings' => $record->phpAnswerBlockHeadings,
-            'sidecar_answer_block_headings' => $record->sidecarAnswerBlockHeadings,
-        ]);
-    }
-
-    /**
-     * @param array{
-     *     intent_id: string,
-     *     button_label: string,
-     *     prompt_text: string,
-     *     primary_users: list<string>,
-     *     use_case_traces: list<string>,
-     *     max_records: int,
-     *     max_documents: int,
-     *     lookback_days: int
-     * } $intent
-     *
-     * @throws \DomainException
-     * @throws \InvalidArgumentException
-     * @throws RandomException
-     */
-    private function buildSidecarRequest(
-        array $intent,
-        AgentAccessToken $accessToken,
-        string $requestId
-    ): CopilotRunRequestDto {
-        $patientId = $accessToken->getPatientContext()->getPid();
-        $now = ($this->clock)();
-        $secret = ($this->sharedSecretProvider)();
-        if ($secret === '') {
-            throw new \DomainException('Sidecar shared secret is not configured.');
-        }
-
-        $intentId = $intent['intent_id'];
-        $allowedTools = $accessToken->getGrantedTools();
-        if ($allowedTools === []) {
-            throw new \DomainException('Access token does not grant any sidecar tools.');
-        }
-
-        $allowedSourceTypes = $accessToken->getGrantedDataClasses();
-        if ($allowedSourceTypes === []) {
-            $allowedSourceTypes = [$intentId];
-        }
-
-        $maxRows = max(1, $intent['max_records']);
-        $lookbackDays = max(1, $intent['lookback_days']);
-
-        $traceId = $this->generateUuidV4();
-        $minterRequestId = $this->generateUuidV4();
-        $userIdentity = $this->resolveUserIdentity($accessToken);
-
-        $claims = [
-            'user_id' => $userIdentity['user_id'],
-            'username' => $userIdentity['username'],
-            'patient_id' => $patientId,
-            'encounter_id' => null,
-            'allowed_tools' => $allowedTools,
-            'allowed_source_types' => $allowedSourceTypes,
-            'max_rows' => $maxRows,
-            'lookback_days' => $lookbackDays,
-            'expires_at' => $now + self::RUN_CONTEXT_TTL_SECONDS,
-            'request_id' => $minterRequestId,
-            'trace_id' => $traceId,
-        ];
-
-        $wireToken = CopilotRunContext::mint($claims, $secret, self::RUN_CONTEXT_KEY_VERSION);
-
-        return new CopilotRunRequestDto(
-            runContext: $wireToken,
-            intentId: $intentId,
-            userGoal: null,
-            requestId: $minterRequestId,
-        );
     }
 
     /**
@@ -659,10 +231,6 @@ final class AgentIntentRestController
         ?string $conversationId,
         string $requestId
     ): JsonResponse {
-        if ($this->copilotSidecarClient === null) {
-            return $this->serviceUnavailable($requestId);
-        }
-
         try {
             $patientId = $accessToken->getPatientContext()->getPid();
             $now = ($this->clock)();
@@ -861,33 +429,6 @@ final class AgentIntentRestController
     }
 
     /**
-     * @param array<string, mixed> $agentResponse
-     */
-    private function countClaims(array $agentResponse): int
-    {
-        $blocks = $agentResponse['answer']['answer_blocks'] ?? null;
-        if (!is_array($blocks)) {
-            return 0;
-        }
-        $total = 0;
-        foreach ($blocks as $block) {
-            if (is_array($block) && is_array($block['claims'] ?? null)) {
-                $total += count($block['claims']);
-            }
-        }
-        return $total;
-    }
-
-    /**
-     * @param array<string, mixed> $agentResponse
-     */
-    private function countAnswerBlocks(array $agentResponse): int
-    {
-        $blocks = $agentResponse['answer']['answer_blocks'] ?? null;
-        return is_array($blocks) ? count($blocks) : 0;
-    }
-
-    /**
      * @return array{payload: array<mixed>}|array{errors: array<string, list<string>>}
      */
     private function decodePayload(HttpRestRequest $request): array
@@ -969,16 +510,6 @@ final class AgentIntentRestController
         }
 
         return $validationErrors;
-    }
-
-    /**
-     * @param array<mixed> $payload
-     */
-    private function sourceIdFromPayload(array $payload): ?string
-    {
-        return isset($payload['source_id']) && is_string($payload['source_id'])
-            ? $payload['source_id']
-            : null;
     }
 
     /**

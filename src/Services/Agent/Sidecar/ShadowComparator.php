@@ -4,10 +4,12 @@
  * ShadowComparator
  *
  * Builds {@see ShadowComparisonRecord} value objects for M18 shadow mode.
- * Compares the legacy PHP copilot response (an associative array shaped by
- * {@see \OpenEMR\Services\Agent\AgentEvidenceResponseBuilder}) against the
- * Python sidecar's typed {@see CopilotRunResponseDto} response, surfacing
- * only PHI-free structural signals:
+ * Historically compared the legacy PHP copilot response (an associative
+ * array shaped by the now-removed PHP response builder) against the
+ * Python sidecar's typed {@see CopilotRunResponseDto} response. After the
+ * M24 cutover the PHP builder is gone, but the comparator is retained as
+ * a reusable structural-diff utility for any future side-by-side fixture
+ * comparisons. Surfaces only PHI-free structural signals:
  *
  *   - verification status match (passed vs not-passed)
  *   - cited source-id set equality + counts
@@ -41,8 +43,12 @@ final readonly class ShadowComparator
     /**
      * Compare a PHP-shape copilot response and a typed sidecar response.
      *
-     * @param array<string, mixed>     $phpResponse     Output of
-     *                                                  ``AgentEvidenceResponseBuilder::build()``.
+     * @param array<string, mixed>     $phpResponse     Legacy PHP-shape
+     *                                                  copilot response (an
+     *                                                  associative array
+     *                                                  carrying the same
+     *                                                  fields the sidecar
+     *                                                  emits).
      * @param CopilotRunResponseDto    $sidecarResponse Decoded sidecar payload.
      * @param string                   $traceId         Correlation id used in logs.
      * @param string                   $intentId        Closed-set intent id (PHI-free).

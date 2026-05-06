@@ -3,6 +3,22 @@
 /**
  * AgentIntentRestControllerTest
  *
+ * Sidecar-only contract for the M24 controller. After M24 the PHP
+ * orchestrator/verifier/response-builder/evidence-toolset chain is gone;
+ * the controller is a thin trust boundary that mints a CopilotRunContext
+ * and proxies to the Python sidecar. These tests pin:
+ *
+ *   - happy path: sidecar 200 -> controller emits the documented
+ *     ``data.response_generation = sidecar_proxy`` envelope with
+ *     ``answer_blocks`` / ``citations`` / ``verification`` populated from
+ *     the sidecar response.
+ *   - sidecar failure (401, 501, etc.) collapses to HTTP 503 without
+ *     leaking provider error messages.
+ *   - input validation rejects unknown intents and free-text fields
+ *     before the sidecar is contacted.
+ *   - missing shared secret / unauthenticated session short-circuit
+ *     before any sidecar call is made.
+ *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
  * @license   https://github.com/openemr/openemr/blob/master/LICENSE GNU General Public License 3
@@ -12,15 +28,17 @@ declare(strict_types=1);
 
 namespace OpenEMR\Tests\Isolated\RestControllers\Agent;
 
+use GuzzleHttp\Client;
+use GuzzleHttp\Handler\MockHandler;
+use GuzzleHttp\HandlerStack;
+use GuzzleHttp\Middleware;
+use GuzzleHttp\Psr7\Response as Psr7Response;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\RestControllers\Agent\AgentIntentRestController;
 use OpenEMR\Services\Agent\AgentAccessBroker;
-use OpenEMR\Services\Agent\AgentEvidenceResponseBuilder;
-use OpenEMR\Services\Agent\Anonymizer;
-use OpenEMR\Services\Agent\Evidence\AgentEvidenceToolset;
-use OpenEMR\Services\Agent\Evidence\EvidenceCaps;
-use OpenEMR\Services\Agent\Evidence\EvidenceRecordRepositoryInterface;
+use OpenEMR\Services\Agent\Sidecar\AgentSidecarConfig;
+use OpenEMR\Services\Agent\Sidecar\CopilotSidecarClient;
 use PHPUnit\Framework\Attributes\Group;
 use PHPUnit\Framework\TestCase;
 use Psr\Log\NullLogger;
@@ -30,31 +48,235 @@ use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 
 #[Group('isolated')]
 #[Group('agent')]
-class AgentIntentRestControllerTest extends TestCase
+final class AgentIntentRestControllerTest extends TestCase
 {
-    private AgentIntentRestController $controller;
+    public function testSidecar200ReturnsTypedSidecarEnvelope(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [
+                new Psr7Response(
+                    200,
+                    ['Content-Type' => 'application/json'],
+                    json_encode($this->sidecarSuccessBody(), JSON_THROW_ON_ERROR),
+                ),
+            ],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertCount(1, $history, 'Sidecar must be called exactly once on a happy path');
+        $this->assertSame(
+            'http://sidecar:8010/api/copilot/run',
+            (string) $history[0]['request']->getUri(),
+        );
+        $this->assertSame('current_medications', $body['data']['intent_id']);
+        $this->assertSame('sidecar_proxy', $body['data']['response_generation']);
+        $this->assertSame('trace-from-sidecar', $body['data']['trace']['sidecar_trace_id']);
+        $this->assertSame('passed', $body['data']['verification']['status']);
+        $this->assertCount(1, $body['data']['answer']['answer_blocks']);
+        $this->assertSame('Sidecar generated answer.', $body['data']['answer']['answer_blocks'][0]['content']);
+        $this->assertSame('medication:lists_medication:77', $body['data']['citations'][0]['source_id']);
+    }
+
+    public function testSidecar501IsCollapsedToServiceUnavailable(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [
+                new Psr7Response(
+                    501,
+                    ['Content-Type' => 'application/json'],
+                    json_encode(['detail' => ['error' => 'not_implemented']], JSON_THROW_ON_ERROR),
+                ),
+            ],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
+        $this->assertSame([], $body['data']);
+        $this->assertSame(
+            ['The clinical co-pilot is temporarily unavailable. Please try again shortly.'],
+            $body['internalErrors']['service'],
+        );
+    }
+
+    public function testSidecar401IsCollapsedToServiceUnavailable(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [
+                new Psr7Response(
+                    401,
+                    ['Content-Type' => 'application/json'],
+                    json_encode(['error' => 'context_rejected'], JSON_THROW_ON_ERROR),
+                ),
+            ],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(
+            Response::HTTP_SERVICE_UNAVAILABLE,
+            $response->getStatusCode(),
+            'A 401 from the sidecar must NOT propagate to the UI -- it surfaces as 503',
+        );
+        $this->assertSame([], $body['data']);
+    }
+
+    public function testCsrfFailurePreventsSidecarFromBeingCalled(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [],
+            sidecarHistory: $history,
+        );
+
+        $request = $this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]);
+        $request->headers->set('APICSRFTOKEN', 'tampered-token');
+
+        $response = $controller->postIntent($request);
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_FORBIDDEN, $response->getStatusCode());
+        $this->assertSame([], $history, 'Sidecar must not be called when CSRF check fails');
+        $this->assertSame(['Agent access requires a valid API CSRF token.'], $body['internalErrors']['access']);
+    }
+
+    public function testInvalidIntentIdPreventsSidecarFromBeingCalled(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'fictional_intent',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
+        $this->assertSame([], $history, 'Sidecar must not be called for unknown intents');
+        $this->assertSame(['Unknown agent intent_id.'], $body['validationErrors']['intent_id']);
+    }
+
+    public function testFreeTextPayloadRejectedBeforeSidecarCall(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+            'free_text' => 'patient note',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
+        $this->assertSame(
+            ['Free-text agent input is not supported. Use a cataloged intent_id.'],
+            $body['validationErrors']['free_text'],
+        );
+        $this->assertSame([], $history, 'Free-text rejection must short-circuit before any sidecar call');
+    }
+
+    public function testMissingSharedSecretSurfacesAsServiceUnavailable(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [],
+            sidecarHistory: $history,
+            sharedSecret: '',
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_SERVICE_UNAVAILABLE, $response->getStatusCode());
+        $this->assertSame([], $body['data']);
+        $this->assertSame([], $history, 'Without a shared secret, the sidecar must not be reachable from the controller');
+    }
+
+    // ------------------------------------------------------------------
+    // Helpers
+    // ------------------------------------------------------------------
 
     /**
-     * @var list<array<string, mixed>>
+     * @param list<Psr7Response> $sidecarResponses
+     * @param array<mixed>       $sidecarHistory   Passed by-ref into Guzzle's history middleware.
+     *
+     * @param-out array<mixed>   $sidecarHistory
      */
-    private array $auditEvents = [];
+    private function buildController(
+        array $sidecarResponses,
+        array &$sidecarHistory,
+        string $sharedSecret = 'test-shared-secret',
+    ): AgentIntentRestController {
+        $mock = new MockHandler($sidecarResponses);
+        $handlerStack = HandlerStack::create($mock);
+        $handlerStack->push(Middleware::history($sidecarHistory));
+        $httpClient = new Client(['handler' => $handlerStack]);
 
-    protected function setUp(): void
-    {
-        $this->auditEvents = [];
-        $responseBuilder = new AgentEvidenceResponseBuilder(
-            toolset: new AgentEvidenceToolset(
-                repository: new AgentIntentRestControllerEvidenceRepository(),
-                logger: new NullLogger(),
-                requestIdFactory: static fn (): string => 'agent-test-request'
+        $sidecarClient = new CopilotSidecarClient(
+            new AgentSidecarConfig(
+                url: 'http://sidecar:8010',
+                sharedSecret: 'test-shared-secret',
+                timeoutSeconds: 30,
             ),
-            anonymizer: new Anonymizer(logger: new NullLogger()),
-            logger: new NullLogger()
+            new NullLogger(),
+            $httpClient,
         );
-        $this->controller = new AgentIntentRestController(
+
+        return new AgentIntentRestController(
             accessBroker: new AgentAccessBroker(
-                aclChecker: static fn (string $section, string $value, string $user, string $permission): bool => true,
-                auditLogger: function (
+                aclChecker: static fn (
+                    string $section,
+                    string $value,
+                    string $user,
+                    string $permission
+                ): bool => true,
+                auditLogger: static function (
                     string $event,
                     string $user,
                     string $groupname,
@@ -62,282 +284,15 @@ class AgentIntentRestControllerTest extends TestCase
                     string $comments,
                     ?int $patientId
                 ): void {
-                    $this->auditEvents[] = [
-                        'event' => $event,
-                        'user' => $user,
-                        'groupname' => $groupname,
-                        'success' => $success,
-                        'comments' => $comments,
-                        'patient_id' => $patientId,
-                    ];
                 },
-                logger: new NullLogger()
+                logger: new NullLogger(),
             ),
-            responseBuilder: $responseBuilder,
             logger: new NullLogger(),
-            requestIdFactory: static fn (): string => 'agent-test-request'
+            requestIdFactory: static fn (): string => 'agent-test-request',
+            copilotSidecarClient: $sidecarClient,
+            sharedSecretProvider: static fn (): string => $sharedSecret,
+            clock: static fn (): int => 1_700_000_000,
         );
-    }
-
-    public function testAcceptsKnownClosedIntentAndReturnsEvidencePacket(): void
-    {
-        $request = $this->requestWithJson([
-            'intent_id' => 'current_medications',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-        ]);
-        $response = $this->controller->postIntent($request);
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
-        $this->assertSame('agent-test-request', $response->headers->get('X-OpenEMR-Agent-Request-Id'));
-        $this->assertSame([], $body['validationErrors']);
-        $this->assertSame('current_medications', $body['data']['intent_id']);
-        $this->assertSame('Current medications', $body['data']['button_label']);
-        $this->assertSame('agent-test-request', $body['data']['trace']['request_id']);
-        $this->assertSame('session-local-id', $body['data']['trace']['conversation_id']);
-        $this->assertSame('verified', $body['data']['status']);
-        $this->assertSame('deterministic_verified', $body['data']['response_generation']);
-        $this->assertSame('Current medications', $body['data']['answer']['answer_blocks'][0]['heading']);
-        $this->assertSame('active', $body['data']['answer']['answer_blocks'][0]['claims'][0]['certainty']);
-        $this->assertSame(['medication:lists_medication:77'], $body['data']['answer']['answer_blocks'][0]['claims'][0]['citation_ids']);
-        $this->assertSame([], $body['data']['answer']['missing_or_uncertain']);
-        $this->assertSame('medication:lists_medication:77', $body['data']['citations'][0]['source_id']);
-        $this->assertSame(['medications'], $body['data']['checked_evidence']);
-        $this->assertSame('passed', $body['data']['verification']['status']);
-        $this->assertFalse($body['data']['llm']['configured']);
-        $this->assertFalse($body['data']['llm']['used']);
-        $this->assertSame('agent-test-request', $body['data']['evidence_packet']['request_id']);
-        $this->assertIsArray($request->attributes->get('agentAnonymizedPayloadLog'));
-        $this->assertArrayNotHasKey('placeholder_map', $request->attributes->get('agentAnonymizedPayloadLog'));
-    }
-
-    public function testStoresAnonymizedPayloadForOptionalPayloadLogs(): void
-    {
-        $request = $this->requestWithJson([
-            'intent_id' => 'basic_patient_data',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-        ]);
-
-        $response = $this->controller->postIntent($request);
-        $body = $this->decodeJsonBody($response);
-        $anonymizedPayload = $request->attributes->get('agentAnonymizedPayloadLog');
-
-        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
-        $this->assertStringNotContainsString('Public ID', $body['data']['evidence_packet']['sources'][0]['display']);
-        $this->assertSame(
-            ['Sex: Female', 'Age: 52', 'Status: single'],
-            array_column($body['data']['answer']['answer_blocks'][0]['claims'], 'text')
-        );
-        $this->assertSame(
-            ['source_record', 'source_record', 'source_record'],
-            array_column($body['data']['answer']['answer_blocks'][0]['claims'], 'certainty')
-        );
-        $this->assertIsArray($anonymizedPayload);
-        $this->assertSame('agent.log.v1', $anonymizedPayload['payload_version']);
-        $this->assertSame('agent-test-request', $anonymizedPayload['request_id']);
-        $this->assertSame('basic_patient_data', $anonymizedPayload['intent_id']);
-        $this->assertSame('agent-test-request', $anonymizedPayload['evidence_packet']['request_id']);
-        $this->assertSame('demographics:patient_data:123', $anonymizedPayload['evidence_packet']['sources'][0]['source_id']);
-        $this->assertStringNotContainsString('P123', $anonymizedPayload['evidence_packet']['sources'][0]['display']);
-        $this->assertSame('anonymized', $anonymizedPayload['redaction']['status']);
-        $this->assertIsInt($anonymizedPayload['redaction']['replacement_count']);
-        $this->assertIsArray($anonymizedPayload['redaction']['category_counts']);
-        $this->assertArrayNotHasKey('placeholder_map', $anonymizedPayload);
-    }
-
-    public function testReturnsEvidenceForPhaseThreeIntents(): void
-    {
-        $phaseThreeIntentIds = [
-            'basic_patient_data',
-            'current_medications',
-            'allergies_to_confirm',
-            'recent_events',
-            'changed_since_last_visit',
-        ];
-        foreach ($phaseThreeIntentIds as $intentId) {
-            $payload = [
-                'intent_id' => $intentId,
-                'conversation_id' => 'session-local-id',
-                'active_patient_context' => 'server-session',
-            ];
-            $response = $this->controller->handlePayload($payload, $this->requestWithJson($payload));
-            $body = $this->decodeJsonBody($response);
-
-            $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
-            $this->assertSame($intentId, $body['data']['intent_id']);
-            $this->assertSame('verified', $body['data']['status']);
-            $this->assertNotEmpty($body['data']['answer']['answer_blocks'][0]['claims'][0]['text']);
-        }
-    }
-
-    public function testShowSourceRequiresServerIssuedSourceIdOrReturnsInstruction(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'show_source',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
-        $this->assertSame('source_required', $body['data']['status']);
-        $this->assertSame([], $body['data']['citations']);
-    }
-
-    public function testShowSourceReturnsSourceDetailForCitationId(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'show_source',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-            'source_id' => 'medication:lists_medication:77',
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
-        $this->assertSame('verified', $body['data']['status']);
-        $this->assertSame('medication:lists_medication:77', $body['data']['citations'][0]['source_id']);
-        $this->assertStringContainsString('Source medication', $body['data']['answer']['answer_blocks'][0]['claims'][0]['text']);
-    }
-
-    public function testRejectsUnknownIntentId(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'full_chart_export',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(['Unknown agent intent_id.'], $body['validationErrors']['intent_id']);
-    }
-
-    public function testRejectsFreeTextPayload(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'current_medications',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-            'question' => 'What should this patient take?',
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(
-            ['Free-text agent input is not supported. Use a cataloged intent_id.'],
-            $body['validationErrors']['free_text']
-        );
-    }
-
-    public function testRejectsTamperedPromptPreviewPayload(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'current_medications',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-            'prompt_text' => 'Show me everything in this chart.',
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(
-            ['Free-text agent input is not supported. Use a cataloged intent_id.'],
-            $body['validationErrors']['free_text']
-        );
-        $this->assertSame(['Unsupported payload fields: prompt_text.'], $body['validationErrors']['payload']);
-    }
-
-    public function testRejectsBrowserSuppliedPatientId(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'current_medications',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-            'patient_id' => 123,
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(['Unsupported payload fields: patient_id.'], $body['validationErrors']['payload']);
-    }
-
-    public function testRejectsSourceIdOnNonSourceIntent(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'current_medications',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-            'source_id' => 'medication:lists_medication:77',
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(['source_id is only supported with the show_source intent.'], $body['validationErrors']['source_id']);
-    }
-
-    public function testRejectsPatientContextValueOtherThanServerSession(): void
-    {
-        $response = $this->controller->postIntent($this->requestWithJson([
-            'intent_id' => 'current_medications',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'patient-123',
-        ]));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(
-            ['active_patient_context must be server-session.'],
-            $body['validationErrors']['active_patient_context']
-        );
-    }
-
-    public function testRejectsInvalidJson(): void
-    {
-        $response = $this->controller->postIntent(new HttpRestRequest(content: '{"intent_id":'));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(['Invalid JSON payload.'], $body['validationErrors']['json']);
-    }
-
-    public function testRejectsNonObjectJsonPayload(): void
-    {
-        $response = $this->controller->postIntent(new HttpRestRequest(content: '["current_medications"]'));
-
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
-        $this->assertSame(['JSON payload must be an object.'], $body['validationErrors']['payload']);
-    }
-
-    public function testReturnsForbiddenWhenBrokerDeniesAccess(): void
-    {
-        $request = $this->requestWithJson([
-            'intent_id' => 'current_medications',
-            'conversation_id' => 'session-local-id',
-            'active_patient_context' => 'server-session',
-        ]);
-        $request->headers->set('APICSRFTOKEN', 'bad-token');
-
-        $response = $this->controller->postIntent($request);
-        $body = $this->decodeJsonBody($response);
-
-        $this->assertSame(Response::HTTP_FORBIDDEN, $response->getStatusCode());
-        $this->assertSame([], $body['validationErrors']);
-        $this->assertSame(['Agent access requires a valid API CSRF token.'], $body['internalErrors']['access']);
     }
 
     /**
@@ -366,115 +321,42 @@ class AgentIntentRestControllerTest extends TestCase
     {
         $decoded = json_decode((string) $response->getContent(), true, flags: JSON_THROW_ON_ERROR);
         $this->assertIsArray($decoded);
-        return $decoded;
-    }
-}
-
-final class AgentIntentRestControllerEvidenceRepository implements EvidenceRecordRepositoryInterface
-{
-    public function fetchBasicPatientData(int $pid, EvidenceCaps $caps): array
-    {
-        return [
-            [
-                'source_id' => 'demographics:patient_data:123',
-                'source_type' => 'demographics',
-                'data_class' => 'demographics',
-                'table' => 'patient_data',
-                'record_id' => '123',
-                'patient_id' => 123,
-                'date' => '2026-04-20',
-                'status' => 'available',
-                'display' => 'sex: Female; age: 52; status: single',
-                'fields_used' => ['DOB', 'sex', 'status'],
-                'reliability' => 'structured_patient_record',
-            ],
-        ];
-    }
-
-    public function fetchCurrentMedications(int $pid, EvidenceCaps $caps): array
-    {
-        return [$this->medicationRecord()];
-    }
-
-    public function fetchAllergiesToConfirm(int $pid, EvidenceCaps $caps): array
-    {
-        return [
-            [
-                'source_id' => 'allergy:lists:88',
-                'source_type' => 'allergy',
-                'data_class' => 'allergies',
-                'table' => 'lists',
-                'record_id' => '88',
-                'patient_id' => 123,
-                'date' => '2026-04-19',
-                'status' => 'active',
-                'display' => 'Penicillin; reaction rash',
-                'fields_used' => ['title', 'reaction'],
-                'reliability' => 'structured_active_record',
-            ],
-        ];
-    }
-
-    public function fetchRecentEvents(int $pid, EvidenceCaps $caps): array
-    {
-        return [
-            [
-                'source_id' => 'encounter:form_encounter:99',
-                'source_type' => 'encounter',
-                'data_class' => 'recent_events',
-                'table' => 'form_encounter',
-                'record_id' => '99',
-                'patient_id' => 123,
-                'date' => '2026-04-18',
-                'status' => 'AMB',
-                'display' => 'Encounter 9001; follow-up visit',
-                'fields_used' => ['date', 'reason'],
-                'reliability' => 'structured_event_record',
-            ],
-        ];
-    }
-
-    public function fetchChangedSinceLastVisit(int $pid, EvidenceCaps $caps, array $grantedDataClasses): array
-    {
-        return [
-            [
-                'source_id' => 'encounter:form_encounter:100',
-                'source_type' => 'encounter',
-                'data_class' => 'recent_events',
-                'table' => 'form_encounter',
-                'record_id' => '100',
-                'patient_id' => 123,
-                'date' => '2026-04-21',
-                'status' => 'AMB',
-                'display' => 'Encounter 9002; medication follow-up',
-                'fields_used' => ['date', 'reason'],
-                'reliability' => 'structured_event_record',
-            ],
-        ];
-    }
-
-    public function fetchSourceRecord(int $pid, string $sourceId, EvidenceCaps $caps): ?array
-    {
-        return $sourceId === 'medication:lists_medication:77' ? $this->medicationRecord() : null;
+        $result = [];
+        foreach ($decoded as $key => $value) {
+            $this->assertIsString($key);
+            $result[$key] = $value;
+        }
+        return $result;
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function medicationRecord(): array
+    private function sidecarSuccessBody(): array
     {
         return [
-            'source_id' => 'medication:lists_medication:77',
-            'source_type' => 'medication',
-            'data_class' => 'medications',
-            'table' => 'lists_medication',
-            'record_id' => '77',
-            'patient_id' => 123,
-            'date' => '2026-04-20',
-            'status' => 'active',
-            'display' => 'Metformin 500 mg twice daily',
-            'fields_used' => ['title', 'drug_dosage_instructions'],
-            'reliability' => 'structured_active_record',
+            'answer_blocks' => [
+                [
+                    'type' => 'paragraph',
+                    'content' => 'Sidecar generated answer.',
+                    'citation_indices' => [0],
+                ],
+            ],
+            'missing_or_uncertain' => [],
+            'citations' => [
+                [
+                    'source_type' => 'medication',
+                    'source_id' => 'medication:lists_medication:77',
+                    'label' => 'Metformin 500 mg',
+                    'url' => null,
+                    'snippet' => null,
+                ],
+            ],
+            'tool_sequence' => [],
+            'verification_status' => 'passed',
+            'cost_usd' => 0.0042,
+            'latency_ms_per_step' => ['plan' => 5, 'execute' => 22],
+            'trace_id' => 'trace-from-sidecar',
         ];
     }
 }

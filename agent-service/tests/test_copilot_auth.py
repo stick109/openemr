@@ -133,6 +133,12 @@ def settings_override(_env: None) -> Settings:
         honeycomb_api_key="",
         debug=False,
         log_level="INFO",
+        openemr_db_host="localhost",
+        openemr_db_port=3306,
+        openemr_db_name="",
+        openemr_db_user_ro="",
+        openemr_db_pass_ro="",
+        openemr_db_timeout_s=5,
     )
 
 

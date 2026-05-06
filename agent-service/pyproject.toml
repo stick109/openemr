@@ -15,6 +15,7 @@ dependencies = [
     "openai",
     "rank-bm25",
     "numpy",
+    "pymysql>=1.1",
 ]
 
 [project.optional-dependencies]

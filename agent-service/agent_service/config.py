@@ -3,12 +3,22 @@
 Required env vars:
     AGENT_SHARED_SECRET  -- shared secret checked on every API request
 
+OpenEMR read-only DB (M9): the sidecar's read repository fails closed
+when any of these are missing or empty.
+
+    OPENEMR_DB_NAME      -- target schema name
+    OPENEMR_DB_USER_RO   -- read-only username (sidecar must not have writes)
+    OPENEMR_DB_PASS_RO   -- read-only password (secret)
+
 Optional env vars:
     OPENAI_API_KEY       -- OpenAI API key (required for LLM workers)
     COHERE_API_KEY       -- Cohere API key (required for RAG reranking)
     HONEYCOMB_API_KEY    -- Honeycomb API key (observability)
     AGENT_DEBUG          -- enable debug mode (default: false)
     AGENT_LOG_LEVEL      -- log level (default: INFO)
+    OPENEMR_DB_HOST      -- DB host (default: localhost)
+    OPENEMR_DB_PORT      -- DB port (default: 3306)
+    OPENEMR_DB_TIMEOUT_S -- connect timeout in seconds (default: 5)
 """
 
 from __future__ import annotations
@@ -40,6 +50,26 @@ def _bool_env(name: str, default: bool = False) -> bool:
     return raw.strip().lower() in ("1", "true", "yes")
 
 
+def _int_env(name: str, default: int) -> int:
+    """Parse *name* as an int, falling back to *default* when unset/empty.
+
+    Raises ``RuntimeError`` if the variable is set but unparseable, so a
+    typo (e.g. ``OPENEMR_DB_PORT=33o6``) fails loudly at startup rather
+    than silently using the default.
+    """
+    raw = os.environ.get(name, "")
+    if raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError as exc:
+        msg = (
+            f"Environment variable {name!r}={raw!r} is not a valid integer. "
+            "Fix or unset it before starting the agent service."
+        )
+        raise RuntimeError(msg) from exc
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """Immutable application settings."""
@@ -56,6 +86,19 @@ class Settings:
     debug: bool
     log_level: str
 
+    # OpenEMR read-only DB (M9). ``openemr_db_name`` /
+    # ``openemr_db_user_ro`` / ``openemr_db_pass_ro`` are required by the
+    # repository factory and must be non-empty when the read repository
+    # is constructed; they default to empty here so workers that never
+    # touch the DB are not forced to set them. The repository's
+    # ``from_settings`` factory enforces the fail-closed contract.
+    openemr_db_host: str
+    openemr_db_port: int
+    openemr_db_name: str
+    openemr_db_user_ro: str
+    openemr_db_pass_ro: str
+    openemr_db_timeout_s: int
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
@@ -71,4 +114,10 @@ def get_settings() -> Settings:
         honeycomb_api_key=_optional_env("HONEYCOMB_API_KEY"),
         debug=_bool_env("AGENT_DEBUG"),
         log_level=_optional_env("AGENT_LOG_LEVEL", "INFO").upper(),
+        openemr_db_host=_optional_env("OPENEMR_DB_HOST", "localhost"),
+        openemr_db_port=_int_env("OPENEMR_DB_PORT", 3306),
+        openemr_db_name=_optional_env("OPENEMR_DB_NAME"),
+        openemr_db_user_ro=_optional_env("OPENEMR_DB_USER_RO"),
+        openemr_db_pass_ro=_optional_env("OPENEMR_DB_PASS_RO"),
+        openemr_db_timeout_s=_int_env("OPENEMR_DB_TIMEOUT_S", 5),
     )

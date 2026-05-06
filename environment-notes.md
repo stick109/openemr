@@ -77,3 +77,17 @@ The Redis extension is a manually installed PECL DLL. If PHP is upgraded, replac
 - The full isolated PHPUnit suite is not a clean Windows-host baseline. Latest run of `.\vendor\bin\phpunit.bat -c phpunit-isolated.xml` on 2026-04-29 completed with `Tests: 2766, Assertions: 7086, Errors: 4, Failures: 340, Warnings: 4, Notices: 1, Skipped: 14, Incomplete: 14`.
 - Remaining Windows-host failure categories include path/routing expectations, Twig template path handling, CRLF fixture output differences, subprocess spawning behavior, POSIX-style permission checks, and symlink creation permissions.
 - Use targeted Windows suites for local iteration, and use the Linux Docker environment for broad validation.
+
+## Sidecar Preflight — 2026-05-06
+
+| Check                  | Result | Detail                                       |
+|------------------------|--------|----------------------------------------------|
+| Git branch             | PASS   | `codex/sidecar` created from `master`        |
+| Python 3.11+           | PASS   | Python 3.11.7 via `py` launcher              |
+| Docker Compose v2      | PASS   | Docker Compose v2.39.2-desktop.1             |
+| OpenEMR stack          | PASS   | All 7 services running and healthy           |
+| OpenEMR HTTP endpoint  | PASS   | http://localhost:8300/ returns HTTP 302       |
+| OpenEMR HTTPS endpoint | PASS   | https://localhost:9300/ returns HTTP 302      |
+
+- The `python` command is not on PATH (Windows Store app-execution alias intercepts it). Use `py` or `py -3` instead.
+- No blocking issues found.

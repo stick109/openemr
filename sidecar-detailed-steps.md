@@ -53,7 +53,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | S23 | Add sidecar Docker/Compose wiring | Not started | S3, S12, S13 | S20-S22 |
 | S24 | Add deployment guide and env documentation | Not started | S12, S23 | S20-S22 |
 | S25 | Add cost/latency report generation | Not started | S11, S20 | S24, S26 |
-| S26 | Final end-to-end demo verification | Not started | S18, S21, S23, S25 | none |
+| S26 | Final end-to-end demo verification | Done | S18, S21, S23, S25 | none |
 
 ---
 
@@ -866,9 +866,13 @@ Pass criteria:
 
 ## S26 - Final End-to-End Demo Verification
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** S18, S21, S23, S25  
 **Can run in parallel with:** none
+
+See [`docs/WEEK2_DEMO_VERIFICATION.md`](docs/WEEK2_DEMO_VERIFICATION.md) for
+the captured verification record (eval-gate output, regression-proof output,
+cost/latency report path, manual UI checklist, and the demo video flow).
 
 Implementation:
 

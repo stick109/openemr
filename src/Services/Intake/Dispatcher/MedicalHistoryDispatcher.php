@@ -4,16 +4,20 @@
  * MedicalHistoryDispatcher
  *
  * Persists a Medical History intake form into the FHIR-shaped
- * `questionnaire_response` table, the encounter-form
- * `form_questionnaire_assessments` table, and the encounter timeline
- * `forms` table.
+ * `questionnaire_response` table and the encounter-form
+ * `form_questionnaire_assessments` table.
  *
  * The dispatcher is intentionally minimal: it builds a small FHIR
- * `QuestionnaireResponse` JSON envelope describing the answers, stores it,
- * and links it to the encounter so the upload appears in the patient's
- * timeline. It does *not* exercise the full
+ * `QuestionnaireResponse` JSON envelope describing the answers and stores
+ * it. It does *not* exercise the full
  * {@see \OpenEMR\Services\QuestionnaireResponseService} pipeline, which is
  * tightly coupled to LHC-Forms-driven UI flows.
+ *
+ * The encounter-timeline `forms` row is registered exclusively by
+ * `interface/forms/upload_intake_form/save.php` via
+ * {@see \OpenEMR\Services\FormService::addForm()} after this dispatcher
+ * returns — registering it here too would produce a duplicate timeline row
+ * with stale metadata (wrong `form_id`, numeric `user`).
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -34,7 +38,6 @@ use Throwable;
 
 final class MedicalHistoryDispatcher
 {
-    private const FORM_DIRECTORY = 'upload_intake_form';
     private const FORM_NAME = 'Medical History (Intake Upload)';
     private const QUESTIONNAIRE_NAME = QuestionnaireResponseBuilder::QUESTIONNAIRE_NAME;
 
@@ -95,14 +98,6 @@ final class MedicalHistoryDispatcher
             responseId: $responseId,
             questionnaireJson: $questionnaireSerialised,
             responseJson: $responseSerialised,
-            now: $now->format('Y-m-d H:i:s'),
-        );
-
-        $this->linkToEncounter(
-            patientId: $patientId,
-            encounterId: $encounterId,
-            authUserId: $authUserId,
-            formRowId: $assessmentId,
             now: $now->format('Y-m-d H:i:s'),
         );
 
@@ -214,39 +209,6 @@ final class MedicalHistoryDispatcher
         } catch (Throwable $exception) {
             throw new IngestionFailedException(
                 'Failed to persist medical-history assessment row.',
-                $exception
-            );
-        }
-    }
-
-    private function linkToEncounter(
-        int $patientId,
-        int $encounterId,
-        int $authUserId,
-        int $formRowId,
-        string $now,
-    ): void {
-        $sql = 'INSERT INTO `forms`
-            (`date`, `encounter`, `form_name`, `form_id`, `pid`,
-             `user`, `groupname`, `authorized`, `formdir`)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
-        $bindings = [
-            $now,
-            $encounterId,
-            self::FORM_NAME,
-            $formRowId,
-            $patientId,
-            (string) $authUserId,
-            'Default',
-            1,
-            self::FORM_DIRECTORY,
-        ];
-
-        try {
-            QueryUtils::sqlInsert($sql, $bindings);
-        } catch (Throwable $exception) {
-            throw new IngestionFailedException(
-                'Failed to attach medical-history form to encounter.',
                 $exception
             );
         }

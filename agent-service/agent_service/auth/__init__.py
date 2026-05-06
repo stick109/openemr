@@ -19,9 +19,17 @@ from agent_service.auth.copilot_run_context import (
     CopilotRunContextError,
     verify_copilot_run_context,
 )
+from agent_service.auth.secret_resolver import (
+    SUPPORTED_KEY_VERSION,
+    default_secret_resolver,
+    make_secret_resolver,
+)
 
 __all__ = [
+    "SUPPORTED_KEY_VERSION",
     "CopilotRunContext",
     "CopilotRunContextError",
+    "default_secret_resolver",
+    "make_secret_resolver",
     "verify_copilot_run_context",
 ]

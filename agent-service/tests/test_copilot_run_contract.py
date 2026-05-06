@@ -334,13 +334,17 @@ class TestSubSchemas:
 
 
 class TestCopilotEndpointStub:
-    def test_valid_request_returns_501_not_implemented(self, client: TestClient) -> None:
+    def test_unsigned_request_returns_401(self, client: TestClient) -> None:
+        # M4 wires the signed-context verifier into the route. A request
+        # with a placeholder token now fails closed at 401 before it can
+        # reach the M13 stub body. The "valid signed request reaches the
+        # 501 stub" path is exercised in tests/test_copilot_auth.py
+        # where tokens are minted with the test secret.
         resp = client.post("/api/copilot/run", json=_valid_request_payload())
 
-        assert resp.status_code == 501
+        assert resp.status_code == 401
         body = resp.json()
-        assert body["error"] == "not_implemented"
-        assert "stub" in body["message"].lower()
+        assert body["error"] == "invalid_run_context"
 
     def test_invalid_request_returns_422(self, client: TestClient) -> None:
         # Missing both intent_id and user_goal -- should fail validation

@@ -102,6 +102,17 @@ class WriteProposal(BaseModel):
     citations: tuple[Citation, ...] = Field(
         description="Sources backing the proposed write; required.",
     )
+    citation_field_map: tuple[str, ...] = Field(
+        default_factory=tuple,
+        description=(
+            "Optional positional mapping aligning each entry in "
+            "``citations`` to a field name in ``payload``. When empty the "
+            "proposal makes no per-field claim; when populated the entry "
+            "at index ``i`` names the payload field cited by "
+            "``citations[i]``. M21 validators rely on this to enforce "
+            "per-field citation coverage."
+        ),
+    )
     idempotency_key: Annotated[
         str,
         Field(

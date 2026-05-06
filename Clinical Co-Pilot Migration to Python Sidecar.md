@@ -62,7 +62,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M18 | Add shadow mode comparing PHP and Python outputs | Done | M13-M17 | M19 |
 | M19 | Add per-intent cutover feature flags | Not started | M18 | M20 |
 | M20 | Cut over read-only intents one by one | Not started | M18, M19 | M21 |
-| M21 | Move write-like actions to two-phase sidecar proposals | Not started | M13, M15, Sidecar S16-S17 | M20 |
+| M21 | Move write-like actions to two-phase sidecar proposals | Done | M13, M15, Sidecar S16-S17 | M20 |
 | M22 | Expand evals for LLM-chosen tool behavior | Done | M13-M16 | M23 |
 | M23 | Gate migration in CI | Done | M18, M22 | M24 |
 | M24 | Remove migrated PHP agent internals | Not started | M20, M21, M23 | M25 prep |
@@ -763,9 +763,9 @@ Pass criteria:
 
 ## M21 - Move Write-Like Actions to Two-Phase Sidecar Proposals
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M13, M15, Sidecar S16-S17  
 **Can run in parallel with:** M20
 

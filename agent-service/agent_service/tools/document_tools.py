@@ -263,9 +263,14 @@ def _persist_lab_observation_proposal_schema() -> dict[str, Any]:
     """Schema for ``persist_lab_observation_proposal``.
 
     The model supplies an ``observation`` object describing the lab row
-    it wants to persist.  Validation against
-    :class:`~agent_service.schemas.lab_pdf.LabResult` happens inside the
-    executor so the JSON Schema stays small and model-friendly.
+    it wants to persist plus a list of ``observation_citations`` covering
+    each observation field.  M21 requires every value in the proposed
+    observation to be citation-backed: the executor rejects a proposal
+    that names a field with no matching citation.
+
+    Validation against :class:`~agent_service.schemas.lab_pdf.LabResult`
+    happens inside the executor (and the PHP committer) so the JSON
+    Schema stays small and model-friendly.
     """
     return {
         "type": "object",
@@ -277,6 +282,35 @@ def _persist_lab_observation_proposal_schema() -> dict[str, Any]:
                     "The executor validates against LabResult and "
                     "rejects anything that does not match."
                 ),
+            },
+            "observation_citations": {
+                "type": "array",
+                "description": (
+                    "Citations backing each field in the proposed "
+                    "observation.  Each entry must have a ``field`` key "
+                    "naming the observation field plus citation metadata "
+                    "(``source_type``, ``source_id``, ``label``, optional "
+                    "``url`` and ``snippet``).  The executor rejects the "
+                    "proposal if any observation field is uncited."
+                ),
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "field": {"type": "string"},
+                        "source_type": {"type": "string"},
+                        "source_id": {"type": "string"},
+                        "label": {"type": "string"},
+                        "url": {"type": "string"},
+                        "snippet": {"type": "string"},
+                    },
+                    "required": [
+                        "field",
+                        "source_type",
+                        "source_id",
+                        "label",
+                    ],
+                    "additionalProperties": False,
+                },
             },
         },
         "required": ["observation"],
@@ -465,17 +499,25 @@ def persist_lab_observation_proposal_executor(
 
     This executor never writes to a database.  It produces a typed,
     deterministic proposal that the PHP host (M21) is responsible for
-    accepting and persisting.
+    validating and committing.
 
     Idempotency is keyed on ``trace_id`` plus a stable hash of the
     observation payload, so two identical calls inside the same run
     produce identical ``idempotency_key`` values.  This lets the PHP
     side dedupe accidental retries.
 
-    The executor does NOT validate the observation against a schema in
-    M12: that wiring belongs in M21 where the PHP committer enforces
-    OpenEMR-side invariants.  We do, however, ensure ``observation`` is
-    a mapping so we can hash it deterministically.
+    Citations
+    ---------
+    M21 requires every clinical write to cite its evidence.  The model
+    supplies ``observation_citations`` -- a list of objects naming the
+    observation field each citation backs.  The executor wraps each
+    entry as an API-level :class:`~agent_service.schemas.copilot.Citation`
+    and attaches the resulting tuple to the emitted :class:`WriteProposal`.
+    The executor itself does NOT enforce per-field coverage; that is the
+    M21 validator's responsibility (see
+    :func:`agent_service.proposals.validator.validate_lab_observation_proposal`)
+    so the model can still receive a fully-shaped proposal that the PHP
+    boundary may then reject with a typed error.
     """
     observation_raw = runtime_args.get("observation")
     if not isinstance(observation_raw, Mapping):
@@ -489,6 +531,46 @@ def persist_lab_observation_proposal_executor(
         }
 
     observation = dict(observation_raw)
+
+    citations_raw = runtime_args.get("observation_citations") or []
+    if not isinstance(citations_raw, list):
+        return {
+            "records": [],
+            "citations": [],
+            "warnings": [
+                "persist_lab_observation_proposal: 'observation_citations' "
+                "must be a list."
+            ],
+        }
+
+    citations: list[Citation] = []
+    citation_field_map: list[str] = []
+    for entry in citations_raw:
+        if not isinstance(entry, Mapping):
+            continue
+        field = entry.get("field")
+        source_type = entry.get("source_type")
+        source_id = entry.get("source_id")
+        label = entry.get("label")
+        if not all(isinstance(v, str) and v != "" for v in (field, source_type, source_id, label)):
+            continue
+        url = entry.get("url")
+        snippet = entry.get("snippet")
+        citations.append(
+            Citation(
+                source_type=source_type,
+                source_id=source_id,
+                label=label,
+                url=url if isinstance(url, str) and url != "" else None,
+                snippet=snippet if isinstance(snippet, str) and snippet != "" else None,
+            ),
+        )
+        # Mypy/Pyright will already have narrowed ``field`` to ``str``
+        # via the ``all`` guard above; keep the narrowing assertion so
+        # static analysers don't have to redo the inference.
+        assert isinstance(field, str)
+        citation_field_map.append(field)
+
     payload_hash = _stable_payload_hash(observation)
     idempotency_key = f"{context.trace_id}:{payload_hash}"
     proposal_id = uuid.uuid4().hex
@@ -498,7 +580,8 @@ def persist_lab_observation_proposal_executor(
         proposal_id=proposal_id,
         proposal_kind="lab_observation",
         payload=observation,
-        citations=(),
+        citations=tuple(citations),
+        citation_field_map=tuple(citation_field_map),
         idempotency_key=idempotency_key,
         proposed_at=now,
     )
@@ -509,12 +592,13 @@ def persist_lab_observation_proposal_executor(
             "trace_id": context.trace_id,
             "proposal_id": proposal_id,
             "idempotency_key": idempotency_key,
+            "citation_count": len(citations),
         },
     )
 
     return {
         "records": [proposal.model_dump(mode="json")],
-        "citations": [],
+        "citations": list(citations),
         "warnings": [],
         "proposal": proposal,
     }

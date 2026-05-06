@@ -46,7 +46,7 @@
         <mxCell id="cf" value="Railway deployed app URL&#xa;https://&lt;openemr&gt;.up.railway.app&#xa;OpenEMR web service is the submitted link" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="100" y="540" width="380" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="render" value="Railway private services&#xa;agent-service + MariaDB/MySQL in same project&#xa;No Cloudflare Tunnel or Render service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="privateServices" value="Railway private services&#xa;agent-service + MariaDB/MySQL in same project&#xa;One managed deployment surface" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="540" y="540" width="380" height="120" as="geometry" />
         </mxCell>
         <mxCell id="readme" value="README.md — Deploy in 10 minutes&#xa;Railway setup + public app URL; GitLab submission OK because both remotes exist&#xa;Env vars: OPENAI_API_KEY · COHERE_API_KEY · AGENT_SHARED_SECRET · HONEYCOMB_API_KEY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=12;align=left;spacing=10;" vertex="1" parent="1">

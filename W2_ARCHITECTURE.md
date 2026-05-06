@@ -439,14 +439,13 @@ assignment forbids logging raw PHI to SaaS, and the OpenEMR audit trail
 also benefits from sanitized attributes). The redactor's `Sanitized` view
 is the load-bearing contract; the backend is interchangeable.
 
-### 11.5 Railway deployment (vs. Render + Cloudflare Tunnel)
+### 11.5 Railway deployment
 
 The submitted deployed link is Railway. OpenEMR, `agent-service`, and the
 existing MariaDB/MySQL service live in the same Railway project so the
-grader has one managed deployment surface rather than a local stack exposed
-through Cloudflare Tunnel plus a separate Render service. The repo can be
-submitted through GitLab because this fork has both GitLab and GitHub
-remotes; GitHub remains useful for the Actions mirror.
+grader has one managed deployment surface. The repo can be submitted
+through GitLab because this fork has both GitLab and GitHub remotes;
+GitHub remains useful for the Actions mirror.
 
 ### 11.6 Single-PDF-per-call (vs. batch)
 

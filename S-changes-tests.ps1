@@ -17,38 +17,9 @@
 #
 # Exit code: 0 iff every executed test passed; 1 otherwise.
 #
-# -----------------------------------------------------------------------------
-# Manual UI checks NOT covered here (open the deployed/local app and verify):
-# -----------------------------------------------------------------------------
-#  1. (If demo container is not running)
-#         docker compose --project-name openemr down -v
-#         docker compose --project-name openemr up -d
-#     Wait until `docker compose ps` shows openemr + agent-service healthy.
-#  2. Browse to https://localhost:9300/, log in as admin / pass.
-#  3. Open a (synthetic/demo) patient -> open an encounter.
-#  4. Click "Add Form" in the encounter -> confirm
-#     "Upload Document (Co-Pilot)" appears in the picker.
-#     (S14 + Option B; if Option B has not landed, you may need
-#     Admin -> Forms -> Forms Administration -> Register the form first.)
-#  5. Choose "Upload Document (Co-Pilot)" -> upload one of the synthetic
-#     lab PDFs you keep for demos (e.g., generated via generate-lab-pdf.ps1).
-#  6. Confirm processing completes without errors and the form row appears
-#     on the encounter timeline.
-#  7. Open the form row -> the view page should render the PDF on the
-#     left (pdf.js) and extracted fields on the right (S18).
-#  8. Hover an extracted field -> a bbox overlay should appear over the
-#     PDF region the value came from.
-#  9. Click an extracted field -> the PDF should scroll to the page and
-#     flash the overlay.
-# 10. Click a guideline citation chip -> a side panel should open showing
-#     the snippet and source URL.
-# 11. (Optional) Upload one intake form fixture -> confirm the legacy
-#     intake path still works.
-# 12. Tail sidecar logs in another terminal:
-#         docker compose --project-name openemr logs -f agent-service
-#     Confirm tool_sequence, latency, and cost fields appear, and that
-#     the log lines contain no raw PHI (no names, no SSN-like strings).
-# -----------------------------------------------------------------------------
+# Manual UI steps that cannot be exercised from cmdline live in
+# S-changes-UI-tests.md alongside this script. Run this script first,
+# then walk that checklist in the browser.
 
 [CmdletBinding()]
 param(
@@ -142,6 +113,23 @@ function Assert-FileNotContains {
         throw "$Description failed: forbidden pattern '$Pattern' still present in $Path"
     }
     Write-Host "  ok: $Description"
+}
+
+# Run a script block with OPENAI_API_KEY removed from the process environment.
+# The FakeLLMClient guards against accidental real-API calls when the var is
+# set; eval/test paths always use fake clients, so we strip it for the duration
+# of the action and restore it afterwards. Setting $env:VAR=$null is unreliable
+# across PowerShell versions, so we use the .NET Environment API to actually
+# delete the variable.
+function Invoke-WithoutOpenAIKey {
+    param([scriptblock]$Action)
+    $saved = [Environment]::GetEnvironmentVariable('OPENAI_API_KEY', 'Process')
+    try {
+        [Environment]::SetEnvironmentVariable('OPENAI_API_KEY', $null, 'Process')
+        & $Action
+    } finally {
+        [Environment]::SetEnvironmentVariable('OPENAI_API_KEY', $saved, 'Process')
+    }
 }
 
 function Have-Command {
@@ -285,83 +273,124 @@ if ($SkipPythonTests) {
 } else {
 
     Test-Step "Python: pytest suite (full agent-service)" {
-        Push-Location "agent-service"
-        try {
-            & py -m pytest -q
-        } finally { Pop-Location }
+        Invoke-WithoutOpenAIKey {
+            Push-Location "agent-service"
+            try {
+                & py -m pytest -q
+            } finally { Pop-Location }
+        }
     }
 
     Test-Step "Python: eval baseline passes 100% (S20)" {
-        Push-Location "agent-service"
-        try {
-            & py -m agent_service.eval --baseline agent_service/eval/baseline.json
-        } finally { Pop-Location }
+        Invoke-WithoutOpenAIKey {
+            Push-Location "agent-service"
+            try {
+                & py -m agent_service.eval --baseline agent_service/eval/baseline.json
+            } finally { Pop-Location }
+        }
     }
 
     Test-Step "Python: regression-injection drop-citations FAILS (S22)" {
-        Push-Location "agent-service"
-        try {
-            & py -m agent_service.eval --baseline agent_service/eval/baseline.json --inject-regression drop-citations
-            if ($LASTEXITCODE -eq 0) { throw "expected non-zero exit, got 0 (regression should have failed the gate)" }
-            $global:LASTEXITCODE = 0
-        } finally { Pop-Location }
+        Invoke-WithoutOpenAIKey {
+            Push-Location "agent-service"
+            try {
+                & py -m agent_service.eval --baseline agent_service/eval/baseline.json --inject-regression drop-citations
+                if ($LASTEXITCODE -eq 0) { throw "expected non-zero exit, got 0 (regression should have failed the gate)" }
+                $global:LASTEXITCODE = 0
+            } finally { Pop-Location }
+        }
     }
 
     Test-Step "Python: regression-injection wrong-value FAILS (S22)" {
-        Push-Location "agent-service"
-        try {
-            & py -m agent_service.eval --baseline agent_service/eval/baseline.json --inject-regression wrong-value
-            if ($LASTEXITCODE -eq 0) { throw "expected non-zero exit, got 0" }
-            $global:LASTEXITCODE = 0
-        } finally { Pop-Location }
+        Invoke-WithoutOpenAIKey {
+            Push-Location "agent-service"
+            try {
+                & py -m agent_service.eval --baseline agent_service/eval/baseline.json --inject-regression wrong-value
+                if ($LASTEXITCODE -eq 0) { throw "expected non-zero exit, got 0" }
+                $global:LASTEXITCODE = 0
+            } finally { Pop-Location }
+        }
     }
 
     Test-Step "Python: regression-injection flip-abnormal-flags FAILS (S22)" {
-        Push-Location "agent-service"
-        try {
-            & py -m agent_service.eval --baseline agent_service/eval/baseline.json --inject-regression flip-abnormal-flags
-            if ($LASTEXITCODE -eq 0) { throw "expected non-zero exit, got 0" }
-            $global:LASTEXITCODE = 0
-        } finally { Pop-Location }
+        Invoke-WithoutOpenAIKey {
+            Push-Location "agent-service"
+            try {
+                & py -m agent_service.eval --baseline agent_service/eval/baseline.json --inject-regression flip-abnormal-flags
+                if ($LASTEXITCODE -eq 0) { throw "expected non-zero exit, got 0" }
+                $global:LASTEXITCODE = 0
+            } finally { Pop-Location }
+        }
     }
 
     Test-Step "Python: cost/latency report generates (S25)" {
-        Push-Location "agent-service"
-        try {
-            $records = "agent_service/eval/run-records.jsonl"
-            if (Test-Path $records) { Remove-Item $records -Force }
-            & py -m agent_service.eval --baseline agent_service/eval/baseline.json --record-runs $records
-            if ($LASTEXITCODE -ne 0) { throw "eval --record-runs failed" }
-            $report = Join-Path $repoRoot "cost-latency-report.md"
-            if (Test-Path $report) { Remove-Item $report -Force }
-            & py -m agent_service.observability.report --records $records --out $report
-            if ($LASTEXITCODE -ne 0) { throw "observability.report failed" }
-            if (-not (Test-Path $report)) { throw "report file not created" }
-            $content = Get-Content $report -Raw
-            foreach ($section in @("p50", "p95", "Cost", "Bottleneck", "100", "1000", "10000")) {
-                if ($content -notmatch [regex]::Escape($section)) {
-                    throw "report missing expected section/keyword: $section"
+        Invoke-WithoutOpenAIKey {
+            Push-Location "agent-service"
+            try {
+                $records = "agent_service/eval/run-records.jsonl"
+                if (Test-Path $records) { Remove-Item $records -Force }
+                & py -m agent_service.eval --baseline agent_service/eval/baseline.json --record-runs $records
+                if ($LASTEXITCODE -ne 0) { throw "eval --record-runs failed" }
+                $report = Join-Path $repoRoot "cost-latency-report.md"
+                if (Test-Path $report) { Remove-Item $report -Force }
+                & py -m agent_service.observability.report --records $records --out $report
+                if ($LASTEXITCODE -ne 0) { throw "observability.report failed" }
+                if (-not (Test-Path $report)) { throw "report file not created" }
+                $content = Get-Content $report -Raw
+                # Numeric volumes can be formatted with thousands separators
+                # (e.g. "1,000", "10,000"); accept either form.
+                $patterns = @(
+                    @{ Name = "p50";        Regex = "p50" },
+                    @{ Name = "p95";        Regex = "p95" },
+                    @{ Name = "Cost";       Regex = "Cost" },
+                    @{ Name = "Bottleneck"; Regex = "Bottleneck" },
+                    @{ Name = "100";        Regex = "\b100\b" },
+                    @{ Name = "1000";       Regex = "\b1[,.]?000\b" },
+                    @{ Name = "10000";      Regex = "\b10[,.]?000\b" }
+                )
+                foreach ($p in $patterns) {
+                    if ($content -notmatch $p.Regex) {
+                        throw "report missing expected section/keyword: $($p.Name)"
+                    }
                 }
-            }
-            Write-Host "  ok: report has all expected sections"
-        } finally { Pop-Location }
+                Write-Host "  ok: report has all expected sections"
+            } finally { Pop-Location }
+        }
     }
 
-    Test-Step "Pre-push hook: passes with OPENAI_API_KEY set (session fix)" {
-        $saved = $env:OPENAI_API_KEY
-        try {
-            $env:OPENAI_API_KEY = "sk-test-fake-value-for-S-changes-tests"
-            $hook = "scripts/hooks/pre-push"
-            if (-not (Test-Path $hook)) { throw "hook script missing" }
-            # Invoke directly via bash; hook doesn't read stdin during fast path.
-            & bash $hook origin "https://example.invalid/openemr.git"
-            if ($LASTEXITCODE -ne 0) { throw "hook exited $LASTEXITCODE" }
-            if ($env:OPENAI_API_KEY -ne "sk-test-fake-value-for-S-changes-tests") {
-                throw "hook leaked unset to outer shell -- subshell isolation broken"
+    # The runtime hook smoke test must use Git Bash specifically, not WSL bash,
+    # because the hook's "py / python3 / python" lookup only finds the Windows
+    # Python launcher under Git Bash. The static check above already proves the
+    # hook contains `unset OPENAI_API_KEY`, so a SKIP here is acceptable when
+    # Git Bash is not available.
+    $gitBash = $null
+    foreach ($candidate in @(
+        "C:\Program Files\Git\bin\bash.exe",
+        "C:\Program Files (x86)\Git\bin\bash.exe",
+        "C:\Program Files\Git\usr\bin\bash.exe"
+    )) {
+        if (Test-Path $candidate) { $gitBash = $candidate; break }
+    }
+    if (-not $gitBash) {
+        Skip-Step "Pre-push hook: passes with OPENAI_API_KEY set (session fix)" "Git Bash not found at standard install paths (real git push exercises this)"
+    } else {
+        Test-Step "Pre-push hook: passes with OPENAI_API_KEY set (session fix)" {
+            $saved = $env:OPENAI_API_KEY
+            try {
+                $env:OPENAI_API_KEY = "sk-test-fake-value-for-S-changes-tests"
+                $hook = "scripts/hooks/pre-push"
+                if (-not (Test-Path $hook)) { throw "hook script missing" }
+                # Invoke via Git Bash explicitly so the hook's `py` lookup
+                # finds the real Windows Python launcher, not WSL's python3.
+                & $gitBash $hook origin "https://example.invalid/openemr.git"
+                if ($LASTEXITCODE -ne 0) { throw "hook exited $LASTEXITCODE" }
+                if ($env:OPENAI_API_KEY -ne "sk-test-fake-value-for-S-changes-tests") {
+                    throw "hook leaked unset to outer shell -- subshell isolation broken"
+                }
+                Write-Host "  ok: hook ran cleanly with key set; outer shell preserved"
+            } finally {
+                $env:OPENAI_API_KEY = $saved
             }
-            Write-Host "  ok: hook ran cleanly with key set; outer shell preserved"
-        } finally {
-            $env:OPENAI_API_KEY = $saved
         }
     }
 }
@@ -372,13 +401,17 @@ if ($SkipPythonTests) {
 
 if ($SkipPhpTests) {
     Skip-Step "PHP: isolated tests (sidecar+citation+lab dispatcher)" "-SkipPhpTests"
-} elseif (-not (Test-Path "vendor/bin/phpunit") -and -not (Test-Path "vendor/bin/phpunit.bat")) {
+} elseif (-not (Test-Path "vendor/bin/phpunit")) {
     Skip-Step "PHP: isolated tests" "vendor/bin/phpunit not present (run composer install)"
+} elseif (-not (Have-Command 'php')) {
+    Skip-Step "PHP: isolated tests" "php interpreter not on PATH"
 } else {
     Test-Step "PHP: isolated tests for sidecar/citation/lab dispatcher (S12-S18)" {
-        $phpunit = "vendor/bin/phpunit"
-        if (Test-Path "vendor/bin/phpunit.bat") { $phpunit = "vendor/bin/phpunit.bat" }
-        & $phpunit -c phpunit-isolated.xml --filter "(AgentSidecar|SharedUpload|AgentServiceClient|LabPdf|Citation|UploadIntakeForm)"
+        # Invoke phpunit via `php` directly. Going through vendor/bin/phpunit.bat
+        # makes cmd.exe re-interpret the `|` characters in the --filter regex
+        # as pipes, which splits the command and breaks. Calling php.exe with
+        # the phpunit phar as the script bypasses cmd.exe entirely.
+        & php vendor/bin/phpunit -c phpunit-isolated.xml --filter "(AgentSidecar|SharedUpload|AgentServiceClient|LabPdf|Citation|UploadIntakeForm)"
     }
 }
 

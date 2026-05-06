@@ -5,6 +5,11 @@
 # with CRLF conversion.
 *.pdf binary
 
+# Shell scripts must keep LF line endings even on Windows checkouts, otherwise
+# bash refuses them with "$'\r': command not found" errors.
+*.sh                       text eol=lf
+scripts/hooks/*            text eol=lf
+
 # Exclude dev-only infrastructure from release archives and Composer installs.
 # GitHub uses these rules when generating source downloads for tagged releases.
 # Keep anything needed to install, configure, or run OpenEMR.

@@ -22,6 +22,11 @@ from agent_service.tools.definition import (
     ToolDefinition,
     ToolDefinitionError,
 )
+from agent_service.tools.executor import (
+    ToolCallOutcome,
+    ToolExecutionError,
+    execute_tool,
+)
 from agent_service.tools.registry import (
     ToolNotFoundError,
     ToolRegistry,
@@ -33,11 +38,14 @@ from agent_service.tools.stubs import STUB_TOOLS, build_stub_tools
 __all__ = [
     "FORBIDDEN_INPUT_KEYS",
     "STUB_TOOLS",
+    "ToolCallOutcome",
     "ToolDefinition",
     "ToolDefinitionError",
+    "ToolExecutionError",
     "ToolNotFoundError",
     "ToolRegistry",
     "ToolRegistryError",
     "build_stub_tools",
     "default_registry",
+    "execute_tool",
 ]

@@ -45,7 +45,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M1 | Inventory current PHP behavior and build parity fixtures | Done | none | M0, M2 |
 | M2 | Define sidecar copilot run contract | Done | M0 | M1, M3 |
 | M3 | Define signed `CopilotRunContext` | Done | M0 | M2 |
-| M4 | Add sidecar context verification | Not started | M2, M3 | M5, M6 |
+| M4 | Add sidecar context verification | Done | M2, M3 | M5, M6 |
 | M5 | Add Python tool registry primitives | Done | M2 | M4, M6 |
 | M6 | Add policy-enforced tool executor | Not started | M3, M5 | M4 |
 | M7 | Port intent catalog and capability caps to Python | Not started | M5, M6 | M8, M9 |
@@ -218,9 +218,9 @@ Pass criteria:
 
 ## M4 - Add Sidecar Context Verification
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M2, M3  
 **Can run in parallel with:** M5, M6
 

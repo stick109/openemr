@@ -641,7 +641,7 @@ checkpoint down into per-day tasks.
 | Q1 | The assignment says "GitLab Repository" but the project is on GitHub — is GitHub OK?                  | User    | **Yes** — the repo has two remotes: one GitHub remote and one GitLab remote. Submission can point to GitLab while keeping GitHub as the working mirror. |
 | Q2 | Pass thresholds in §4.11 — are the proposed values acceptable, or should they come from the Week-1 baseline once measured? | User    | No        |
 | Q3 | Demographics-merge: is "fill-only-empty" the right Week-2 default, or should we always require user confirmation? | User    | No        |
-| Q4 | Cohere API key — do we have one, or should we go straight to the cross-encoder fallback?              | User    | No        |
+| Q4 | Cohere API key — do we have one, or should we go straight to the cross-encoder fallback?              | User    | **Yes** — a Cohere key is available. Use Cohere Rerank for live/dev retrieval; keep the deterministic fake reranker for CI/tests. Cross-encoder remains a fallback only if Cohere access breaks. |
 | Q5 | Honeycomb is a SaaS observability tool — assignment forbids logging raw PHI to SaaS; redactor design is in §4.12 — is the regex+sanitizer view sufficient, or do we need a self-hosted backend (Tempo)? | User    | No        |
 | Q6 | How many guideline chunks do we need? §3 says ~50–100, but the assignment's "small" is unspecified.    | User    | No        |
 | Q7 | The assignment lists a "**deployed link**" in submission requirements. Is a Cloudflare Tunnel to a local docker stack acceptable, or must OpenEMR itself be on a managed host? | User    | No        |

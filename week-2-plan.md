@@ -133,7 +133,7 @@ component from `intake-forms-plan.md` §3 to its Week-2 fate.
 | Where the agent service is deployed                                              | **Render** (single Python web service) — small, free tier, public URL.                                                                                       |
 | OpenEMR-side surface                                                             | **Reuse `interface/forms/upload_intake_form/`** from `intake-forms-plan.md` §3.3, with the dropdown extended to include `Lab Report`.                        |
 | Worker naming                                                                    | The assignment says "intake-extractor"; we treat that as "**document-extractor**" (handles both `lab_pdf` and `intake_form`, dispatched on `doc_type`).      |
-| Observability backend                                                            | **OpenTelemetry → Honeycomb (free tier)** for traces + spans. Token/cost/eval logged in a local SQLite (no PHI to SaaS).                                       |
+| Observability backend                                                            | **OpenTelemetry → Honeycomb (free tier)** for sanitized traces + spans. Durable token/cost/eval records live in the existing OpenEMR MariaDB/MySQL database; no raw PHI goes to SaaS. |
 | Eval harness                                                                     | **`pytest` + a small custom rubric runner** that emits a JSON report. Boolean rubrics only.                                                                   |
 | CI gate                                                                          | **Local Git pre-push hook** + a **GitHub Actions** mirror so PRs from outside the host are also gated.                                                       |
 | Repo layout                                                                      | **Same OpenEMR fork**. New code under `agent-service/` (Python) and `interface/forms/upload_intake_form/` (PHP).                                              |
@@ -642,7 +642,7 @@ checkpoint down into per-day tasks.
 | Q2 | Pass thresholds in §4.11 — are the proposed values acceptable, or should they come from the Week-1 baseline once measured? | User    | No        |
 | Q3 | Demographics-merge: is "fill-only-empty" the right Week-2 default, or should we always require user confirmation? | User    | No        |
 | Q4 | Cohere API key — do we have one, or should we go straight to the cross-encoder fallback?              | User    | **Yes** — a Cohere key is available. Use Cohere Rerank for live/dev retrieval; keep the deterministic fake reranker for CI/tests. Cross-encoder remains a fallback only if Cohere access breaks. |
-| Q5 | Honeycomb is a SaaS observability tool — assignment forbids logging raw PHI to SaaS; redactor design is in §4.12 — is the regex+sanitizer view sufficient, or do we need a self-hosted backend (Tempo)? | User    | No        |
+| Q5 | Honeycomb is a SaaS observability tool — assignment forbids logging raw PHI to SaaS; redactor design is in §4.12 — is the regex+sanitizer view sufficient, or do we need a self-hosted backend (Tempo)? | User    | **Yes** — use Honeycomb for sanitized demo traces only. Store detailed cost/latency/token/eval records in the existing OpenEMR MariaDB/MySQL database, not CouchDB or a separate SQLite/Postgres store. Tempo/Jaeger are unnecessary unless SaaS observability is later banned outright. |
 | Q6 | How many guideline chunks do we need? §3 says ~50–100, but the assignment's "small" is unspecified.    | User    | No        |
 | Q7 | The assignment lists a "**deployed link**" in submission requirements. Is a Cloudflare Tunnel to a local docker stack acceptable, or must OpenEMR itself be on a managed host? | User    | No        |
 | Q8 | Worker naming: assignment says "intake-extractor", but it must also handle lab PDFs. Confirm we can rename to "document-extractor" in code while keeping the assignment's name in docs. | User    | No        |
@@ -787,7 +787,7 @@ Goal: hit absolute thresholds; round out observability + cost report.
 
 - [ ] **§4.11 thresholds** — `schema_valid ≥ 0.95`, `citation_present ≥ 0.98`, `factually_consistent ≥ 0.85`, `safe_refusal ≥ 0.90`. Tune the extractor prompt or the schema if any rubric is short.
 - [ ] **§4.12 dashboards** — Honeycomb dashboards for latency p50/p95, cost per run, refusal rate, rubric pass-rate.
-- [ ] **§4.17 Cost & latency report** — generated from local SQLite; published as a Markdown file in the repo.
+- [ ] **§4.17 Cost & latency report** — generated from the OpenEMR MariaDB/MySQL observability records; published as a Markdown file in the repo.
 - [ ] **Architecture doc review** — re-read [`W2_ARCHITECTURE.md`](W2_ARCHITECTURE.md) once everything is wired and update §10/§11 with anything that surprised us.
 
 ### Day 6 (Sunday) — Final @ 12:00 PM CT

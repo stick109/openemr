@@ -58,6 +58,10 @@ class ForbiddenGlobalNamespaceRule implements Rule
         }
         $definingFileAbs = $scope->getFile();
         $definingFile = substr($definingFileAbs, strlen($appRoot) + 1);
+        // composer.json `autoload.files` always uses forward slashes, even
+        // on Windows. Normalise the analysed path the same way so the
+        // allowlist match is portable across Git Bash / WSL / Linux CI.
+        $definingFile = str_replace('\\', '/', $definingFile);
 
         if (in_array($definingFile, $allowed, true)) {
             return [];

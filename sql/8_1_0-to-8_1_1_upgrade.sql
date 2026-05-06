@@ -159,3 +159,21 @@ VALUES
    'Administrative', '', 1, 0, 'admin|super', NULL);
 #EndIf
 
+--
+-- Register the audit_log_purge background service.
+-- Hourly DELETE on `log` rows older than 24 hours so a small MariaDB
+-- volume cannot be filled by the audit log alone. See
+-- src/Services/Logging/AuditLogPurgeService.php for the HIPAA caveat:
+-- production deployments must either raise the retention (in code) or
+-- set `active = 0` on this row before going live.
+--
+
+#IfNotRow background_services name audit_log_purge
+INSERT INTO `background_services`
+  (`name`, `title`, `active`, `running`, `next_run`,
+   `execute_interval`, `function`, `require_once`, `sort_order`)
+VALUES
+  ('audit_log_purge', 'Audit Log Retention Purge', 1, 0, NOW(),
+   60, 'auditLogPurgeServiceRun', '/library/audit_log_purge.php', 200);
+#EndIf
+

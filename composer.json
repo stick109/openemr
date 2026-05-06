@@ -170,6 +170,7 @@
             "library/classes"
         ],
         "files": [
+            "library/audit_log_purge.php",
             "library/global_functions.inc.php",
             "library/htmlspecialchars.inc.php",
             "library/formdata.inc.php",

@@ -42,7 +42,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | ID | Step | Status | Depends on | Can run in parallel with |
 | --- | --- | --- | --- | --- |
 | M0 | Confirm migration target and PHP boundary | Done | Sidecar S3-S4 | M1 |
-| M1 | Inventory current PHP behavior and build parity fixtures | Not started | none | M0, M2 |
+| M1 | Inventory current PHP behavior and build parity fixtures | Done | none | M0, M2 |
 | M2 | Define sidecar copilot run contract | Not started | M0 | M1, M3 |
 | M3 | Define signed `CopilotRunContext` | Not started | M0 | M2 |
 | M4 | Add sidecar context verification | Not started | M2, M3 | M5, M6 |
@@ -113,9 +113,9 @@ Pass criteria:
 
 ## M1 - Inventory Current PHP Behavior and Build Parity Fixtures
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** none  
 **Can run in parallel with:** M0, M2
 

@@ -1,0 +1,24 @@
+{
+  "intent_id": "changed_since_last_visit",
+  "scenario": "unauthorized source",
+  "input": {
+    "user_goal": "Explain what changed since the last visit.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 365,
+      "max_rows": 30,
+      "allowed_tools": ["get_changes_since_last_visit", "get_source_detail"]
+    },
+    "evidence_packet_ref": "Repository would return a delta from data_class=billing, which is not in granted_data_classes"
+  },
+  "expected": {
+    "tool_sequence": ["get_changes_since_last_visit"],
+    "citation_ids_required": false,
+    "answer_blocks_min": 1,
+    "verification_status": "refused",
+    "missing_or_uncertain": [],
+    "refusal_reason": "data_class_not_granted"
+  },
+  "notes": "AgentEvidenceToolset::fetchChangedSinceLastVisit explicitly receives accessToken granted_data_classes; AgentEvidenceToolset::ensureDataClassAllowed throws AgentEvidenceAccessException when a returned source has a data_class outside the granted set."
+}

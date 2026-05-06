@@ -1,0 +1,24 @@
+{
+  "intent_id": "show_source",
+  "scenario": "conflicting data",
+  "input": {
+    "user_goal": "Show source evidence behind this claim.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 0,
+      "max_rows": 1,
+      "allowed_tools": ["get_source_detail"]
+    },
+    "evidence_packet_ref": "source_id 'allergy:lists:601' resolves to a single record but the cited claim text references a conflicting allergy status"
+  },
+  "expected": {
+    "tool_sequence": ["get_source_detail"],
+    "citation_ids_required": true,
+    "answer_blocks_min": 1,
+    "verification_status": "passed",
+    "missing_or_uncertain": [],
+    "refusal_reason": null
+  },
+  "notes": "show_source returns one bounded source. The conflicting interpretation is the responsibility of the caller intent (allergies_to_confirm); show_source itself simply renders 'Source allergy from <date> (<status>): <display>'."
+}

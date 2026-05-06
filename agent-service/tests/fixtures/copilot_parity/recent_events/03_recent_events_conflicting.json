@@ -1,0 +1,24 @@
+{
+  "intent_id": "recent_events",
+  "scenario": "conflicting data",
+  "input": {
+    "user_goal": "Show me recent events.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 180,
+      "max_rows": 30,
+      "allowed_tools": ["get_recent_events", "get_source_detail"]
+    },
+    "evidence_packet_ref": "Duplicate encounter rows from a join (same source_id encounter:form_encounter:701 twice) - existing PHP eval fixture duplicate_recent_event_records"
+  },
+  "expected": {
+    "tool_sequence": ["get_recent_events"],
+    "citation_ids_required": true,
+    "answer_blocks_min": 1,
+    "verification_status": "passed",
+    "missing_or_uncertain": [],
+    "refusal_reason": null
+  },
+  "notes": "Mirrors tests/Tests/Fixtures/Agent/agent-eval-fixtures.json::duplicate_recent_event_records. EvidencePacketNormalizer dedupes to one source despite the JOIN producing two rows; tool_run.source_count remains 2 to record what the SQL returned."
+}

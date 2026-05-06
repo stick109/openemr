@@ -1,0 +1,24 @@
+{
+  "intent_id": "changed_since_last_visit",
+  "scenario": "conflicting data",
+  "input": {
+    "user_goal": "Explain what changed since the last visit.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 365,
+      "max_rows": 30,
+      "allowed_tools": ["get_changes_since_last_visit", "get_source_detail"]
+    },
+    "evidence_packet_ref": "A medication was added in lists_medication and an overlapping prescription was discontinued; both cited"
+  },
+  "expected": {
+    "tool_sequence": ["get_changes_since_last_visit"],
+    "citation_ids_required": true,
+    "answer_blocks_min": 1,
+    "verification_status": "passed",
+    "missing_or_uncertain": [],
+    "refusal_reason": null
+  },
+  "notes": "Both records appear as separate cited claims. Verifier emits 'conflicting' warning when claim certainty='conflicting'; remains passed."
+}

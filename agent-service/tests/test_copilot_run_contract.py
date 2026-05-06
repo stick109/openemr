@@ -20,8 +20,10 @@ from pydantic import ValidationError
 from agent_service.schemas.copilot import (
     AnswerBlock,
     Citation,
+    Claim,
     CopilotRunRequest,
     CopilotRunResponse,
+    MissingOrUncertain,
     ToolCallRecord,
     USER_GOAL_MAX_CHARS,
 )
@@ -174,18 +176,41 @@ def _sample_response_dict() -> dict[str, Any]:
     return {
         "answer_blocks": [
             {
-                "type": "paragraph",
-                "content": "Patient is on lisinopril 10 mg daily.",
-                "citation_indices": [0],
-            },
-            {
-                "type": "list",
-                "content": "- Lisinopril 10 mg PO daily\n- Atorvastatin 20 mg PO nightly",
-                "citation_indices": [0, 1],
+                "heading": "Current medications",
+                "claims": [
+                    {
+                        "text": "Lisinopril 10 mg PO daily",
+                        "citation_ids": ["med:1234"],
+                        "certainty": "active",
+                    },
+                    {
+                        "text": "Atorvastatin 20 mg PO nightly",
+                        "citation_ids": ["med:1234", "chunk:hypertension-2024-12"],
+                        "certainty": "active",
+                    },
+                ],
+                "body_markdown": None,
             },
         ],
+        "claims": [
+            {
+                "text": "Lisinopril 10 mg PO daily",
+                "citation_ids": ["med:1234"],
+                "certainty": "active",
+            },
+            {
+                "text": "Atorvastatin 20 mg PO nightly",
+                "citation_ids": ["med:1234", "chunk:hypertension-2024-12"],
+                "certainty": "active",
+            },
+        ],
+        "citation_ids": ["chunk:hypertension-2024-12", "med:1234"],
+        "certainty": "high",
         "missing_or_uncertain": [
-            "Last refill date for atorvastatin not confirmed.",
+            {
+                "text": "Last refill date for atorvastatin not confirmed.",
+                "citation_ids": [],
+            },
         ],
         "citations": [
             {
@@ -239,12 +264,38 @@ class TestCopilotRunResponse:
         dumped = response.model_dump()
         assert dumped == sample
 
-    def test_answer_blocks_keep_citation_indices(self) -> None:
+    def test_answer_blocks_carry_claims(self) -> None:
         sample = _sample_response_dict()
         response = CopilotRunResponse.model_validate(sample)
 
-        assert response.answer_blocks[0].citation_indices == [0]
-        assert response.answer_blocks[1].citation_indices == [0, 1]
+        assert isinstance(response.answer_blocks[0], AnswerBlock)
+        assert response.answer_blocks[0].heading == "Current medications"
+        assert len(response.answer_blocks[0].claims) == 2
+        first_claim = response.answer_blocks[0].claims[0]
+        assert isinstance(first_claim, Claim)
+        assert first_claim.text == "Lisinopril 10 mg PO daily"
+        assert first_claim.citation_ids == ["med:1234"]
+
+    def test_top_level_claim_aggregation_round_trips(self) -> None:
+        sample = _sample_response_dict()
+        response = CopilotRunResponse.model_validate(sample)
+
+        assert len(response.claims) == 2
+        assert response.citation_ids == [
+            "chunk:hypertension-2024-12",
+            "med:1234",
+        ]
+        assert response.certainty == "high"
+
+    def test_missing_or_uncertain_uses_object_shape(self) -> None:
+        sample = _sample_response_dict()
+        response = CopilotRunResponse.model_validate(sample)
+
+        assert len(response.missing_or_uncertain) == 1
+        item = response.missing_or_uncertain[0]
+        assert isinstance(item, MissingOrUncertain)
+        assert "atorvastatin" in item.text
+        assert item.citation_ids == []
 
     def test_tool_sequence_omits_argument_values(self) -> None:
         sample = _sample_response_dict()
@@ -288,9 +339,21 @@ class TestCopilotRunResponse:
 
 
 class TestSubSchemas:
-    def test_answer_block_requires_type_and_content(self) -> None:
+    def test_answer_block_requires_heading_and_claims(self) -> None:
         with pytest.raises(ValidationError):
-            AnswerBlock.model_validate({"content": "hi"})
+            AnswerBlock.model_validate({"claims": []})
+        with pytest.raises(ValidationError):
+            AnswerBlock.model_validate({"heading": "x"})
+
+    def test_claim_requires_text_and_certainty(self) -> None:
+        with pytest.raises(ValidationError):
+            Claim.model_validate({"text": "hello"})
+        with pytest.raises(ValidationError):
+            Claim.model_validate({"certainty": "active"})
+
+    def test_missing_or_uncertain_requires_text(self) -> None:
+        with pytest.raises(ValidationError):
+            MissingOrUncertain.model_validate({"citation_ids": ["x"]})
 
     def test_citation_url_and_snippet_optional(self) -> None:
         citation = Citation.model_validate(

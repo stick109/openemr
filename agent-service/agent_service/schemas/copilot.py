@@ -5,6 +5,15 @@ These schemas form the stable wire contract between the PHP UI proxy
 copilot endpoint introduced in step M2 of
 ``Clinical Co-Pilot Migration to Python Sidecar.md``.
 
+M14 brings the answer block / claim / citation shape into alignment with
+the existing browser UI in
+``interface/patient_file/summary/agent_panel.js`` and the PHP source of
+truth in ``src/Services/Agent/AgentEvidenceResponseBuilder.php``. The UI
+walks ``answer_blocks[].claims[]`` (each with ``text``, ``citation_ids``,
+``certainty``) and renders ``missing_or_uncertain[]`` as objects with
+``text`` + ``citation_ids``. M14 also surfaces top-level ``claims``,
+``citation_ids``, and ``certainty`` for the verifier (M15).
+
 Notes
 -----
 - ``run_context`` is the **raw signed wire token** as a string. Decoding
@@ -12,7 +21,9 @@ Notes
   / M4 (``agent_service.auth.copilot_run_context``). At the schema layer
   it is opaque.
 - All models use ``ConfigDict(extra="forbid", strict=True)`` so unknown
-  fields and silent type coercions are rejected at the boundary.
+  fields and silent type coercions are rejected at the boundary. Value
+  objects (``AnswerBlock``, ``Claim``, ``Citation``, ``MissingOrUncertain``,
+  ``ToolCallRecord``) are additionally ``frozen=True``.
 - ``ToolCallRecord`` deliberately stores **argument keys only**, never
   values, so PHI cannot leak through the response envelope.
 """
@@ -30,6 +41,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 _STRICT = ConfigDict(extra="forbid", strict=True)
+_STRICT_FROZEN = ConfigDict(extra="forbid", strict=True, frozen=True)
 
 
 # Maximum length of a free-form ``user_goal`` request field.  Cap is enforced
@@ -38,36 +50,93 @@ _STRICT = ConfigDict(extra="forbid", strict=True)
 USER_GOAL_MAX_CHARS: int = 4000
 
 
+# Closed-set certainty markers as understood by the answer builder, the
+# verifier, and the chart UI.
+Certainty = Literal[
+    "high",
+    "medium",
+    "low",
+    "unknown",
+    "active",
+    "inactive",
+    "conflicting",
+    "not_found",
+    "not_checked",
+    "supported",
+    "source_record",
+]
+
+
 # ---------------------------------------------------------------------------
 # Sub-schemas
 # ---------------------------------------------------------------------------
 
 
+class Claim(BaseModel):
+    """A single factual claim backed by zero or more citations.
+
+    The verifier (M15) checks that every claim with content has at least
+    one citation ID that resolves to a known source. Claims with empty
+    ``citation_ids`` are reserved for safe-missingness messaging
+    ("we did not find any X in the checked evidence").
+    """
+
+    model_config = _STRICT_FROZEN
+
+    text: Annotated[
+        str,
+        Field(min_length=1, description="Short factual statement (already PHI-safe and HTML-escaped)."),
+    ]
+    citation_ids: list[str] = Field(
+        default_factory=list,
+        description="Citation IDs backing this claim; empty only for safe-missingness or refusal claims.",
+    )
+    certainty: Certainty = Field(
+        description="Certainty marker consumed by the verifier and the UI.",
+    )
+
+
 class AnswerBlock(BaseModel):
     """A single rendered piece of the copilot response.
 
-    The chart UI walks ``answer_blocks`` in order and renders each one
-    according to its ``type``.  Renderers for unknown types should fall
-    back to plain text rendering of ``content``.
+    Wire shape mirrors ``AgentEvidenceResponseBuilder::answerFromPacket``
+    in PHP and the renderer in ``agent_panel.js`` (which iterates
+    ``answer_blocks[].claims[]`` and pulls ``heading``).
     """
 
-    model_config = _STRICT
+    model_config = _STRICT_FROZEN
 
-    type: Annotated[
+    heading: Annotated[
         str,
-        Field(
-            min_length=1,
-            max_length=64,
-            description="Renderer hint, e.g. 'paragraph', 'list', 'table', 'callout'.",
-        ),
+        Field(min_length=1, description="Block heading shown above the claim list."),
     ]
-    content: Annotated[
+    claims: list[Claim] = Field(
+        description="Ordered list of factual claims rendered as a bullet list in the UI.",
+    )
+    body_markdown: str | None = Field(
+        default=None,
+        description="Optional inline notes rendered below the claims (HTML-escaped).",
+    )
+
+
+class MissingOrUncertain(BaseModel):
+    """A 'what we did not find' note rendered alongside the answer.
+
+    Wire shape mirrors the objects produced by
+    ``AgentEvidenceResponseBuilder::addBasicPatientDataMissingness``: a
+    short text plus optional citation IDs pointing at why the gap is
+    known (e.g. a review marker that confirms the chart was inspected).
+    """
+
+    model_config = _STRICT_FROZEN
+
+    text: Annotated[
         str,
-        Field(description="Rendered text or structured payload (renderer-specific)."),
+        Field(min_length=1, description="Short human-readable missingness note (HTML-escaped)."),
     ]
-    citation_indices: list[int] = Field(
+    citation_ids: list[str] = Field(
         default_factory=list,
-        description="Indices into the response-level ``citations`` list backing this block.",
+        description="Citation IDs explaining why the gap is known; empty when none apply.",
     )
 
 
@@ -81,7 +150,7 @@ class Citation(BaseModel):
     sources -- the renderer treats them uniformly.
     """
 
-    model_config = _STRICT
+    model_config = _STRICT_FROZEN
 
     source_type: Annotated[
         str,
@@ -118,7 +187,7 @@ class ToolCallRecord(BaseModel):
     in admin UIs without leaking patient data or free-text query content.
     """
 
-    model_config = _STRICT
+    model_config = _STRICT_FROZEN
 
     tool_name: Annotated[str, Field(min_length=1, max_length=128)]
     arguments_keys: list[str] = Field(
@@ -143,26 +212,7 @@ class ToolCallRecord(BaseModel):
 
 
 class CopilotRunRequest(BaseModel):
-    """Wire contract for ``POST /api/copilot/run`` (request body).
-
-    Fields
-    ------
-    run_context
-        Signed, short-lived wire token minted by PHP and verified by the
-        sidecar (see M3 / M4).  Carried as an opaque string at this
-        layer.
-    intent_id
-        Optional closed-set intent identifier (e.g. ``current_medications``).
-        Mutually compatible with ``user_goal`` -- at least one must be
-        present.
-    user_goal
-        Optional free-form clinician question.  Hard-capped at
-        ``USER_GOAL_MAX_CHARS`` to bound prompt size.
-    request_id
-        Caller-supplied UUID used for idempotency and trace correlation.
-    conversation_state
-        Optional opaque round-trip state passed through unchanged.
-    """
+    """Wire contract for ``POST /api/copilot/run`` (request body)."""
 
     model_config = _STRICT
 
@@ -215,7 +265,14 @@ class CopilotRunResponse(BaseModel):
 
     All fields are required so downstream renderers can assume a stable
     shape.  ``missing_or_uncertain`` and ``citations`` may be empty
-    lists; ``answer_blocks`` is empty only when the verifier refused.
+    lists; ``answer_blocks`` is empty only when the verifier refused
+    and no claims survived.
+
+    M14 surfaces three new top-level fields backed by the M14 builder:
+    ``claims`` (the union of all per-block claims, ordered), ``citation_ids``
+    (the deduplicated, sorted union of all citation IDs referenced by any
+    claim), and ``certainty`` (the overall certainty bucket the M15
+    verifier inspects).
     """
 
     model_config = _STRICT
@@ -223,8 +280,17 @@ class CopilotRunResponse(BaseModel):
     answer_blocks: list[AnswerBlock] = Field(
         description="Ordered list of rendered answer pieces.",
     )
-    missing_or_uncertain: list[str] = Field(
-        description="Human-readable notes for facts the agent could not confirm.",
+    claims: list[Claim] = Field(
+        description="Ordered union of every claim across answer_blocks; verifier-facing.",
+    )
+    citation_ids: list[str] = Field(
+        description="Deduplicated, sorted union of all citation IDs referenced by claims.",
+    )
+    certainty: Literal["high", "medium", "low", "unknown"] = Field(
+        description="Overall certainty bucket the verifier inspects.",
+    )
+    missing_or_uncertain: list[MissingOrUncertain] = Field(
+        description="Notes for facts the agent could not confirm.",
     )
     citations: list[Citation] = Field(
         description="Sources backing the answer blocks.",
@@ -250,9 +316,12 @@ class CopilotRunResponse(BaseModel):
 
 __all__ = [
     "AnswerBlock",
+    "Certainty",
     "Citation",
+    "Claim",
     "CopilotRunRequest",
     "CopilotRunResponse",
+    "MissingOrUncertain",
     "ToolCallRecord",
     "USER_GOAL_MAX_CHARS",
     "VerificationStatus",

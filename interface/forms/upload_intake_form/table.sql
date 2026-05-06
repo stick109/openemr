@@ -39,3 +39,34 @@ CREATE TABLE IF NOT EXISTS `form_upload_intake_form` (
     KEY `idx_encounter` (`encounter`),
     KEY `idx_pid` (`pid`)
 ) ENGINE=InnoDB;
+
+-- Citation rows associated with a form_upload_intake_form record (S17).
+-- One row per Citation object returned from the agent-service sidecar
+-- (see agent-service/CONTRACT.md and src/Services/Agent/Sidecar/AgentRunResult.php).
+-- The `source_type` ENUM matches the discriminator on the API-level
+-- Citation union; `pdf_bbox` rows populate the page/bbox columns and may
+-- carry a `field_name` (clinical SourceCitation contract), while
+-- `guideline` rows populate chunk_id/source_url/snippet/section.
+CREATE TABLE IF NOT EXISTS `form_upload_intake_form_citation` (
+    `id`         BIGINT       NOT NULL AUTO_INCREMENT,
+    `form_id`    BIGINT       NOT NULL,
+    `source_type` ENUM('pdf_bbox', 'guideline') NOT NULL,
+    `field_name` VARCHAR(255) DEFAULT NULL,
+    `page`       INT          DEFAULT NULL,
+    `bbox_x0`    DECIMAL(10, 4) DEFAULT NULL,
+    `bbox_y0`    DECIMAL(10, 4) DEFAULT NULL,
+    `bbox_x1`    DECIMAL(10, 4) DEFAULT NULL,
+    `bbox_y1`    DECIMAL(10, 4) DEFAULT NULL,
+    `chunk_id`   VARCHAR(255) DEFAULT NULL,
+    `source_url` TEXT         DEFAULT NULL,
+    `snippet`    TEXT         DEFAULT NULL,
+    `section`    VARCHAR(255) DEFAULT NULL,
+    `created_at` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    KEY `idx_form_id` (`form_id`)
+) ENGINE=InnoDB;
+
+-- Manual verification (run from the project root):
+--   docker compose --project-name openemr exec -T mysql \
+--     mysql -uroot -proot openemr \
+--     -e "DESCRIBE form_upload_intake_form_citation;"

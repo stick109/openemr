@@ -39,11 +39,15 @@ use OpenEMR\Services\Agent\Sidecar\AgentRunResult;
 use OpenEMR\Services\Agent\Sidecar\AgentServiceClient;
 use OpenEMR\Services\Agent\Sidecar\AgentServiceException;
 use OpenEMR\Services\Agent\Sidecar\AgentSidecarConfig;
+use OpenEMR\Services\Agent\Sidecar\CitationPersistenceService;
+use OpenEMR\Services\Agent\Sidecar\Dispatcher\LabPdfDispatcher;
+use OpenEMR\Services\Agent\Sidecar\Dispatcher\QueryUtilsSqlExecutor;
 use OpenEMR\Services\Agent\Sidecar\SharedUploadManager;
 use OpenEMR\Services\FormService;
 use OpenEMR\Services\Intake\Dispatcher\ConsentDispatcher;
 use OpenEMR\Services\Intake\Dispatcher\DemographicsDispatcher;
 use OpenEMR\Services\Intake\Dispatcher\MedicalHistoryDispatcher;
+use OpenEMR\Services\Intake\Exception\IngestionFailedException;
 use OpenEMR\Services\Intake\Exception\IntakeFormException;
 use OpenEMR\Services\Intake\IntakeFormIngestService;
 use OpenEMR\Services\Intake\OpenAi\OpenAIClient;
@@ -202,10 +206,33 @@ if ($useSidecar) {
         'cost_usd' => $sidecarResult->costUsd,
     ]);
 
-    // TODO(S16+): persist sidecar extraction result into OpenEMR tables.
-    // For now the sidecar result is logged; downstream persistence is the
-    // responsibility of subsequent implementation steps. The form row is
-    // still recorded below so the encounter timeline entry exists.
+    // -- Lab data persistence (S16) ---------------------------------------
+    // Map the sidecar's structured `LabPdf` extraction onto OpenEMR's
+    // procedure_order / procedure_report / procedure_result tables. A
+    // dispatcher failure (SQL error, missing data) blocks the rest of the
+    // submission so we don't end up with a form row pointing at nothing.
+    $labDispatcher = new LabPdfDispatcher(
+        sql: new QueryUtilsSqlExecutor(),
+        logger: $logger,
+        clock: ServiceContainer::getClock(),
+    );
+    try {
+        $labDispatchResult = $labDispatcher->dispatch(
+            patientId: $pidInt,
+            encounterId: $encounterInt,
+            extracted: $sidecarResult->extracted,
+            traceId: $traceId,
+        );
+    } catch (IngestionFailedException $e) {
+        $logger->error('Lab dispatch failed; aborting upload.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'trace_id' => $traceId,
+            'exception' => $e,
+        ]);
+        $renderFailure(xl('The lab report data could not be saved. Please retry or contact support.'));
+    }
+
     $authUserIdRaw = $session->get('authUserID');
     $authUserIdString = is_scalar($authUserIdRaw) ? (string) $authUserIdRaw : '0';
     $insertedRowId = \OpenEMR\Common\Database\QueryUtils::sqlInsert(
@@ -225,9 +252,31 @@ if ($useSidecar) {
                 'extraction_confidence' => $sidecarResult->extractionConfidence,
                 'cost_usd' => $sidecarResult->costUsd,
                 'tool_sequence' => $sidecarResult->toolSequence,
+                'procedure_order_id' => $labDispatchResult->procedureOrderId,
+                'procedure_report_id' => $labDispatchResult->procedureReportId,
+                'procedure_result_ids' => $labDispatchResult->procedureResultIds,
+                'lab_dispatch_created' => $labDispatchResult->created,
             ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
         ]
     );
+
+    // -- Citation persistence (S17) ---------------------------------------
+    // Citations are best-effort metadata for downstream UX. The lab data
+    // (which S16 persists to procedure_order/report/result) is the
+    // primary value of this upload — a failure to persist citations must
+    // not unwind the whole submission. Log and continue.
+    try {
+        $citationService = new CitationPersistenceService($logger);
+        $citationService->persist((int) $insertedRowId, $sidecarResult->citations);
+    } catch (\Throwable $citationException) {
+        $logger->error('Citation persistence failed; continuing.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'form_id' => $insertedRowId,
+            'trace_id' => $traceId,
+            'exception' => $citationException,
+        ]);
+    }
 
     $result = new \OpenEMR\Services\Intake\IngestResult(
         formType: $formType,

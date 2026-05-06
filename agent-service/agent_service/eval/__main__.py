@@ -14,6 +14,19 @@ Inject the ``drop-citations`` regression and verify that the
         --baseline agent_service/eval/baseline.json \
         --inject-regression drop-citations
 
+Inject a wrong-value regression and verify that ``factually_consistent``
+fails (lab values mutated, intake chief concerns rewritten)::
+
+    py -m agent_service.eval \
+        --baseline agent_service/eval/baseline.json \
+        --inject-regression wrong-value
+
+Flip every lab abnormal flag and watch ``factually_consistent`` collapse::
+
+    py -m agent_service.eval \
+        --baseline agent_service/eval/baseline.json \
+        --inject-regression flip-abnormal-flags
+
 Persist a per-case JSON report next to the baseline::
 
     py -m agent_service.eval \
@@ -25,8 +38,9 @@ Exit codes
 
 * ``0`` -- every rubric meets its threshold and (if baseline exists)
   did not regress more than :data:`REGRESSION_TOLERANCE`.
-* ``1`` -- one or more rubrics failed.  Failure summaries are printed
-  to stderr.
+* ``1`` -- one or more rubrics failed.  A structured failure summary
+  is printed to stderr, listing the regressed rubric, the delta vs.
+  baseline, and the affected fixture IDs.
 * ``2`` -- argument parsing or fixture-loading error.
 """
 
@@ -38,16 +52,16 @@ import sys
 from pathlib import Path
 
 from agent_service.eval.runner import (
+    SUPPORTED_REGRESSIONS,
     EvalReport,
     compare_to_baseline,
+    format_failure_summary,
     format_pass_rate_table,
     load_baseline,
     run_eval,
     write_baseline,
 )
-
-
-_SUPPORTED_REGRESSIONS: tuple[str, ...] = ("drop-citations", "wrong-value")
+from agent_service.observability.storage import JSONLStorage
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -70,13 +84,15 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--inject-regression",
-        choices=_SUPPORTED_REGRESSIONS,
+        choices=SUPPORTED_REGRESSIONS,
         default=None,
         help=(
             "Apply a regression hook to every fixture's recorded "
             "extraction response.  drop-citations strips source "
-            "citations; wrong-value is a stub for the regression-test "
-            "step (S22)."
+            "citations (breaks citation_present); wrong-value mutates "
+            "key extracted fields (breaks factually_consistent); "
+            "flip-abnormal-flags swaps high<->low on every lab row "
+            "(breaks factually_consistent harder)."
         ),
     )
     parser.add_argument(
@@ -84,6 +100,16 @@ def _build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help="Optional path to write per-case results as JSON.",
+    )
+    parser.add_argument(
+        "--record-runs",
+        type=Path,
+        default=None,
+        help=(
+            "Optional path to a JSONL file. When supplied, the runner writes "
+            "a sanitized RunRecord per fixture for downstream cost/latency "
+            "reporting.  Off by default to preserve historical behaviour."
+        ),
     )
     return parser
 
@@ -99,8 +125,15 @@ def main(argv: list[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
+    record_storage = (
+        JSONLStorage(args.record_runs) if args.record_runs is not None else None
+    )
+
     try:
-        report = run_eval(inject_regression=args.inject_regression)
+        report = run_eval(
+            inject_regression=args.inject_regression,
+            record_storage=record_storage,
+        )
     except FileNotFoundError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
@@ -122,14 +155,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
-    passed, failures = compare_to_baseline(report, baseline)
+    passed, _failures = compare_to_baseline(report, baseline)
     if passed:
         print("\nAll rubrics meet thresholds and no regression detected.")
         return 0
 
-    print("\nFAIL: regression(s) detected:", file=sys.stderr)
-    for failure in failures:
-        print(f"  - {failure}", file=sys.stderr)
+    # Structured, demo-ready failure summary: per-rubric delta plus the
+    # case IDs of the affected fixtures.
+    print()
+    print(format_failure_summary(report, baseline), file=sys.stderr)
     return 1
 
 

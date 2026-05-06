@@ -61,7 +61,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M17 | Add PHP thin proxy to sidecar copilot endpoint | Done | M2-M4 | M13-M16 |
 | M18 | Add shadow mode comparing PHP and Python outputs | Done | M13-M17 | M19 |
 | M19 | Add per-intent cutover feature flags | Done | M18 | M20 |
-| M20 | Cut over read-only intents one by one | Not started | M18, M19 | M21 |
+| M20 | Cut over read-only intents one by one | Done | M18, M19 | M21 |
 | M21 | Move write-like actions to two-phase sidecar proposals | Done | M13, M15, Sidecar S16-S17 | M20 |
 | M22 | Expand evals for LLM-chosen tool behavior | Done | M13-M16 | M23 |
 | M23 | Gate migration in CI | Done | M18, M22 | M24 |
@@ -726,9 +726,9 @@ Pass criteria:
 
 ## M20 - Cut Over Read-Only Intents One by One
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M18, M19  
 **Can run in parallel with:** M21
 

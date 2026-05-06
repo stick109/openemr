@@ -23,11 +23,15 @@ final readonly class AnswerBlockDto
      * @param string         $type             Renderer hint, e.g. ``paragraph``, ``list``, ``table``.
      * @param string         $content          Rendered text or structured payload (renderer-specific).
      * @param list<int>      $citationIndices  Indices into the response-level ``citations`` list.
+     * @param string         $heading          Block heading from the sidecar wire shape. Optional
+     *                                         for backward compatibility with the legacy
+     *                                         ``type``/``content`` projection used by the renderer.
      */
     public function __construct(
         public string $type,
         public string $content,
         public array $citationIndices,
+        public string $heading = '',
     ) {
     }
 
@@ -50,6 +54,7 @@ final readonly class AnswerBlockDto
             type: is_string($data['type'] ?? null) ? $data['type'] : '',
             content: is_string($data['content'] ?? null) ? $data['content'] : '',
             citationIndices: $indices,
+            heading: is_string($data['heading'] ?? null) ? $data['heading'] : '',
         );
     }
 }

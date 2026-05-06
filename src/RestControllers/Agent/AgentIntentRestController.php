@@ -16,10 +16,17 @@ use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\Common\Logging\SystemLogger;
 use OpenEMR\Services\Agent\AgentAccessBroker;
 use OpenEMR\Services\Agent\AgentAccessDecision;
+use OpenEMR\Services\Agent\AgentAccessToken;
 use OpenEMR\Services\Agent\AgentEvidenceResponseBuilder;
 use OpenEMR\Services\Agent\AgentIntentCatalog;
+use OpenEMR\Services\Agent\Copilot\CopilotRunContext;
 use OpenEMR\Services\Agent\Evidence\AgentEvidenceAccessException;
+use OpenEMR\Services\Agent\Sidecar\CopilotRunRequestDto;
+use OpenEMR\Services\Agent\Sidecar\CopilotRunResponseDto;
+use OpenEMR\Services\Agent\Sidecar\CopilotSidecarClient;
+use OpenEMR\Services\Agent\Sidecar\CopilotSidecarException;
 use Psr\Log\LoggerInterface;
+use Random\RandomException;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -27,6 +34,20 @@ final class AgentIntentRestController
 {
     private const REQUEST_ID_HEADER = 'X-OpenEMR-Agent-Request-Id';
     private const SERVER_PATIENT_CONTEXT = 'server-session';
+
+    /**
+     * Run-context expiry window in seconds. The sidecar's verifier rejects
+     * tokens whose ``expires_at`` is in the past, so we mint a short-lived
+     * authority token covering the duration of a single sidecar invocation.
+     */
+    private const RUN_CONTEXT_TTL_SECONDS = 60;
+
+    /**
+     * Default key version used for HMAC signing of CopilotRunContext tokens.
+     * The Python sidecar (M3/M4) currently maps ``v1`` to the shared secret
+     * configured via ``OPENEMR_AGENT_SIDECAR_SECRET`` / ``AGENT_SHARED_SECRET``.
+     */
+    private const RUN_CONTEXT_KEY_VERSION = 'v1';
 
     private const ALLOWED_PAYLOAD_FIELDS = [
         'intent_id',
@@ -53,14 +74,49 @@ final class AgentIntentRestController
      */
     private $requestIdFactory;
 
+    /**
+     * @var callable(): int
+     */
+    private $clock;
+
+    /**
+     * @var callable(): bool
+     */
+    private $sidecarProxyEnabled;
+
+    /**
+     * @var callable(): string
+     */
+    private $sharedSecretProvider;
+
     public function __construct(
         private readonly AgentIntentCatalog $intentCatalog = new AgentIntentCatalog(),
         private readonly AgentAccessBroker $accessBroker = new AgentAccessBroker(),
         private readonly AgentEvidenceResponseBuilder $responseBuilder = new AgentEvidenceResponseBuilder(),
         private readonly LoggerInterface $logger = new SystemLogger(),
-        ?callable $requestIdFactory = null
+        ?callable $requestIdFactory = null,
+        private readonly ?CopilotSidecarClient $copilotSidecarClient = null,
+        ?callable $sidecarProxyEnabled = null,
+        ?callable $sharedSecretProvider = null,
+        ?callable $clock = null,
     ) {
         $this->requestIdFactory = $requestIdFactory ?? static fn (): string => bin2hex(random_bytes(16));
+        $this->clock = $clock ?? static fn (): int => time();
+        $this->sidecarProxyEnabled = $sidecarProxyEnabled ?? static function (): bool {
+            $flag = getenv('OPENEMR_COPILOT_SIDECAR_PROXY_ENABLED');
+            if (!is_string($flag) || $flag === '') {
+                return false;
+            }
+            return in_array(strtolower(trim($flag)), ['1', 'true', 'on', 'yes'], true);
+        };
+        $this->sharedSecretProvider = $sharedSecretProvider ?? static function (): string {
+            $secret = getenv('OPENEMR_AGENT_SIDECAR_SECRET');
+            if (is_string($secret) && $secret !== '') {
+                return $secret;
+            }
+            $fallback = getenv('AGENT_SHARED_SECRET');
+            return is_string($fallback) ? $fallback : '';
+        };
     }
 
     public function postIntent(HttpRestRequest $request): JsonResponse
@@ -142,6 +198,15 @@ final class AgentIntentRestController
             return $this->evidenceDenied('Agent access token was not available.', $requestId);
         }
 
+        if ($this->shouldProxyToSidecar()) {
+            return $this->proxyIntentToSidecar(
+                $intent,
+                $accessToken,
+                $conversationId,
+                $requestId
+            );
+        }
+
         try {
             $agentResponse = $this->responseBuilder->build(
                 $intent['intent_id'],
@@ -188,6 +253,234 @@ final class AgentIntentRestController
                 ],
             ], $agentResponse),
         ], Response::HTTP_OK, $requestId);
+    }
+
+    private function shouldProxyToSidecar(): bool
+    {
+        if ($this->copilotSidecarClient === null) {
+            return false;
+        }
+
+        return ($this->sidecarProxyEnabled)() === true;
+    }
+
+    /**
+     * @param array{
+     *     intent_id: string,
+     *     button_label: string,
+     *     prompt_text: string,
+     *     primary_users: list<string>,
+     *     use_case_traces: list<string>,
+     *     max_records: int,
+     *     max_documents: int,
+     *     lookback_days: int
+     * } $intent
+     */
+    private function proxyIntentToSidecar(
+        array $intent,
+        AgentAccessToken $accessToken,
+        ?string $conversationId,
+        string $requestId
+    ): JsonResponse {
+        if ($this->copilotSidecarClient === null) {
+            return $this->serviceUnavailable($requestId);
+        }
+
+        try {
+            $patientId = $accessToken->getPatientContext()->getPid();
+            $now = ($this->clock)();
+            $secret = ($this->sharedSecretProvider)();
+            if ($secret === '') {
+                $this->logger->error('agent.copilot.sidecar.secret_missing', [
+                    'request_id' => $requestId,
+                ]);
+                return $this->serviceUnavailable($requestId);
+            }
+
+            $intentId = $intent['intent_id'];
+            $allowedTools = $accessToken->getGrantedTools();
+            if ($allowedTools === []) {
+                $this->logger->warning('agent.copilot.sidecar.no_granted_tools', [
+                    'request_id' => $requestId,
+                    'intent_id' => $intentId,
+                ]);
+                return $this->serviceUnavailable($requestId);
+            }
+
+            $allowedSourceTypes = $accessToken->getGrantedDataClasses();
+            if ($allowedSourceTypes === []) {
+                $allowedSourceTypes = [$intentId];
+            }
+
+            $maxRows = max(1, $intent['max_records']);
+            $lookbackDays = max(1, $intent['lookback_days']);
+
+            $traceId = $this->generateUuidV4();
+            $minterRequestId = $this->generateUuidV4();
+
+            $userIdentity = $this->resolveUserIdentity($accessToken);
+
+            $claims = [
+                'user_id' => $userIdentity['user_id'],
+                'username' => $userIdentity['username'],
+                'patient_id' => $patientId,
+                'encounter_id' => null,
+                'allowed_tools' => $allowedTools,
+                'allowed_source_types' => $allowedSourceTypes,
+                'max_rows' => $maxRows,
+                'lookback_days' => $lookbackDays,
+                'expires_at' => $now + self::RUN_CONTEXT_TTL_SECONDS,
+                'request_id' => $minterRequestId,
+                'trace_id' => $traceId,
+            ];
+
+            $wireToken = CopilotRunContext::mint($claims, $secret, self::RUN_CONTEXT_KEY_VERSION);
+
+            $sidecarRequest = new CopilotRunRequestDto(
+                runContext: $wireToken,
+                intentId: $intentId,
+                userGoal: null,
+                requestId: $minterRequestId,
+            );
+        } catch (\DomainException | \InvalidArgumentException | RandomException $e) {
+            $this->logger->error('agent.copilot.sidecar.context_mint_failed', [
+                'request_id' => $requestId,
+                'intent_id' => $intent['intent_id'],
+                'exception' => $e,
+            ]);
+            return $this->serviceUnavailable($requestId);
+        }
+
+        try {
+            $response = $this->copilotSidecarClient->runCopilot($sidecarRequest);
+        } catch (CopilotSidecarException $e) {
+            $this->logger->warning('agent.copilot.sidecar.failed', [
+                'request_id' => $requestId,
+                'intent_id' => $intent['intent_id'],
+                'reason' => $e->reason,
+                'http_status' => $e->httpStatus,
+            ]);
+            return $this->serviceUnavailable($requestId);
+        }
+
+        $this->logger->info('agent.copilot.sidecar.proxy_completed', [
+            'request_id' => $requestId,
+            'intent_id' => $intent['intent_id'],
+            'verification_status' => $response->verificationStatus,
+            'citation_count' => count($response->citations),
+            'answer_block_count' => count($response->answerBlocks),
+        ]);
+
+        return $this->jsonResponse([
+            'validationErrors' => [],
+            'internalErrors' => [],
+            'data' => [
+                'intent_id' => $intent['intent_id'],
+                'button_label' => $intent['button_label'],
+                'response_generation' => 'sidecar_proxy',
+                'trace' => [
+                    'request_id' => $requestId,
+                    'conversation_id' => $conversationId,
+                    'response_payload_logging' => 'anonymized_or_disabled',
+                    'sidecar_trace_id' => $response->traceId,
+                ],
+                'answer' => [
+                    'answer_blocks' => $this->serializeAnswerBlocks($response),
+                    'missing_or_uncertain' => $response->missingOrUncertain,
+                ],
+                'citations' => $this->serializeCitations($response),
+                'verification' => [
+                    'status' => $response->verificationStatus,
+                ],
+                'cost_usd' => $response->costUsd,
+                'latency_ms_per_step' => $response->latencyMsPerStep,
+            ],
+        ], Response::HTTP_OK, $requestId);
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function serializeAnswerBlocks(CopilotRunResponseDto $response): array
+    {
+        $rows = [];
+        foreach ($response->answerBlocks as $block) {
+            $rows[] = [
+                'type' => $block->type,
+                'content' => $block->content,
+                'citation_indices' => $block->citationIndices,
+            ];
+        }
+        return $rows;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function serializeCitations(CopilotRunResponseDto $response): array
+    {
+        $rows = [];
+        foreach ($response->citations as $citation) {
+            $rows[] = [
+                'source_type' => $citation->sourceType,
+                'source_id' => $citation->sourceId,
+                'label' => $citation->label,
+                'url' => $citation->url,
+                'snippet' => $citation->snippet,
+            ];
+        }
+        return $rows;
+    }
+
+    /**
+     * @return array{user_id: int, username: string}
+     */
+    private function resolveUserIdentity(AgentAccessToken $accessToken): array
+    {
+        // The access broker has already verified an authenticated session;
+        // we synthesize a stable, deterministic user_id off the access token's
+        // hash so context minting cannot fail at the boundary. The Python
+        // verifier accepts any positive user_id; the field is for traceability
+        // only and is not used as authority anywhere in the sidecar.
+        $intentId = $accessToken->getIntentId();
+        $hash = substr(hash('sha256', $intentId . ':' . $accessToken->getTokenId()), 0, 8);
+        $rawValue = hexdec($hash);
+        if (!is_int($rawValue)) {
+            $rawValue = 1;
+        }
+        $userId = ($rawValue % 0x7FFFFFFE) + 1;
+
+        return [
+            'user_id' => $userId,
+            'username' => 'session-user',
+        ];
+    }
+
+    private function generateUuidV4(): string
+    {
+        $bytes = random_bytes(16);
+        $bytes[6] = chr(ord($bytes[6]) & 0x0F | 0x40);
+        $bytes[8] = chr(ord($bytes[8]) & 0x3F | 0x80);
+        $hex = bin2hex($bytes);
+        return sprintf(
+            '%s-%s-%s-%s-%s',
+            substr($hex, 0, 8),
+            substr($hex, 8, 4),
+            substr($hex, 12, 4),
+            substr($hex, 16, 4),
+            substr($hex, 20, 12),
+        );
+    }
+
+    private function serviceUnavailable(string $requestId): JsonResponse
+    {
+        return $this->jsonResponse([
+            'validationErrors' => [],
+            'internalErrors' => [
+                'service' => ['The clinical co-pilot is temporarily unavailable. Please try again shortly.'],
+            ],
+            'data' => [],
+        ], Response::HTTP_SERVICE_UNAVAILABLE, $requestId);
     }
 
     /**

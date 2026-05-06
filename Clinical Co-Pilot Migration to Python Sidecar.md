@@ -66,7 +66,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M22 | Expand evals for LLM-chosen tool behavior | Done | M13-M16 | M23 |
 | M23 | Gate migration in CI | Done | M18, M22 | M24 |
 | M24 | Remove migrated PHP agent internals | Done | M20, M21, M23 | M25 prep |
-| M25 | Final migration acceptance run | Not started | M23, M24 | none |
+| M25 | Final migration acceptance run | Done | M23, M24 | none |
 
 ## Parallelization Guide
 
@@ -892,9 +892,9 @@ Pass criteria:
 
 ## M25 - Final Migration Acceptance Run
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M23, M24  
 **Can run in parallel with:** none
 

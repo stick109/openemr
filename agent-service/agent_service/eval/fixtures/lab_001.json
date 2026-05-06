@@ -1,0 +1,215 @@
+{
+  "case_id": "lab_001",
+  "doc_type": "lab_pdf",
+  "description": "Normal CBC panel - all values within reference range",
+  "input_file_path": "fixtures/lab_001.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "WBC",
+        "value": "6.5",
+        "unit": "x10^3/uL",
+        "reference_range": "4.0-11.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "wbc"
+        }
+      },
+      {
+        "test_name": "RBC",
+        "value": "4.8",
+        "unit": "x10^6/uL",
+        "reference_range": "4.2-5.4",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "rbc"
+        }
+      },
+      {
+        "test_name": "Hemoglobin",
+        "value": "14.2",
+        "unit": "g/dL",
+        "reference_range": "12.0-16.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "hemoglobin"
+        }
+      },
+      {
+        "test_name": "Hematocrit",
+        "value": "42.0",
+        "unit": "%",
+        "reference_range": "37.0-47.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            190.0,
+            250.0,
+            210.0
+          ],
+          "field_name": "hematocrit"
+        }
+      },
+      {
+        "test_name": "Platelets",
+        "value": "250",
+        "unit": "x10^3/uL",
+        "reference_range": "150-400",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            220.0,
+            250.0,
+            240.0
+          ],
+          "field_name": "platelets"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_001.pdf": "fake-file-lab_001"
+    },
+    "extract_responses": {
+      "fake-file-lab_001": {
+        "results": [
+          {
+            "test_name": "WBC",
+            "value": "6.5",
+            "unit": "x10^3/uL",
+            "reference_range": "4.0-11.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "wbc"
+            }
+          },
+          {
+            "test_name": "RBC",
+            "value": "4.8",
+            "unit": "x10^6/uL",
+            "reference_range": "4.2-5.4",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "rbc"
+            }
+          },
+          {
+            "test_name": "Hemoglobin",
+            "value": "14.2",
+            "unit": "g/dL",
+            "reference_range": "12.0-16.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "hemoglobin"
+            }
+          },
+          {
+            "test_name": "Hematocrit",
+            "value": "42.0",
+            "unit": "%",
+            "reference_range": "37.0-47.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                190.0,
+                250.0,
+                210.0
+              ],
+              "field_name": "hematocrit"
+            }
+          },
+          {
+            "test_name": "Platelets",
+            "value": "250",
+            "unit": "x10^3/uL",
+            "reference_range": "150-400",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                220.0,
+                250.0,
+                240.0
+              ],
+              "field_name": "platelets"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

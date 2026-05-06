@@ -1,0 +1,143 @@
+{
+  "case_id": "lab_003",
+  "doc_type": "lab_pdf",
+  "description": "CBC with elevated WBC suggesting infection",
+  "input_file_path": "fixtures/lab_003.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "WBC",
+        "value": "18.4",
+        "unit": "x10^3/uL",
+        "reference_range": "4.0-11.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "wbc"
+        }
+      },
+      {
+        "test_name": "Neutrophils",
+        "value": "85",
+        "unit": "%",
+        "reference_range": "40-70",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "neutrophils"
+        }
+      },
+      {
+        "test_name": "Hemoglobin",
+        "value": "13.5",
+        "unit": "g/dL",
+        "reference_range": "12.0-16.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "hemoglobin"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_003.pdf": "fake-file-lab_003"
+    },
+    "extract_responses": {
+      "fake-file-lab_003": {
+        "results": [
+          {
+            "test_name": "WBC",
+            "value": "18.4",
+            "unit": "x10^3/uL",
+            "reference_range": "4.0-11.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "wbc"
+            }
+          },
+          {
+            "test_name": "Neutrophils",
+            "value": "85",
+            "unit": "%",
+            "reference_range": "40-70",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "neutrophils"
+            }
+          },
+          {
+            "test_name": "Hemoglobin",
+            "value": "13.5",
+            "unit": "g/dL",
+            "reference_range": "12.0-16.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "hemoglobin"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

@@ -1,0 +1,107 @@
+{
+  "case_id": "lab_011",
+  "doc_type": "lab_pdf",
+  "description": "Thyroid panel showing primary hypothyroidism (high TSH, low T4)",
+  "input_file_path": "fixtures/lab_011.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "TSH",
+        "value": "15.2",
+        "unit": "uIU/mL",
+        "reference_range": "0.4-4.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "tsh"
+        }
+      },
+      {
+        "test_name": "Free T4",
+        "value": "0.5",
+        "unit": "ng/dL",
+        "reference_range": "0.8-1.8",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "low",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "free_t4"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_011.pdf": "fake-file-lab_011"
+    },
+    "extract_responses": {
+      "fake-file-lab_011": {
+        "results": [
+          {
+            "test_name": "TSH",
+            "value": "15.2",
+            "unit": "uIU/mL",
+            "reference_range": "0.4-4.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "tsh"
+            }
+          },
+          {
+            "test_name": "Free T4",
+            "value": "0.5",
+            "unit": "ng/dL",
+            "reference_range": "0.8-1.8",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "low",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "free_t4"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

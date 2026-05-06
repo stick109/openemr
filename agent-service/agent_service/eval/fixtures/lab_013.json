@@ -1,0 +1,71 @@
+{
+  "case_id": "lab_013",
+  "doc_type": "lab_pdf",
+  "description": "HbA1c within normal range",
+  "input_file_path": "fixtures/lab_013.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "HbA1c",
+        "value": "5.2",
+        "unit": "%",
+        "reference_range": "<5.7",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "hba1c"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_013.pdf": "fake-file-lab_013"
+    },
+    "extract_responses": {
+      "fake-file-lab_013": {
+        "results": [
+          {
+            "test_name": "HbA1c",
+            "value": "5.2",
+            "unit": "%",
+            "reference_range": "<5.7",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "hba1c"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

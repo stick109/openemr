@@ -1,0 +1,71 @@
+{
+  "case_id": "lab_005",
+  "doc_type": "lab_pdf",
+  "description": "Glucose at critical-low value indicating severe hypoglycemia",
+  "input_file_path": "fixtures/lab_005.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "Glucose",
+        "value": "38",
+        "unit": "mg/dL",
+        "reference_range": "70-100",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "critical_low",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "glucose"
+        }
+      }
+    ],
+    "extraction_confidence": 0.99,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_005.pdf": "fake-file-lab_005"
+    },
+    "extract_responses": {
+      "fake-file-lab_005": {
+        "results": [
+          {
+            "test_name": "Glucose",
+            "value": "38",
+            "unit": "mg/dL",
+            "reference_range": "70-100",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "critical_low",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "glucose"
+            }
+          }
+        ],
+        "extraction_confidence": 0.99,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

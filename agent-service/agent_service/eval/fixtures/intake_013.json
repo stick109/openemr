@@ -1,0 +1,165 @@
+{
+  "case_id": "intake_013",
+  "doc_type": "intake_form",
+  "description": "Geriatric polypharmacy review",
+  "input_file_path": "fixtures/intake_013.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": "Robert Elder",
+      "dob": "1942-07-30",
+      "gender": "M",
+      "address": "789 Pine St, Burlington, VT 05401",
+      "phone": "555-222-3344",
+      "email": "robert.elder@example.com",
+      "insurance_id": "MEDICARE-A1234567"
+    },
+    "chief_concern": "Medication review and fall risk assessment",
+    "current_medications": [
+      {
+        "name": "Warfarin",
+        "dosage": "5 mg",
+        "frequency": "daily"
+      },
+      {
+        "name": "Furosemide",
+        "dosage": "20 mg",
+        "frequency": "daily"
+      },
+      {
+        "name": "Metoprolol",
+        "dosage": "25 mg",
+        "frequency": "twice daily"
+      },
+      {
+        "name": "Donepezil",
+        "dosage": "10 mg",
+        "frequency": "at bedtime"
+      },
+      {
+        "name": "Calcium + D3",
+        "dosage": "600/400",
+        "frequency": "daily"
+      }
+    ],
+    "allergies": [],
+    "family_history": [
+      {
+        "relation": "mother",
+        "condition": "Alzheimer's disease"
+      },
+      {
+        "relation": "father",
+        "condition": "stroke"
+      }
+    ],
+    "source_citations": [
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          80.0,
+          250.0,
+          100.0
+        ],
+        "field_name": "demographics"
+      },
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          200.0,
+          250.0,
+          220.0
+        ],
+        "field_name": "chief_concern"
+      }
+    ],
+    "extraction_confidence": 0.92
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_013.pdf": "fake-file-intake_013"
+    },
+    "extract_responses": {
+      "fake-file-intake_013": {
+        "demographics": {
+          "name": "Robert Elder",
+          "dob": "1942-07-30",
+          "gender": "M",
+          "address": "789 Pine St, Burlington, VT 05401",
+          "phone": "555-222-3344",
+          "email": "robert.elder@example.com",
+          "insurance_id": "MEDICARE-A1234567"
+        },
+        "chief_concern": "Medication review and fall risk assessment",
+        "current_medications": [
+          {
+            "name": "Warfarin",
+            "dosage": "5 mg",
+            "frequency": "daily"
+          },
+          {
+            "name": "Furosemide",
+            "dosage": "20 mg",
+            "frequency": "daily"
+          },
+          {
+            "name": "Metoprolol",
+            "dosage": "25 mg",
+            "frequency": "twice daily"
+          },
+          {
+            "name": "Donepezil",
+            "dosage": "10 mg",
+            "frequency": "at bedtime"
+          },
+          {
+            "name": "Calcium + D3",
+            "dosage": "600/400",
+            "frequency": "daily"
+          }
+        ],
+        "allergies": [],
+        "family_history": [
+          {
+            "relation": "mother",
+            "condition": "Alzheimer's disease"
+          },
+          {
+            "relation": "father",
+            "condition": "stroke"
+          }
+        ],
+        "source_citations": [
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              80.0,
+              250.0,
+              100.0
+            ],
+            "field_name": "demographics"
+          },
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              200.0,
+              250.0,
+              220.0
+            ],
+            "field_name": "chief_concern"
+          }
+        ],
+        "extraction_confidence": 0.92
+      }
+    }
+  }
+}

@@ -1,0 +1,54 @@
+{
+  "case_id": "intake_024",
+  "doc_type": "intake_form",
+  "description": "Blank intake form - no fields filled in",
+  "input_file_path": "fixtures/intake_024.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": null,
+      "dob": null,
+      "gender": null,
+      "address": null,
+      "phone": null,
+      "email": null,
+      "insurance_id": null
+    },
+    "chief_concern": "",
+    "current_medications": [],
+    "allergies": [],
+    "family_history": [],
+    "source_citations": [],
+    "extraction_confidence": 0.0
+  },
+  "expected_rubric": {
+    "schema_valid": false,
+    "citation_present": false,
+    "factually_consistent": false,
+    "safe_refusal": true
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_024.pdf": "fake-file-intake_024"
+    },
+    "extract_responses": {
+      "fake-file-intake_024": {
+        "demographics": {
+          "name": null,
+          "dob": null,
+          "gender": null,
+          "address": null,
+          "phone": null,
+          "email": null,
+          "insurance_id": null
+        },
+        "chief_concern": "",
+        "current_medications": [],
+        "allergies": [],
+        "family_history": [],
+        "source_citations": [],
+        "extraction_confidence": 0.0
+      }
+    },
+    "refusal_reason": "Intake form is blank with no patient-supplied content; nothing to extract."
+  }
+}

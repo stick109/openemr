@@ -1,0 +1,179 @@
+{
+  "case_id": "lab_006",
+  "doc_type": "lab_pdf",
+  "description": "Normal lipid panel - cardiovascular risk factors within limits",
+  "input_file_path": "fixtures/lab_006.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "Total Cholesterol",
+        "value": "180",
+        "unit": "mg/dL",
+        "reference_range": "<200",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "total_cholesterol"
+        }
+      },
+      {
+        "test_name": "LDL",
+        "value": "95",
+        "unit": "mg/dL",
+        "reference_range": "<100",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "ldl"
+        }
+      },
+      {
+        "test_name": "HDL",
+        "value": "55",
+        "unit": "mg/dL",
+        "reference_range": ">40",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "hdl"
+        }
+      },
+      {
+        "test_name": "Triglycerides",
+        "value": "120",
+        "unit": "mg/dL",
+        "reference_range": "<150",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            190.0,
+            250.0,
+            210.0
+          ],
+          "field_name": "triglycerides"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_006.pdf": "fake-file-lab_006"
+    },
+    "extract_responses": {
+      "fake-file-lab_006": {
+        "results": [
+          {
+            "test_name": "Total Cholesterol",
+            "value": "180",
+            "unit": "mg/dL",
+            "reference_range": "<200",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "total_cholesterol"
+            }
+          },
+          {
+            "test_name": "LDL",
+            "value": "95",
+            "unit": "mg/dL",
+            "reference_range": "<100",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "ldl"
+            }
+          },
+          {
+            "test_name": "HDL",
+            "value": "55",
+            "unit": "mg/dL",
+            "reference_range": ">40",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "hdl"
+            }
+          },
+          {
+            "test_name": "Triglycerides",
+            "value": "120",
+            "unit": "mg/dL",
+            "reference_range": "<150",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                190.0,
+                250.0,
+                210.0
+              ],
+              "field_name": "triglycerides"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

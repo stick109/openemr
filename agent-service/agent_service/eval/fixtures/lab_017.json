@@ -1,0 +1,143 @@
+{
+  "case_id": "lab_017",
+  "doc_type": "lab_pdf",
+  "description": "Urinalysis suggestive of urinary tract infection",
+  "input_file_path": "fixtures/lab_017.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "Leukocyte Esterase",
+        "value": "positive",
+        "unit": "qualitative",
+        "reference_range": "negative",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "abnormal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "leukocyte_esterase"
+        }
+      },
+      {
+        "test_name": "Nitrites",
+        "value": "positive",
+        "unit": "qualitative",
+        "reference_range": "negative",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "abnormal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "nitrites"
+        }
+      },
+      {
+        "test_name": "WBC (urine)",
+        "value": "50",
+        "unit": "/hpf",
+        "reference_range": "0-5",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "wbc_(urine)"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_017.pdf": "fake-file-lab_017"
+    },
+    "extract_responses": {
+      "fake-file-lab_017": {
+        "results": [
+          {
+            "test_name": "Leukocyte Esterase",
+            "value": "positive",
+            "unit": "qualitative",
+            "reference_range": "negative",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "abnormal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "leukocyte_esterase"
+            }
+          },
+          {
+            "test_name": "Nitrites",
+            "value": "positive",
+            "unit": "qualitative",
+            "reference_range": "negative",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "abnormal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "nitrites"
+            }
+          },
+          {
+            "test_name": "WBC (urine)",
+            "value": "50",
+            "unit": "/hpf",
+            "reference_range": "0-5",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "wbc_(urine)"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

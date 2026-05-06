@@ -1,0 +1,117 @@
+{
+  "case_id": "intake_006",
+  "doc_type": "intake_form",
+  "description": "Migraine evaluation",
+  "input_file_path": "fixtures/intake_006.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": "John Patient",
+      "dob": "1980-01-15",
+      "gender": "M",
+      "address": "123 Main St, Springfield, IL 62701",
+      "phone": "555-123-4567",
+      "email": "john.patient@example.com",
+      "insurance_id": "BCBS-99887766"
+    },
+    "chief_concern": "Recurrent migraines, increasing in frequency",
+    "current_medications": [
+      {
+        "name": "Sumatriptan",
+        "dosage": "50 mg",
+        "frequency": "as needed for migraine"
+      }
+    ],
+    "allergies": [],
+    "family_history": [
+      {
+        "relation": "mother",
+        "condition": "migraine"
+      }
+    ],
+    "source_citations": [
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          80.0,
+          250.0,
+          100.0
+        ],
+        "field_name": "demographics"
+      },
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          200.0,
+          250.0,
+          220.0
+        ],
+        "field_name": "chief_concern"
+      }
+    ],
+    "extraction_confidence": 0.92
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_006.pdf": "fake-file-intake_006"
+    },
+    "extract_responses": {
+      "fake-file-intake_006": {
+        "demographics": {
+          "name": "John Patient",
+          "dob": "1980-01-15",
+          "gender": "M",
+          "address": "123 Main St, Springfield, IL 62701",
+          "phone": "555-123-4567",
+          "email": "john.patient@example.com",
+          "insurance_id": "BCBS-99887766"
+        },
+        "chief_concern": "Recurrent migraines, increasing in frequency",
+        "current_medications": [
+          {
+            "name": "Sumatriptan",
+            "dosage": "50 mg",
+            "frequency": "as needed for migraine"
+          }
+        ],
+        "allergies": [],
+        "family_history": [
+          {
+            "relation": "mother",
+            "condition": "migraine"
+          }
+        ],
+        "source_citations": [
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              80.0,
+              250.0,
+              100.0
+            ],
+            "field_name": "demographics"
+          },
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              200.0,
+              250.0,
+              220.0
+            ],
+            "field_name": "chief_concern"
+          }
+        ],
+        "extraction_confidence": 0.92
+      }
+    }
+  }
+}

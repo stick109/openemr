@@ -1,0 +1,215 @@
+{
+  "case_id": "lab_016",
+  "doc_type": "lab_pdf",
+  "description": "Normal urinalysis dipstick",
+  "input_file_path": "fixtures/lab_016.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "Urine pH",
+        "value": "6.0",
+        "unit": "pH units",
+        "reference_range": "4.5-8.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "urine_ph"
+        }
+      },
+      {
+        "test_name": "Urine Protein",
+        "value": "negative",
+        "unit": "qualitative",
+        "reference_range": "negative",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "urine_protein"
+        }
+      },
+      {
+        "test_name": "Urine Glucose",
+        "value": "negative",
+        "unit": "qualitative",
+        "reference_range": "negative",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "urine_glucose"
+        }
+      },
+      {
+        "test_name": "Urine Ketones",
+        "value": "negative",
+        "unit": "qualitative",
+        "reference_range": "negative",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            190.0,
+            250.0,
+            210.0
+          ],
+          "field_name": "urine_ketones"
+        }
+      },
+      {
+        "test_name": "Urine Blood",
+        "value": "negative",
+        "unit": "qualitative",
+        "reference_range": "negative",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            220.0,
+            250.0,
+            240.0
+          ],
+          "field_name": "urine_blood"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_016.pdf": "fake-file-lab_016"
+    },
+    "extract_responses": {
+      "fake-file-lab_016": {
+        "results": [
+          {
+            "test_name": "Urine pH",
+            "value": "6.0",
+            "unit": "pH units",
+            "reference_range": "4.5-8.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "urine_ph"
+            }
+          },
+          {
+            "test_name": "Urine Protein",
+            "value": "negative",
+            "unit": "qualitative",
+            "reference_range": "negative",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "urine_protein"
+            }
+          },
+          {
+            "test_name": "Urine Glucose",
+            "value": "negative",
+            "unit": "qualitative",
+            "reference_range": "negative",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "urine_glucose"
+            }
+          },
+          {
+            "test_name": "Urine Ketones",
+            "value": "negative",
+            "unit": "qualitative",
+            "reference_range": "negative",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                190.0,
+                250.0,
+                210.0
+              ],
+              "field_name": "urine_ketones"
+            }
+          },
+          {
+            "test_name": "Urine Blood",
+            "value": "negative",
+            "unit": "qualitative",
+            "reference_range": "negative",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                220.0,
+                250.0,
+                240.0
+              ],
+              "field_name": "urine_blood"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

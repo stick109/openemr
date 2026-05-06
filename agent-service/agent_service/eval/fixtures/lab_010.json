@@ -1,0 +1,143 @@
+{
+  "case_id": "lab_010",
+  "doc_type": "lab_pdf",
+  "description": "Normal thyroid function panel",
+  "input_file_path": "fixtures/lab_010.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "TSH",
+        "value": "2.1",
+        "unit": "uIU/mL",
+        "reference_range": "0.4-4.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "tsh"
+        }
+      },
+      {
+        "test_name": "Free T4",
+        "value": "1.2",
+        "unit": "ng/dL",
+        "reference_range": "0.8-1.8",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "free_t4"
+        }
+      },
+      {
+        "test_name": "Free T3",
+        "value": "3.0",
+        "unit": "pg/mL",
+        "reference_range": "2.3-4.2",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "free_t3"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_010.pdf": "fake-file-lab_010"
+    },
+    "extract_responses": {
+      "fake-file-lab_010": {
+        "results": [
+          {
+            "test_name": "TSH",
+            "value": "2.1",
+            "unit": "uIU/mL",
+            "reference_range": "0.4-4.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "tsh"
+            }
+          },
+          {
+            "test_name": "Free T4",
+            "value": "1.2",
+            "unit": "ng/dL",
+            "reference_range": "0.8-1.8",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "free_t4"
+            }
+          },
+          {
+            "test_name": "Free T3",
+            "value": "3.0",
+            "unit": "pg/mL",
+            "reference_range": "2.3-4.2",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "free_t3"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

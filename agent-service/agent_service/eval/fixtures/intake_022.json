@@ -1,0 +1,95 @@
+{
+  "case_id": "intake_022",
+  "doc_type": "intake_form",
+  "description": "Minimal-data new patient",
+  "input_file_path": "fixtures/intake_022.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": "Anonymous Patient",
+      "dob": null,
+      "gender": null,
+      "address": null,
+      "phone": null,
+      "email": null,
+      "insurance_id": null
+    },
+    "chief_concern": "Establishing care",
+    "current_medications": [],
+    "allergies": [],
+    "family_history": [],
+    "source_citations": [
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          80.0,
+          250.0,
+          100.0
+        ],
+        "field_name": "demographics"
+      },
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          200.0,
+          250.0,
+          220.0
+        ],
+        "field_name": "chief_concern"
+      }
+    ],
+    "extraction_confidence": 0.65
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_022.pdf": "fake-file-intake_022"
+    },
+    "extract_responses": {
+      "fake-file-intake_022": {
+        "demographics": {
+          "name": "Anonymous Patient",
+          "dob": null,
+          "gender": null,
+          "address": null,
+          "phone": null,
+          "email": null,
+          "insurance_id": null
+        },
+        "chief_concern": "Establishing care",
+        "current_medications": [],
+        "allergies": [],
+        "family_history": [],
+        "source_citations": [
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              80.0,
+              250.0,
+              100.0
+            ],
+            "field_name": "demographics"
+          },
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              200.0,
+              250.0,
+              220.0
+            ],
+            "field_name": "chief_concern"
+          }
+        ],
+        "extraction_confidence": 0.65
+      }
+    }
+  }
+}

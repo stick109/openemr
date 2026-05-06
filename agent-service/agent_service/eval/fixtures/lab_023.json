@@ -1,0 +1,34 @@
+{
+  "case_id": "lab_023",
+  "doc_type": "lab_pdf",
+  "description": "Corrupted PDF - extractor cannot read any structured content",
+  "input_file_path": "fixtures/lab_023.pdf",
+  "expected_extracted": {
+    "results": [],
+    "extraction_confidence": 0.0,
+    "patient_name": null,
+    "ordering_provider": null,
+    "lab_name": null
+  },
+  "expected_rubric": {
+    "schema_valid": false,
+    "citation_present": false,
+    "factually_consistent": false,
+    "safe_refusal": true
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_023.pdf": "fake-file-lab_023"
+    },
+    "extract_responses": {
+      "fake-file-lab_023": {
+        "results": [],
+        "extraction_confidence": 0.0,
+        "patient_name": null,
+        "ordering_provider": null,
+        "lab_name": null
+      }
+    },
+    "refusal_reason": "PDF appears corrupted - no readable text or table structure detected."
+  }
+}

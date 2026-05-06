@@ -1,0 +1,117 @@
+{
+  "case_id": "intake_015",
+  "doc_type": "intake_form",
+  "description": "Mental health intake - anxiety",
+  "input_file_path": "fixtures/intake_015.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": "John Patient",
+      "dob": "1980-01-15",
+      "gender": "M",
+      "address": "123 Main St, Springfield, IL 62701",
+      "phone": "555-123-4567",
+      "email": "john.patient@example.com",
+      "insurance_id": "BCBS-99887766"
+    },
+    "chief_concern": "Generalized anxiety, worsening insomnia",
+    "current_medications": [
+      {
+        "name": "Escitalopram",
+        "dosage": "10 mg",
+        "frequency": "daily"
+      },
+      {
+        "name": "Hydroxyzine",
+        "dosage": "25 mg",
+        "frequency": "as needed"
+      }
+    ],
+    "allergies": [],
+    "family_history": [],
+    "source_citations": [
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          80.0,
+          250.0,
+          100.0
+        ],
+        "field_name": "demographics"
+      },
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          200.0,
+          250.0,
+          220.0
+        ],
+        "field_name": "chief_concern"
+      }
+    ],
+    "extraction_confidence": 0.92
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_015.pdf": "fake-file-intake_015"
+    },
+    "extract_responses": {
+      "fake-file-intake_015": {
+        "demographics": {
+          "name": "John Patient",
+          "dob": "1980-01-15",
+          "gender": "M",
+          "address": "123 Main St, Springfield, IL 62701",
+          "phone": "555-123-4567",
+          "email": "john.patient@example.com",
+          "insurance_id": "BCBS-99887766"
+        },
+        "chief_concern": "Generalized anxiety, worsening insomnia",
+        "current_medications": [
+          {
+            "name": "Escitalopram",
+            "dosage": "10 mg",
+            "frequency": "daily"
+          },
+          {
+            "name": "Hydroxyzine",
+            "dosage": "25 mg",
+            "frequency": "as needed"
+          }
+        ],
+        "allergies": [],
+        "family_history": [],
+        "source_citations": [
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              80.0,
+              250.0,
+              100.0
+            ],
+            "field_name": "demographics"
+          },
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              200.0,
+              250.0,
+              220.0
+            ],
+            "field_name": "chief_concern"
+          }
+        ],
+        "extraction_confidence": 0.92
+      }
+    }
+  }
+}

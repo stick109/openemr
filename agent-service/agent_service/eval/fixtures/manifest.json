@@ -1,0 +1,356 @@
+{
+  "version": 1,
+  "total_cases": 50,
+  "cases": [
+    {
+      "case_id": "lab_001",
+      "doc_type": "lab_pdf",
+      "description": "Normal CBC panel - all values within reference range",
+      "expected_outcome": "success",
+      "fixture_file": "lab_001.json"
+    },
+    {
+      "case_id": "lab_002",
+      "doc_type": "lab_pdf",
+      "description": "CBC with low hemoglobin indicating anemia",
+      "expected_outcome": "success",
+      "fixture_file": "lab_002.json"
+    },
+    {
+      "case_id": "lab_003",
+      "doc_type": "lab_pdf",
+      "description": "CBC with elevated WBC suggesting infection",
+      "expected_outcome": "success",
+      "fixture_file": "lab_003.json"
+    },
+    {
+      "case_id": "lab_004",
+      "doc_type": "lab_pdf",
+      "description": "BMP with critically high potassium - life-threatening",
+      "expected_outcome": "success",
+      "fixture_file": "lab_004.json"
+    },
+    {
+      "case_id": "lab_005",
+      "doc_type": "lab_pdf",
+      "description": "Glucose at critical-low value indicating severe hypoglycemia",
+      "expected_outcome": "success",
+      "fixture_file": "lab_005.json"
+    },
+    {
+      "case_id": "lab_006",
+      "doc_type": "lab_pdf",
+      "description": "Normal lipid panel - cardiovascular risk factors within limits",
+      "expected_outcome": "success",
+      "fixture_file": "lab_006.json"
+    },
+    {
+      "case_id": "lab_007",
+      "doc_type": "lab_pdf",
+      "description": "Lipid panel with elevated LDL and triglycerides",
+      "expected_outcome": "success",
+      "fixture_file": "lab_007.json"
+    },
+    {
+      "case_id": "lab_008",
+      "doc_type": "lab_pdf",
+      "description": "Normal hepatic function panel",
+      "expected_outcome": "success",
+      "fixture_file": "lab_008.json"
+    },
+    {
+      "case_id": "lab_009",
+      "doc_type": "lab_pdf",
+      "description": "Liver panel showing elevated AST/ALT consistent with hepatocellular injury",
+      "expected_outcome": "success",
+      "fixture_file": "lab_009.json"
+    },
+    {
+      "case_id": "lab_010",
+      "doc_type": "lab_pdf",
+      "description": "Normal thyroid function panel",
+      "expected_outcome": "success",
+      "fixture_file": "lab_010.json"
+    },
+    {
+      "case_id": "lab_011",
+      "doc_type": "lab_pdf",
+      "description": "Thyroid panel showing primary hypothyroidism (high TSH, low T4)",
+      "expected_outcome": "success",
+      "fixture_file": "lab_011.json"
+    },
+    {
+      "case_id": "lab_012",
+      "doc_type": "lab_pdf",
+      "description": "Thyroid panel showing hyperthyroidism (suppressed TSH, elevated T4)",
+      "expected_outcome": "success",
+      "fixture_file": "lab_012.json"
+    },
+    {
+      "case_id": "lab_013",
+      "doc_type": "lab_pdf",
+      "description": "HbA1c within normal range",
+      "expected_outcome": "success",
+      "fixture_file": "lab_013.json"
+    },
+    {
+      "case_id": "lab_014",
+      "doc_type": "lab_pdf",
+      "description": "HbA1c in pre-diabetic range",
+      "expected_outcome": "success",
+      "fixture_file": "lab_014.json"
+    },
+    {
+      "case_id": "lab_015",
+      "doc_type": "lab_pdf",
+      "description": "HbA1c consistent with poorly-controlled diabetes",
+      "expected_outcome": "success",
+      "fixture_file": "lab_015.json"
+    },
+    {
+      "case_id": "lab_016",
+      "doc_type": "lab_pdf",
+      "description": "Normal urinalysis dipstick",
+      "expected_outcome": "success",
+      "fixture_file": "lab_016.json"
+    },
+    {
+      "case_id": "lab_017",
+      "doc_type": "lab_pdf",
+      "description": "Urinalysis suggestive of urinary tract infection",
+      "expected_outcome": "success",
+      "fixture_file": "lab_017.json"
+    },
+    {
+      "case_id": "lab_018",
+      "doc_type": "lab_pdf",
+      "description": "Mixed CBC + BMP panel with mild anemia and elevated creatinine",
+      "expected_outcome": "success",
+      "fixture_file": "lab_018.json"
+    },
+    {
+      "case_id": "lab_019",
+      "doc_type": "lab_pdf",
+      "description": "Normal comprehensive metabolic panel (CMP)",
+      "expected_outcome": "success",
+      "fixture_file": "lab_019.json"
+    },
+    {
+      "case_id": "lab_020",
+      "doc_type": "lab_pdf",
+      "description": "Coagulation panel with INR above therapeutic range",
+      "expected_outcome": "success",
+      "fixture_file": "lab_020.json"
+    },
+    {
+      "case_id": "lab_021",
+      "doc_type": "lab_pdf",
+      "description": "Vitamin D deficiency",
+      "expected_outcome": "success",
+      "fixture_file": "lab_021.json"
+    },
+    {
+      "case_id": "lab_022",
+      "doc_type": "lab_pdf",
+      "description": "Iron studies consistent with iron-deficiency anemia",
+      "expected_outcome": "success",
+      "fixture_file": "lab_022.json"
+    },
+    {
+      "case_id": "lab_023",
+      "doc_type": "lab_pdf",
+      "description": "Corrupted PDF - extractor cannot read any structured content",
+      "expected_outcome": "refusal",
+      "fixture_file": "lab_023.json"
+    },
+    {
+      "case_id": "lab_024",
+      "doc_type": "lab_pdf",
+      "description": "Blank lab requisition - no result values populated",
+      "expected_outcome": "refusal",
+      "fixture_file": "lab_024.json"
+    },
+    {
+      "case_id": "lab_025",
+      "doc_type": "lab_pdf",
+      "description": "Document missing required fields (no reference ranges, no units)",
+      "expected_outcome": "refusal",
+      "fixture_file": "lab_025.json"
+    },
+    {
+      "case_id": "intake_001",
+      "doc_type": "intake_form",
+      "description": "Annual physical, no chronic conditions",
+      "expected_outcome": "success",
+      "fixture_file": "intake_001.json"
+    },
+    {
+      "case_id": "intake_002",
+      "doc_type": "intake_form",
+      "description": "Hypertension follow-up",
+      "expected_outcome": "success",
+      "fixture_file": "intake_002.json"
+    },
+    {
+      "case_id": "intake_003",
+      "doc_type": "intake_form",
+      "description": "Type 2 diabetes management",
+      "expected_outcome": "success",
+      "fixture_file": "intake_003.json"
+    },
+    {
+      "case_id": "intake_004",
+      "doc_type": "intake_form",
+      "description": "Asthma exacerbation",
+      "expected_outcome": "success",
+      "fixture_file": "intake_004.json"
+    },
+    {
+      "case_id": "intake_005",
+      "doc_type": "intake_form",
+      "description": "Acute lower-back pain",
+      "expected_outcome": "success",
+      "fixture_file": "intake_005.json"
+    },
+    {
+      "case_id": "intake_006",
+      "doc_type": "intake_form",
+      "description": "Migraine evaluation",
+      "expected_outcome": "success",
+      "fixture_file": "intake_006.json"
+    },
+    {
+      "case_id": "intake_007",
+      "doc_type": "intake_form",
+      "description": "Penicillin allergy with severe reaction",
+      "expected_outcome": "success",
+      "fixture_file": "intake_007.json"
+    },
+    {
+      "case_id": "intake_008",
+      "doc_type": "intake_form",
+      "description": "Multi-allergy patient",
+      "expected_outcome": "success",
+      "fixture_file": "intake_008.json"
+    },
+    {
+      "case_id": "intake_009",
+      "doc_type": "intake_form",
+      "description": "Family history of breast cancer",
+      "expected_outcome": "success",
+      "fixture_file": "intake_009.json"
+    },
+    {
+      "case_id": "intake_010",
+      "doc_type": "intake_form",
+      "description": "Cardiac risk assessment",
+      "expected_outcome": "success",
+      "fixture_file": "intake_010.json"
+    },
+    {
+      "case_id": "intake_011",
+      "doc_type": "intake_form",
+      "description": "Pregnancy intake - first prenatal visit",
+      "expected_outcome": "success",
+      "fixture_file": "intake_011.json"
+    },
+    {
+      "case_id": "intake_012",
+      "doc_type": "intake_form",
+      "description": "Pediatric well-child visit",
+      "expected_outcome": "success",
+      "fixture_file": "intake_012.json"
+    },
+    {
+      "case_id": "intake_013",
+      "doc_type": "intake_form",
+      "description": "Geriatric polypharmacy review",
+      "expected_outcome": "success",
+      "fixture_file": "intake_013.json"
+    },
+    {
+      "case_id": "intake_014",
+      "doc_type": "intake_form",
+      "description": "Mental health intake - depression",
+      "expected_outcome": "success",
+      "fixture_file": "intake_014.json"
+    },
+    {
+      "case_id": "intake_015",
+      "doc_type": "intake_form",
+      "description": "Mental health intake - anxiety",
+      "expected_outcome": "success",
+      "fixture_file": "intake_015.json"
+    },
+    {
+      "case_id": "intake_016",
+      "doc_type": "intake_form",
+      "description": "Sports injury - knee pain",
+      "expected_outcome": "success",
+      "fixture_file": "intake_016.json"
+    },
+    {
+      "case_id": "intake_017",
+      "doc_type": "intake_form",
+      "description": "Dermatology - rash evaluation",
+      "expected_outcome": "success",
+      "fixture_file": "intake_017.json"
+    },
+    {
+      "case_id": "intake_018",
+      "doc_type": "intake_form",
+      "description": "GI complaint - heartburn",
+      "expected_outcome": "success",
+      "fixture_file": "intake_018.json"
+    },
+    {
+      "case_id": "intake_019",
+      "doc_type": "intake_form",
+      "description": "Autoimmune - rheumatoid arthritis follow-up",
+      "expected_outcome": "success",
+      "fixture_file": "intake_019.json"
+    },
+    {
+      "case_id": "intake_020",
+      "doc_type": "intake_form",
+      "description": "COPD exacerbation",
+      "expected_outcome": "success",
+      "fixture_file": "intake_020.json"
+    },
+    {
+      "case_id": "intake_021",
+      "doc_type": "intake_form",
+      "description": "Travel medicine consult",
+      "expected_outcome": "success",
+      "fixture_file": "intake_021.json"
+    },
+    {
+      "case_id": "intake_022",
+      "doc_type": "intake_form",
+      "description": "Minimal-data new patient",
+      "expected_outcome": "success",
+      "fixture_file": "intake_022.json"
+    },
+    {
+      "case_id": "intake_023",
+      "doc_type": "intake_form",
+      "description": "Corrupted intake form PDF - unreadable",
+      "expected_outcome": "refusal",
+      "fixture_file": "intake_023.json"
+    },
+    {
+      "case_id": "intake_024",
+      "doc_type": "intake_form",
+      "description": "Blank intake form - no fields filled in",
+      "expected_outcome": "refusal",
+      "fixture_file": "intake_024.json"
+    },
+    {
+      "case_id": "intake_025",
+      "doc_type": "intake_form",
+      "description": "Intake form missing chief concern (required field)",
+      "expected_outcome": "refusal",
+      "fixture_file": "intake_025.json"
+    }
+  ]
+}

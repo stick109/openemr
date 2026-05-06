@@ -1,0 +1,251 @@
+{
+  "case_id": "lab_018",
+  "doc_type": "lab_pdf",
+  "description": "Mixed CBC + BMP panel with mild anemia and elevated creatinine",
+  "input_file_path": "fixtures/lab_018.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "WBC",
+        "value": "9.0",
+        "unit": "x10^3/uL",
+        "reference_range": "4.0-11.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "wbc"
+        }
+      },
+      {
+        "test_name": "Hemoglobin",
+        "value": "11.5",
+        "unit": "g/dL",
+        "reference_range": "12.0-16.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "low",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "hemoglobin"
+        }
+      },
+      {
+        "test_name": "Platelets",
+        "value": "180",
+        "unit": "x10^3/uL",
+        "reference_range": "150-400",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "platelets"
+        }
+      },
+      {
+        "test_name": "Sodium",
+        "value": "142",
+        "unit": "mmol/L",
+        "reference_range": "135-145",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 2,
+          "bbox": [
+            50.0,
+            80.0,
+            250.0,
+            100.0
+          ],
+          "field_name": "sodium"
+        }
+      },
+      {
+        "test_name": "Potassium",
+        "value": "4.2",
+        "unit": "mmol/L",
+        "reference_range": "3.5-5.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 2,
+          "bbox": [
+            50.0,
+            110.0,
+            250.0,
+            130.0
+          ],
+          "field_name": "potassium"
+        }
+      },
+      {
+        "test_name": "Creatinine",
+        "value": "1.5",
+        "unit": "mg/dL",
+        "reference_range": "0.6-1.2",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 2,
+          "bbox": [
+            50.0,
+            140.0,
+            250.0,
+            160.0
+          ],
+          "field_name": "creatinine"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_018.pdf": "fake-file-lab_018"
+    },
+    "extract_responses": {
+      "fake-file-lab_018": {
+        "results": [
+          {
+            "test_name": "WBC",
+            "value": "9.0",
+            "unit": "x10^3/uL",
+            "reference_range": "4.0-11.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "wbc"
+            }
+          },
+          {
+            "test_name": "Hemoglobin",
+            "value": "11.5",
+            "unit": "g/dL",
+            "reference_range": "12.0-16.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "low",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "hemoglobin"
+            }
+          },
+          {
+            "test_name": "Platelets",
+            "value": "180",
+            "unit": "x10^3/uL",
+            "reference_range": "150-400",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "platelets"
+            }
+          },
+          {
+            "test_name": "Sodium",
+            "value": "142",
+            "unit": "mmol/L",
+            "reference_range": "135-145",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 2,
+              "bbox": [
+                50.0,
+                80.0,
+                250.0,
+                100.0
+              ],
+              "field_name": "sodium"
+            }
+          },
+          {
+            "test_name": "Potassium",
+            "value": "4.2",
+            "unit": "mmol/L",
+            "reference_range": "3.5-5.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 2,
+              "bbox": [
+                50.0,
+                110.0,
+                250.0,
+                130.0
+              ],
+              "field_name": "potassium"
+            }
+          },
+          {
+            "test_name": "Creatinine",
+            "value": "1.5",
+            "unit": "mg/dL",
+            "reference_range": "0.6-1.2",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 2,
+              "bbox": [
+                50.0,
+                140.0,
+                250.0,
+                160.0
+              ],
+              "field_name": "creatinine"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

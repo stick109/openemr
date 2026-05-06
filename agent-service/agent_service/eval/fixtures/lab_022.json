@@ -1,0 +1,179 @@
+{
+  "case_id": "lab_022",
+  "doc_type": "lab_pdf",
+  "description": "Iron studies consistent with iron-deficiency anemia",
+  "input_file_path": "fixtures/lab_022.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "Serum Iron",
+        "value": "22",
+        "unit": "ug/dL",
+        "reference_range": "50-170",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "low",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "serum_iron"
+        }
+      },
+      {
+        "test_name": "TIBC",
+        "value": "450",
+        "unit": "ug/dL",
+        "reference_range": "240-450",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "tibc"
+        }
+      },
+      {
+        "test_name": "Ferritin",
+        "value": "8",
+        "unit": "ng/mL",
+        "reference_range": "20-250",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "low",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "ferritin"
+        }
+      },
+      {
+        "test_name": "Transferrin Saturation",
+        "value": "5",
+        "unit": "%",
+        "reference_range": "20-50",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "low",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            190.0,
+            250.0,
+            210.0
+          ],
+          "field_name": "transferrin_saturation"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_022.pdf": "fake-file-lab_022"
+    },
+    "extract_responses": {
+      "fake-file-lab_022": {
+        "results": [
+          {
+            "test_name": "Serum Iron",
+            "value": "22",
+            "unit": "ug/dL",
+            "reference_range": "50-170",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "low",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "serum_iron"
+            }
+          },
+          {
+            "test_name": "TIBC",
+            "value": "450",
+            "unit": "ug/dL",
+            "reference_range": "240-450",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "tibc"
+            }
+          },
+          {
+            "test_name": "Ferritin",
+            "value": "8",
+            "unit": "ng/mL",
+            "reference_range": "20-250",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "low",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "ferritin"
+            }
+          },
+          {
+            "test_name": "Transferrin Saturation",
+            "value": "5",
+            "unit": "%",
+            "reference_range": "20-50",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "low",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                190.0,
+                250.0,
+                210.0
+              ],
+              "field_name": "transferrin_saturation"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "case_id": "lab_025",
+  "doc_type": "lab_pdf",
+  "description": "Document missing required fields (no reference ranges, no units)",
+  "input_file_path": "fixtures/lab_025.pdf",
+  "expected_extracted": {
+    "results": [],
+    "extraction_confidence": 0.0,
+    "patient_name": null,
+    "ordering_provider": null,
+    "lab_name": null
+  },
+  "expected_rubric": {
+    "schema_valid": false,
+    "citation_present": false,
+    "factually_consistent": false,
+    "safe_refusal": true
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_025.pdf": "fake-file-lab_025"
+    },
+    "extract_responses": {
+      "fake-file-lab_025": {
+        "results": [],
+        "extraction_confidence": 0.0,
+        "patient_name": null,
+        "ordering_provider": null,
+        "lab_name": null
+      }
+    },
+    "refusal_reason": "Lab values present but reference ranges and units are missing - extraction unsafe."
+  }
+}

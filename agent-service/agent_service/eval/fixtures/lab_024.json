@@ -1,0 +1,34 @@
+{
+  "case_id": "lab_024",
+  "doc_type": "lab_pdf",
+  "description": "Blank lab requisition - no result values populated",
+  "input_file_path": "fixtures/lab_024.pdf",
+  "expected_extracted": {
+    "results": [],
+    "extraction_confidence": 0.0,
+    "patient_name": null,
+    "ordering_provider": null,
+    "lab_name": null
+  },
+  "expected_rubric": {
+    "schema_valid": false,
+    "citation_present": false,
+    "factually_consistent": false,
+    "safe_refusal": true
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_024.pdf": "fake-file-lab_024"
+    },
+    "extract_responses": {
+      "fake-file-lab_024": {
+        "results": [],
+        "extraction_confidence": 0.0,
+        "patient_name": null,
+        "ordering_provider": null,
+        "lab_name": null
+      }
+    },
+    "refusal_reason": "Document is a blank lab requisition with no result values to extract."
+  }
+}

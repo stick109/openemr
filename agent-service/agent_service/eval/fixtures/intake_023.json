@@ -1,0 +1,54 @@
+{
+  "case_id": "intake_023",
+  "doc_type": "intake_form",
+  "description": "Corrupted intake form PDF - unreadable",
+  "input_file_path": "fixtures/intake_023.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": null,
+      "dob": null,
+      "gender": null,
+      "address": null,
+      "phone": null,
+      "email": null,
+      "insurance_id": null
+    },
+    "chief_concern": "",
+    "current_medications": [],
+    "allergies": [],
+    "family_history": [],
+    "source_citations": [],
+    "extraction_confidence": 0.0
+  },
+  "expected_rubric": {
+    "schema_valid": false,
+    "citation_present": false,
+    "factually_consistent": false,
+    "safe_refusal": true
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_023.pdf": "fake-file-intake_023"
+    },
+    "extract_responses": {
+      "fake-file-intake_023": {
+        "demographics": {
+          "name": null,
+          "dob": null,
+          "gender": null,
+          "address": null,
+          "phone": null,
+          "email": null,
+          "insurance_id": null
+        },
+        "chief_concern": "",
+        "current_medications": [],
+        "allergies": [],
+        "family_history": [],
+        "source_citations": [],
+        "extraction_confidence": 0.0
+      }
+    },
+    "refusal_reason": "Intake form PDF is corrupted; no demographic or clinical fields recoverable."
+  }
+}

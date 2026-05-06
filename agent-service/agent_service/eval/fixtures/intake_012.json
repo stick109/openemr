@@ -1,0 +1,117 @@
+{
+  "case_id": "intake_012",
+  "doc_type": "intake_form",
+  "description": "Pediatric well-child visit",
+  "input_file_path": "fixtures/intake_012.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": "Lily Smith",
+      "dob": "2019-04-22",
+      "gender": "F",
+      "address": "456 Oak Ave, Madison, WI 53703",
+      "phone": "555-987-6543",
+      "email": null,
+      "insurance_id": "AETNA-44332211"
+    },
+    "chief_concern": "6-year-old well-child check and immunizations",
+    "current_medications": [],
+    "allergies": [
+      {
+        "allergen": "Eggs",
+        "reaction": "hives",
+        "severity": "mild"
+      }
+    ],
+    "family_history": [
+      {
+        "relation": "father",
+        "condition": "eczema"
+      }
+    ],
+    "source_citations": [
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          80.0,
+          250.0,
+          100.0
+        ],
+        "field_name": "demographics"
+      },
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          200.0,
+          250.0,
+          220.0
+        ],
+        "field_name": "chief_concern"
+      }
+    ],
+    "extraction_confidence": 0.92
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_012.pdf": "fake-file-intake_012"
+    },
+    "extract_responses": {
+      "fake-file-intake_012": {
+        "demographics": {
+          "name": "Lily Smith",
+          "dob": "2019-04-22",
+          "gender": "F",
+          "address": "456 Oak Ave, Madison, WI 53703",
+          "phone": "555-987-6543",
+          "email": null,
+          "insurance_id": "AETNA-44332211"
+        },
+        "chief_concern": "6-year-old well-child check and immunizations",
+        "current_medications": [],
+        "allergies": [
+          {
+            "allergen": "Eggs",
+            "reaction": "hives",
+            "severity": "mild"
+          }
+        ],
+        "family_history": [
+          {
+            "relation": "father",
+            "condition": "eczema"
+          }
+        ],
+        "source_citations": [
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              80.0,
+              250.0,
+              100.0
+            ],
+            "field_name": "demographics"
+          },
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              200.0,
+              250.0,
+              220.0
+            ],
+            "field_name": "chief_concern"
+          }
+        ],
+        "extraction_confidence": 0.92
+      }
+    }
+  }
+}

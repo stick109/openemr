@@ -1,0 +1,71 @@
+{
+  "case_id": "lab_021",
+  "doc_type": "lab_pdf",
+  "description": "Vitamin D deficiency",
+  "input_file_path": "fixtures/lab_021.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "25-OH Vitamin D",
+        "value": "14",
+        "unit": "ng/mL",
+        "reference_range": "30-100",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "low",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "25-oh_vitamin_d"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_021.pdf": "fake-file-lab_021"
+    },
+    "extract_responses": {
+      "fake-file-lab_021": {
+        "results": [
+          {
+            "test_name": "25-OH Vitamin D",
+            "value": "14",
+            "unit": "ng/mL",
+            "reference_range": "30-100",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "low",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "25-oh_vitamin_d"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

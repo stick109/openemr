@@ -1,0 +1,179 @@
+{
+  "case_id": "lab_009",
+  "doc_type": "lab_pdf",
+  "description": "Liver panel showing elevated AST/ALT consistent with hepatocellular injury",
+  "input_file_path": "fixtures/lab_009.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "AST",
+        "value": "180",
+        "unit": "U/L",
+        "reference_range": "10-40",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "ast"
+        }
+      },
+      {
+        "test_name": "ALT",
+        "value": "220",
+        "unit": "U/L",
+        "reference_range": "7-56",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "alt"
+        }
+      },
+      {
+        "test_name": "Alkaline Phosphatase",
+        "value": "160",
+        "unit": "U/L",
+        "reference_range": "44-147",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "alkaline_phosphatase"
+        }
+      },
+      {
+        "test_name": "Total Bilirubin",
+        "value": "2.4",
+        "unit": "mg/dL",
+        "reference_range": "0.1-1.2",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "high",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            190.0,
+            250.0,
+            210.0
+          ],
+          "field_name": "total_bilirubin"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_009.pdf": "fake-file-lab_009"
+    },
+    "extract_responses": {
+      "fake-file-lab_009": {
+        "results": [
+          {
+            "test_name": "AST",
+            "value": "180",
+            "unit": "U/L",
+            "reference_range": "10-40",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "ast"
+            }
+          },
+          {
+            "test_name": "ALT",
+            "value": "220",
+            "unit": "U/L",
+            "reference_range": "7-56",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "alt"
+            }
+          },
+          {
+            "test_name": "Alkaline Phosphatase",
+            "value": "160",
+            "unit": "U/L",
+            "reference_range": "44-147",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "alkaline_phosphatase"
+            }
+          },
+          {
+            "test_name": "Total Bilirubin",
+            "value": "2.4",
+            "unit": "mg/dL",
+            "reference_range": "0.1-1.2",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "high",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                190.0,
+                250.0,
+                210.0
+              ],
+              "field_name": "total_bilirubin"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

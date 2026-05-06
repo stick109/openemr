@@ -1,0 +1,395 @@
+{
+  "case_id": "lab_019",
+  "doc_type": "lab_pdf",
+  "description": "Normal comprehensive metabolic panel (CMP)",
+  "input_file_path": "fixtures/lab_019.pdf",
+  "expected_extracted": {
+    "results": [
+      {
+        "test_name": "Sodium",
+        "value": "140",
+        "unit": "mmol/L",
+        "reference_range": "135-145",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            100.0,
+            250.0,
+            120.0
+          ],
+          "field_name": "sodium"
+        }
+      },
+      {
+        "test_name": "Potassium",
+        "value": "4.0",
+        "unit": "mmol/L",
+        "reference_range": "3.5-5.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            130.0,
+            250.0,
+            150.0
+          ],
+          "field_name": "potassium"
+        }
+      },
+      {
+        "test_name": "Chloride",
+        "value": "104",
+        "unit": "mmol/L",
+        "reference_range": "98-107",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            160.0,
+            250.0,
+            180.0
+          ],
+          "field_name": "chloride"
+        }
+      },
+      {
+        "test_name": "CO2",
+        "value": "26",
+        "unit": "mmol/L",
+        "reference_range": "22-29",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            190.0,
+            250.0,
+            210.0
+          ],
+          "field_name": "co2"
+        }
+      },
+      {
+        "test_name": "Glucose",
+        "value": "88",
+        "unit": "mg/dL",
+        "reference_range": "70-100",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            220.0,
+            250.0,
+            240.0
+          ],
+          "field_name": "glucose"
+        }
+      },
+      {
+        "test_name": "BUN",
+        "value": "12",
+        "unit": "mg/dL",
+        "reference_range": "7-20",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            250.0,
+            250.0,
+            270.0
+          ],
+          "field_name": "bun"
+        }
+      },
+      {
+        "test_name": "Creatinine",
+        "value": "0.9",
+        "unit": "mg/dL",
+        "reference_range": "0.6-1.2",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            280.0,
+            250.0,
+            300.0
+          ],
+          "field_name": "creatinine"
+        }
+      },
+      {
+        "test_name": "Calcium",
+        "value": "9.5",
+        "unit": "mg/dL",
+        "reference_range": "8.5-10.5",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            310.0,
+            250.0,
+            330.0
+          ],
+          "field_name": "calcium"
+        }
+      },
+      {
+        "test_name": "Albumin",
+        "value": "4.4",
+        "unit": "g/dL",
+        "reference_range": "3.5-5.0",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            340.0,
+            250.0,
+            360.0
+          ],
+          "field_name": "albumin"
+        }
+      },
+      {
+        "test_name": "Total Protein",
+        "value": "7.0",
+        "unit": "g/dL",
+        "reference_range": "6.0-8.3",
+        "collection_date": "2025-09-15",
+        "abnormal_flag": "normal",
+        "source_citation": {
+          "page": 1,
+          "bbox": [
+            50.0,
+            370.0,
+            250.0,
+            390.0
+          ],
+          "field_name": "total_protein"
+        }
+      }
+    ],
+    "extraction_confidence": 0.95,
+    "patient_name": "Jane Doe",
+    "ordering_provider": "Dr. Alice Roberts",
+    "lab_name": "QuestDiagnostics"
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/lab_019.pdf": "fake-file-lab_019"
+    },
+    "extract_responses": {
+      "fake-file-lab_019": {
+        "results": [
+          {
+            "test_name": "Sodium",
+            "value": "140",
+            "unit": "mmol/L",
+            "reference_range": "135-145",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                100.0,
+                250.0,
+                120.0
+              ],
+              "field_name": "sodium"
+            }
+          },
+          {
+            "test_name": "Potassium",
+            "value": "4.0",
+            "unit": "mmol/L",
+            "reference_range": "3.5-5.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                130.0,
+                250.0,
+                150.0
+              ],
+              "field_name": "potassium"
+            }
+          },
+          {
+            "test_name": "Chloride",
+            "value": "104",
+            "unit": "mmol/L",
+            "reference_range": "98-107",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                160.0,
+                250.0,
+                180.0
+              ],
+              "field_name": "chloride"
+            }
+          },
+          {
+            "test_name": "CO2",
+            "value": "26",
+            "unit": "mmol/L",
+            "reference_range": "22-29",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                190.0,
+                250.0,
+                210.0
+              ],
+              "field_name": "co2"
+            }
+          },
+          {
+            "test_name": "Glucose",
+            "value": "88",
+            "unit": "mg/dL",
+            "reference_range": "70-100",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                220.0,
+                250.0,
+                240.0
+              ],
+              "field_name": "glucose"
+            }
+          },
+          {
+            "test_name": "BUN",
+            "value": "12",
+            "unit": "mg/dL",
+            "reference_range": "7-20",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                250.0,
+                250.0,
+                270.0
+              ],
+              "field_name": "bun"
+            }
+          },
+          {
+            "test_name": "Creatinine",
+            "value": "0.9",
+            "unit": "mg/dL",
+            "reference_range": "0.6-1.2",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                280.0,
+                250.0,
+                300.0
+              ],
+              "field_name": "creatinine"
+            }
+          },
+          {
+            "test_name": "Calcium",
+            "value": "9.5",
+            "unit": "mg/dL",
+            "reference_range": "8.5-10.5",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                310.0,
+                250.0,
+                330.0
+              ],
+              "field_name": "calcium"
+            }
+          },
+          {
+            "test_name": "Albumin",
+            "value": "4.4",
+            "unit": "g/dL",
+            "reference_range": "3.5-5.0",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                340.0,
+                250.0,
+                360.0
+              ],
+              "field_name": "albumin"
+            }
+          },
+          {
+            "test_name": "Total Protein",
+            "value": "7.0",
+            "unit": "g/dL",
+            "reference_range": "6.0-8.3",
+            "collection_date": "2025-09-15",
+            "abnormal_flag": "normal",
+            "source_citation": {
+              "page": 1,
+              "bbox": [
+                50.0,
+                370.0,
+                250.0,
+                390.0
+              ],
+              "field_name": "total_protein"
+            }
+          }
+        ],
+        "extraction_confidence": 0.95,
+        "patient_name": "Jane Doe",
+        "ordering_provider": "Dr. Alice Roberts",
+        "lab_name": "QuestDiagnostics"
+      }
+    }
+  }
+}

@@ -1,0 +1,139 @@
+{
+  "case_id": "intake_004",
+  "doc_type": "intake_form",
+  "description": "Asthma exacerbation",
+  "input_file_path": "fixtures/intake_004.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": "John Patient",
+      "dob": "1980-01-15",
+      "gender": "M",
+      "address": "123 Main St, Springfield, IL 62701",
+      "phone": "555-123-4567",
+      "email": "john.patient@example.com",
+      "insurance_id": "BCBS-99887766"
+    },
+    "chief_concern": "Worsening shortness of breath and wheezing for 3 days",
+    "current_medications": [
+      {
+        "name": "Albuterol",
+        "dosage": "90 mcg",
+        "frequency": "as needed"
+      },
+      {
+        "name": "Fluticasone",
+        "dosage": "110 mcg",
+        "frequency": "twice daily"
+      }
+    ],
+    "allergies": [
+      {
+        "allergen": "Pollen",
+        "reaction": "rhinitis",
+        "severity": "moderate"
+      }
+    ],
+    "family_history": [
+      {
+        "relation": "sister",
+        "condition": "asthma"
+      }
+    ],
+    "source_citations": [
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          80.0,
+          250.0,
+          100.0
+        ],
+        "field_name": "demographics"
+      },
+      {
+        "page": 1,
+        "bbox": [
+          50.0,
+          200.0,
+          250.0,
+          220.0
+        ],
+        "field_name": "chief_concern"
+      }
+    ],
+    "extraction_confidence": 0.92
+  },
+  "expected_rubric": {
+    "schema_valid": true,
+    "citation_present": true,
+    "factually_consistent": true,
+    "safe_refusal": false
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_004.pdf": "fake-file-intake_004"
+    },
+    "extract_responses": {
+      "fake-file-intake_004": {
+        "demographics": {
+          "name": "John Patient",
+          "dob": "1980-01-15",
+          "gender": "M",
+          "address": "123 Main St, Springfield, IL 62701",
+          "phone": "555-123-4567",
+          "email": "john.patient@example.com",
+          "insurance_id": "BCBS-99887766"
+        },
+        "chief_concern": "Worsening shortness of breath and wheezing for 3 days",
+        "current_medications": [
+          {
+            "name": "Albuterol",
+            "dosage": "90 mcg",
+            "frequency": "as needed"
+          },
+          {
+            "name": "Fluticasone",
+            "dosage": "110 mcg",
+            "frequency": "twice daily"
+          }
+        ],
+        "allergies": [
+          {
+            "allergen": "Pollen",
+            "reaction": "rhinitis",
+            "severity": "moderate"
+          }
+        ],
+        "family_history": [
+          {
+            "relation": "sister",
+            "condition": "asthma"
+          }
+        ],
+        "source_citations": [
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              80.0,
+              250.0,
+              100.0
+            ],
+            "field_name": "demographics"
+          },
+          {
+            "page": 1,
+            "bbox": [
+              50.0,
+              200.0,
+              250.0,
+              220.0
+            ],
+            "field_name": "chief_concern"
+          }
+        ],
+        "extraction_confidence": 0.92
+      }
+    }
+  }
+}

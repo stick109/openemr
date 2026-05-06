@@ -1,0 +1,54 @@
+{
+  "case_id": "intake_025",
+  "doc_type": "intake_form",
+  "description": "Intake form missing chief concern (required field)",
+  "input_file_path": "fixtures/intake_025.pdf",
+  "expected_extracted": {
+    "demographics": {
+      "name": null,
+      "dob": null,
+      "gender": null,
+      "address": null,
+      "phone": null,
+      "email": null,
+      "insurance_id": null
+    },
+    "chief_concern": "",
+    "current_medications": [],
+    "allergies": [],
+    "family_history": [],
+    "source_citations": [],
+    "extraction_confidence": 0.0
+  },
+  "expected_rubric": {
+    "schema_valid": false,
+    "citation_present": false,
+    "factually_consistent": false,
+    "safe_refusal": true
+  },
+  "recorded_openai_response": {
+    "upload_responses": {
+      "fixtures/intake_025.pdf": "fake-file-intake_025"
+    },
+    "extract_responses": {
+      "fake-file-intake_025": {
+        "demographics": {
+          "name": null,
+          "dob": null,
+          "gender": null,
+          "address": null,
+          "phone": null,
+          "email": null,
+          "insurance_id": null
+        },
+        "chief_concern": "",
+        "current_medications": [],
+        "allergies": [],
+        "family_history": [],
+        "source_citations": [],
+        "extraction_confidence": 0.0
+      }
+    },
+    "refusal_reason": "Required chief_concern field is absent from the form; cannot infer safely."
+  }
+}

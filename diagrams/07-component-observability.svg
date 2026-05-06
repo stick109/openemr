@@ -18,8 +18,8 @@
   <rect x="60.0" y="790.0" width="1360.0" height="120.0" rx="6" fill="#fffbeb" stroke="#d97706" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="68.0" y="827.2" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Cost computation</text>
   <text x="68.0" y="844.6" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">cost_usd = sum_over_calls( tokens_in × prompt_rate[model] + tokens_out × completion_rate[model] ) + retrieval_hits × rerank_rate.</text>
-  <text x="68.0" y="862.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Rates live in agent_service/cost_table.py and are versioned with the source. The dev cost report aggregates</text>
-  <text x="68.0" y="879.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">cost_log entries by day and by call site for the §4.17 deliverable.</text>
+  <text x="68.0" y="862.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Rates live in agent_service/cost_table.py and are versioned with the source. The Week 2 cost report aggregates</text>
+  <text x="68.0" y="879.4" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">OpenEMR DB observability records by day and by call site for the §4.17 deliverable.</text>
   <rect x="500.0" y="100.0" width="500.0" height="280.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="508.0" y="205.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">PHI redactor — runs BEFORE export</text>
   <text x="508.0" y="224.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">1. Pydantic 'Sanitized' view drops fields not on allowlist</text>
@@ -47,21 +47,21 @@
   <text x="1048.0" y="281.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">trace_id, model, doc_type_kind, latency_ms,</text>
   <text x="1048.0" y="300.1" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">tokens_in/out, cost_usd, retrieval_hits, eval_outcome</text>
   <rect x="500.0" y="450.0" width="500.0" height="160.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="508.0" y="505.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Local SQLite — agent-service/observability.db</text>
-  <text x="508.0" y="524.1" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">tables: cost_log, eval_run, refusal_audit</text>
-  <text x="508.0" y="543.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Used for the cost-and-latency report (§4.17)</text>
-  <text x="508.0" y="561.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Never copied to SaaS; lives only in the dev/render container</text>
+  <text x="508.0" y="505.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Existing OpenEMR MariaDB/MySQL</text>
+  <text x="508.0" y="524.1" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">tables: token_log, cost_log, latency_log, eval_run, refusal_audit</text>
+  <text x="508.0" y="543.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Durable records for the cost-and-latency report (§4.17)</text>
+  <text x="508.0" y="561.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Lives in the Railway project; never copied to SaaS</text>
   <rect x="1040.0" y="450.0" width="380.0" height="160.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="1230.0" y="495.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Honeycomb (free tier)</text>
-  <text x="1230.0" y="514.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Stores SAFE attributes only</text>
-  <text x="1230.0" y="533.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Dashboards: latency p50/p95, cost/run,</text>
-  <text x="1230.0" y="552.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">rubric pass-rate, refusal rate</text>
+  <text x="1230.0" y="514.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Sanitized demo traces/spans only</text>
+  <text x="1230.0" y="533.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Dashboards from SAFE attributes</text>
+  <text x="1230.0" y="552.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">No raw PHI; no durable records</text>
   <text x="1230.0" y="571.3" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Per-trace inspector for hand-off review</text>
   <rect x="60.0" y="450.0" width="380.0" height="160.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="250.0" y="514.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenEMR audit log</text>
   <text x="250.0" y="533.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">trace_id mirrored into the existing audit table</text>
   <text x="250.0" y="552.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Lets a clinician re-find a Honeycomb trace from inside the chart</text>
-  <text x="740.0" y="44.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="bold" fill="#0f172a">Observability — encounter event, PHI redactor, OTel → Honeycomb, local cost/eval store</text>
+  <text x="740.0" y="44.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="bold" fill="#0f172a">Observability — encounter event, PHI redactor, Honeycomb demo traces, OpenEMR DB records</text>
   <line x1="250.0" y1="240.0" x2="750.0" y2="240.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
   <text x="500.0" y="233.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#475569">raw event</text>
   <line x1="750.0" y1="240.0" x2="1230.0" y2="240.0" stroke="#475569" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ad)"/>
@@ -69,7 +69,7 @@
   <line x1="1230.0" y1="240.0" x2="1230.0" y2="530.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ar)"/>
   <text x="1230.0" y="378.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">OTLP export</text>
   <line x1="250.0" y1="240.0" x2="750.0" y2="530.0" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ab)"/>
-  <text x="500.0" y="378.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0284c7">cost + eval rows</text>
+  <text x="500.0" y="378.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0284c7">durable metric rows</text>
   <line x1="250.0" y1="240.0" x2="250.0" y2="530.0" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ab)"/>
   <text x="250.0" y="378.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0284c7">trace_id only</text>
 </svg>

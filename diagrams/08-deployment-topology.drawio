@@ -4,28 +4,28 @@
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="title" value="Deployment Topology — what graders hit, what runs locally, what is SaaS" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
+        <mxCell id="title" value="Deployment Topology — Railway submission, existing DB, sanitized SaaS egress" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontColor=#0f172a;" vertex="1" parent="1">
           <mxGeometry x="40" y="20" width="1400" height="36" as="geometry" />
         </mxCell>
-        <mxCell id="grader" value="Grader (browser)&#xa;Public URL → demo&#xa;App URL · agent URL · README" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=14;align=center;fontStyle=1;" vertex="1" parent="1">
+        <mxCell id="grader" value="Grader (browser)&#xa;Railway public URL → demo&#xa;README + GitLab/GitHub repo" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=14;align=center;fontStyle=1;" vertex="1" parent="1">
           <mxGeometry x="60" y="100" width="280" height="100" as="geometry" />
         </mxCell>
-        <mxCell id="boundaryHost" value="Developer host (Windows / Docker Desktop)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0284c7;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#0c4a6e;" vertex="1" parent="1">
+        <mxCell id="boundaryHost" value="Railway project (submitted deployed app)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#0284c7;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#0c4a6e;" vertex="1" parent="1">
           <mxGeometry x="400" y="80" width="640" height="380" as="geometry" />
         </mxCell>
-        <mxCell id="oemrCt" value="openemr (PHP-Apache)&#xa;:8300 / :9300 (TLS)&#xa;Mounts /var/uploads (PDF dropzone)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="oemrCt" value="OpenEMR (PHP-Apache)&#xa;Railway web service&#xa;Submitted public app URL" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="430" y="130" width="280" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="mysqlCt" value="mysql (OpenEMR data)&#xa;Doctrine migrations on bootstrap" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="mysqlCt" value="MariaDB/MySQL&#xa;Existing OpenEMR database&#xa;App + durable observability records" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0284c7;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="730" y="130" width="280" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="agentCt" value="agent-service (FastAPI)&#xa;:8400 dev / Render in prod&#xa;Reads /var/uploads via volume" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="agentCt" value="agent-service (FastAPI)&#xa;Railway service&#xa;Private HTTP from OpenEMR" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="430" y="240" width="280" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="ragVol" value="rag/corpus.sqlite + sqlite-vec&#xa;Built once at startup; cached in volume" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="ragVol" value="RAG retrieval cache&#xa;SQLite + sqlite-vec index&#xa;50 curated chunks; rebuildable" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="730" y="240" width="280" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="evalCt" value="eval harness (CI image, optional)&#xa;Runs the same code path as runtime,&#xa;but mocks OpenAI client" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="evalCt" value="CI gate (pre-push + GitHub Actions)&#xa;Mocks OpenAI client&#xa;Uses deterministic fake reranker" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="430" y="350" width="580" height="80" as="geometry" />
         </mxCell>
         <mxCell id="boundarySaas" value="External SaaS (only post-redaction data)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#e11d48;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#9f1239;" vertex="1" parent="1">
@@ -37,19 +37,19 @@
         <mxCell id="cohereSaas" value="Cohere API&#xa;rerank-english-v3.0" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="1110" y="240" width="320" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="honeySaas" value="Honeycomb&#xa;OTel traces (no PHI)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="honeySaas" value="Honeycomb&#xa;Sanitized demo traces/spans&#xa;No durable records or raw PHI" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff1f2;strokeColor=#e11d48;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="1110" y="350" width="320" height="80" as="geometry" />
         </mxCell>
-        <mxCell id="boundaryEdge" value="Edge — public URL exposure" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#7c3aed;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#5b21b6;" vertex="1" parent="1">
+        <mxCell id="boundaryEdge" value="Submission surface" style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#7c3aed;dashed=1;strokeWidth=2;align=left;verticalAlign=top;spacingLeft=12;spacingTop=8;fontSize=14;fontStyle=1;fontColor=#5b21b6;" vertex="1" parent="1">
           <mxGeometry x="60" y="490" width="1400" height="220" as="geometry" />
         </mxCell>
-        <mxCell id="cf" value="Cloudflare Tunnel&#xa;openemr-w2.&lt;your-domain&gt;&#xa;TLS terminated; routes to :9300 over the tunnel" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="cf" value="Railway deployed app URL&#xa;https://&lt;openemr&gt;.up.railway.app&#xa;OpenEMR web service is the submitted link" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="100" y="540" width="380" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="render" value="Render web service&#xa;agent-w2.&lt;your-render&gt;.onrender.com&#xa;Built from Dockerfile.agent; restarts on push to main" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
+        <mxCell id="render" value="Railway private services&#xa;agent-service + MariaDB/MySQL in same project&#xa;No Cloudflare Tunnel or Render service" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=13;align=center;" vertex="1" parent="1">
           <mxGeometry x="540" y="540" width="380" height="120" as="geometry" />
         </mxCell>
-        <mxCell id="readme" value="README.md — Deploy in 10 minutes&#xa;1. clone · 2. cp .env.example · 3. docker compose up · 4. cloudflared tunnel · 5. render deploy&#xa;Lists every env var: OPENAI_API_KEY · COHERE_API_KEY · AGENT_SHARED_SECRET · HONEYCOMB_API_KEY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=12;align=left;spacing=10;" vertex="1" parent="1">
+        <mxCell id="readme" value="README.md — Deploy in 10 minutes&#xa;Railway setup + public app URL; GitLab submission OK because both remotes exist&#xa;Env vars: OPENAI_API_KEY · COHERE_API_KEY · AGENT_SHARED_SECRET · HONEYCOMB_API_KEY" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;fontColor=#0f172a;fontSize=12;align=left;spacing=10;" vertex="1" parent="1">
           <mxGeometry x="980" y="540" width="460" height="120" as="geometry" />
         </mxCell>
         <mxCell id="e1" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#7c3aed;fontSize=12;" edge="1" parent="1" source="grader" target="cf">
@@ -58,7 +58,7 @@
         <mxCell id="e2" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#7c3aed;fontSize=12;" edge="1" parent="1" source="cf" target="oemrCt">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="e3" value="HTTPS" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#7c3aed;fontSize=12;" edge="1" parent="1" source="grader" target="render">
+        <mxCell id="e3" value="submission notes" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#7c3aed;fontSize=12;" edge="1" parent="1" source="grader" target="readme">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e4" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#0284c7;" edge="1" parent="1" source="oemrCt" target="agentCt">
@@ -68,6 +68,9 @@
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e6" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#16a34a;" edge="1" parent="1" source="agentCt" target="ragVol">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e10" value="token/cost/latency/eval rows" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#0284c7;fontSize=12;" edge="1" parent="1" source="agentCt" target="mysqlCt">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
         <mxCell id="e7" value="HTTPS (egress)" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;strokeWidth=2;endArrow=block;endFill=1;strokeColor=#9f1239;fontSize=12;" edge="1" parent="1" source="agentCt" target="openaiSaas">

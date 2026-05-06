@@ -11,32 +11,32 @@
   </defs>
   <rect width="1480" height="900" fill="white"/>
   <rect x="60.0" y="490.0" width="1400.0" height="220.0" rx="6" fill="none" stroke="#7c3aed" stroke-width="2.0" stroke-dasharray="8,4"/>
-  <text x="68.0" y="510.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#5b21b6">Edge — public URL exposure</text>
+  <text x="68.0" y="510.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#5b21b6">Submission surface</text>
   <rect x="400.0" y="80.0" width="640.0" height="380.0" rx="6" fill="none" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="8,4"/>
-  <text x="408.0" y="100.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0c4a6e">Developer host (Windows / Docker Desktop)</text>
+  <text x="408.0" y="100.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0c4a6e">Railway project (submitted deployed app)</text>
   <rect x="1080.0" y="80.0" width="380.0" height="380.0" rx="6" fill="none" stroke="#e11d48" stroke-width="2.0" stroke-dasharray="8,4"/>
   <text x="1088.0" y="100.0" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#9f1239">External SaaS (only post-redaction data)</text>
   <rect x="980.0" y="540.0" width="460.0" height="120.0" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="988.0" y="585.9" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">README.md — Deploy in 10 minutes</text>
-  <text x="988.0" y="603.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">1. clone · 2. cp .env.example · 3. docker compose up · 4. cloudflared tunnel · 5. render deploy</text>
-  <text x="988.0" y="620.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Lists every env var: OPENAI_API_KEY · COHERE_API_KEY · AGENT_SHARED_SECRET · HONEYCOMB_API_KEY</text>
-  <text x="740.0" y="44.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="bold" fill="#0f172a">Deployment Topology — what graders hit, what runs locally, what is SaaS</text>
+  <text x="988.0" y="603.3" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Railway setup + public app URL; GitLab submission OK because both remotes exist</text>
+  <text x="988.0" y="620.7" text-anchor="start" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="normal" fill="#0f172a">Env vars: OPENAI_API_KEY · COHERE_API_KEY · AGENT_SHARED_SECRET · HONEYCOMB_API_KEY</text>
+  <text x="740.0" y="44.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="bold" fill="#0f172a">Deployment Topology — Railway submission, existing DB, sanitized SaaS egress</text>
   <rect x="430.0" y="350.0" width="580.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="720.0" y="374.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">eval harness (CI image, optional)</text>
-  <text x="720.0" y="393.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Runs the same code path as runtime,</text>
-  <text x="720.0" y="412.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">but mocks OpenAI client</text>
+  <text x="720.0" y="374.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">CI gate (pre-push + GitHub Actions)</text>
+  <text x="720.0" y="393.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Mocks OpenAI client</text>
+  <text x="720.0" y="412.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Uses deterministic fake reranker</text>
   <rect x="100.0" y="540.0" width="380.0" height="120.0" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="290.0" y="584.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Cloudflare Tunnel</text>
-  <text x="290.0" y="603.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">openemr-w2.</text>
-  <text x="290.0" y="622.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">TLS terminated; routes to :9300 over the tunnel</text>
+  <text x="290.0" y="584.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Railway deployed app URL</text>
+  <text x="290.0" y="603.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">https://.up.railway.app</text>
+  <text x="290.0" y="622.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenEMR web service is the submitted link</text>
   <rect x="540.0" y="540.0" width="380.0" height="120.0" rx="6" fill="#ede9fe" stroke="#7c3aed" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="730.0" y="584.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Render web service</text>
-  <text x="730.0" y="603.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">agent-w2..onrender.com</text>
-  <text x="730.0" y="622.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Built from Dockerfile.agent; restarts on push to main</text>
+  <text x="730.0" y="584.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Railway private services</text>
+  <text x="730.0" y="603.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">agent-service + MariaDB/MySQL in same project</text>
+  <text x="730.0" y="622.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">No Cloudflare Tunnel or Render service</text>
   <rect x="60.0" y="100.0" width="280.0" height="100.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="200.0" y="133.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0f172a">Grader (browser)</text>
-  <text x="200.0" y="153.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0f172a">Public URL → demo</text>
-  <text x="200.0" y="174.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0f172a">App URL · agent URL · README</text>
+  <text x="200.0" y="153.9" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0f172a">Railway public URL → demo</text>
+  <text x="200.0" y="174.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="14" font-weight="bold" fill="#0f172a">README + GitLab/GitHub repo</text>
   <rect x="1110.0" y="130.0" width="320.0" height="80.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="1270.0" y="154.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenAI API</text>
   <text x="1270.0" y="173.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Files API + chat.completions</text>
@@ -45,31 +45,36 @@
   <text x="1270.0" y="274.1" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Cohere API</text>
   <text x="1270.0" y="293.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">rerank-english-v3.0</text>
   <rect x="1110.0" y="350.0" width="320.0" height="80.0" rx="6" fill="#fff1f2" stroke="#e11d48" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="1270.0" y="384.1" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Honeycomb</text>
-  <text x="1270.0" y="403.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OTel traces (no PHI)</text>
+  <text x="1270.0" y="374.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Honeycomb</text>
+  <text x="1270.0" y="393.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Sanitized demo traces/spans</text>
+  <text x="1270.0" y="412.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">No durable records or raw PHI</text>
   <rect x="430.0" y="130.0" width="280.0" height="80.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="570.0" y="154.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">openemr (PHP-Apache)</text>
-  <text x="570.0" y="173.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">:8300 / :9300 (TLS)</text>
-  <text x="570.0" y="192.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Mounts /var/uploads (PDF dropzone)</text>
+  <text x="570.0" y="154.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">OpenEMR (PHP-Apache)</text>
+  <text x="570.0" y="173.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Railway web service</text>
+  <text x="570.0" y="192.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Submitted public app URL</text>
   <rect x="730.0" y="130.0" width="280.0" height="80.0" rx="6" fill="#e0f2fe" stroke="#0284c7" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="870.0" y="164.2" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">mysql (OpenEMR data)</text>
-  <text x="870.0" y="183.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Doctrine migrations on bootstrap</text>
+  <text x="870.0" y="154.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">MariaDB/MySQL</text>
+  <text x="870.0" y="173.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Existing OpenEMR database</text>
+  <text x="870.0" y="192.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">App + durable observability records</text>
   <rect x="430.0" y="240.0" width="280.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
   <text x="570.0" y="264.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">agent-service (FastAPI)</text>
-  <text x="570.0" y="283.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">:8400 dev / Render in prod</text>
-  <text x="570.0" y="302.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Reads /var/uploads via volume</text>
+  <text x="570.0" y="283.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Railway service</text>
+  <text x="570.0" y="302.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Private HTTP from OpenEMR</text>
   <rect x="730.0" y="240.0" width="280.0" height="80.0" rx="6" fill="#dcfce7" stroke="#16a34a" stroke-width="1.0" stroke-dasharray="none"/>
-  <text x="870.0" y="274.1" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">rag/corpus.sqlite + sqlite-vec</text>
-  <text x="870.0" y="293.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">Built once at startup; cached in volume</text>
+  <text x="870.0" y="264.7" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">RAG retrieval cache</text>
+  <text x="870.0" y="283.6" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">SQLite + sqlite-vec index</text>
+  <text x="870.0" y="302.4" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="normal" fill="#0f172a">50 curated chunks; rebuildable</text>
   <line x1="200.0" y1="150.0" x2="290.0" y2="600.0" stroke="#7c3aed" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ap)"/>
   <text x="245.0" y="368.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#7c3aed">HTTPS</text>
   <line x1="290.0" y1="600.0" x2="570.0" y2="170.0" stroke="#7c3aed" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ap)"/>
   <text x="430.0" y="378.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#7c3aed">HTTPS</text>
-  <line x1="200.0" y1="150.0" x2="730.0" y2="600.0" stroke="#7c3aed" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ap)"/>
-  <text x="465.0" y="368.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#7c3aed">HTTPS</text>
+  <line x1="200.0" y1="150.0" x2="1210.0" y2="600.0" stroke="#7c3aed" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ap)"/>
+  <text x="705.0" y="368.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#7c3aed">submission notes</text>
   <line x1="570.0" y1="170.0" x2="570.0" y2="280.0" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ab)"/>
   <line x1="570.0" y1="170.0" x2="870.0" y2="170.0" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ab)"/>
   <line x1="570.0" y1="280.0" x2="870.0" y2="280.0" stroke="#16a34a" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ag)"/>
+  <line x1="570.0" y1="280.0" x2="870.0" y2="170.0" stroke="#0284c7" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ab)"/>
+  <text x="720.0" y="218.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#0284c7">token/cost/latency/eval rows</text>
   <line x1="570.0" y1="280.0" x2="1270.0" y2="170.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ar)"/>
   <text x="920.0" y="218.0" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="11" fill="#9f1239">HTTPS (egress)</text>
   <line x1="570.0" y1="280.0" x2="1270.0" y2="280.0" stroke="#9f1239" stroke-width="2.0" stroke-dasharray="none" marker-end="url(#ar)"/>

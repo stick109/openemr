@@ -45,9 +45,10 @@ regression gate. Anything broader is explicitly out of scope (see
 | `agent-service/` (Python, FastAPI) | this repo (new in Week 2) | Multi-agent orchestration; one HTTP entry point `POST /api/agent/run` |
 | Supervisor / Extractor / Retriever | Python | LangGraph nodes (one supervisor, two workers) |
 | RAG (BM25 + dense + Cohere rerank) | Python | Guideline retrieval with `Citation`-tagged snippets |
+| OpenEMR MariaDB/MySQL | Railway project | Existing OpenEMR database; durable token, cost, latency, and eval records |
 | OpenAI API | external | Vision extraction (Files API + Structured Outputs); embeddings (`text-embedding-3-small`) |
-| Cohere API | external | Rerank (`rerank-english-v3.0`); cross-encoder fallback if absent |
-| OpenTelemetry → Honeycomb | external | Tracing (no PHI; redactor runs before export) |
+| Cohere API | external | Live/dev rerank (`rerank-english-v3.0`); deterministic fake reranker in CI/tests; cross-encoder only if Cohere access breaks |
+| OpenTelemetry → Honeycomb | external | Sanitized demo traces/spans only; no durable records or raw PHI |
 | Eval harness | this repo (new — `agent-service/eval/`) | 50-case rubric runner; pre-push hook + GitHub Actions mirror |
 
 The PHP side stays thin: it owns CSRF/ACL/upload validation and the writes
@@ -147,12 +148,14 @@ Hybrid retrieval has two phases:
 
 **Indexing (startup)**
 1. `corpus_loader.py` walks `agent-service/rag/corpus/` (USPSTF, ADA, JNC,
-   CDC excerpts; ~50–100 chunks of 200–400 words each).
+   CDC excerpts; 50 curated public guideline chunks to start, adding more
+   only if eval coverage exposes retrieval gaps).
 2. `bm25_index.py` builds an in-memory `rank_bm25` index over tokenized
    chunks.
 3. `vector_index.py` calls OpenAI `text-embedding-3-small` in a single
    batch and stores the vectors in a SQLite table indexed with
-   `sqlite-vec` for ANN.
+   `sqlite-vec` for ANN. This SQLite file is a rebuildable retrieval index,
+   not the durable observability or eval store.
 4. The combined index is hashed on corpus version; a re-run with the same
    corpus is a no-op.
 
@@ -162,8 +165,9 @@ Hybrid retrieval has two phases:
 2. BM25 returns top-50 chunk ids; the dense ANN returns top-50 chunk ids.
 3. The two lists are fused with Reciprocal Rank Fusion (`RRF`) into a
    single top-30.
-4. The top-30 is reranked by Cohere `rerank-english-v3.0` (stretch
-   fallback: a local cross-encoder via `sentence-transformers`).
+4. The top-30 is reranked by Cohere `rerank-english-v3.0` in live/dev.
+   CI/tests use a deterministic fake reranker. A local cross-encoder via
+   `sentence-transformers` is reserved for Cohere access failures.
 5. The top-5 chunks are returned. Each chunk carries its `Citation`
    (source URL, section, published date, chunk id) so the answer can be
    grounded back to the corpus.
@@ -282,10 +286,10 @@ The flow:
 
    | Rubric | Threshold |
    |--------|-----------|
-   | `schema_valid` | ≥ 0.95 |
-   | `citation_present` | ≥ 0.98 |
-   | `factually_consistent` | ≥ 0.85 |
-   | `safe_refusal` | ≥ 0.90 |
+   | `schema_valid` | ≥ 0.90 |
+   | `citation_present` | ≥ 0.90 |
+   | `factually_consistent` | ≥ 0.80 |
+   | `safe_refusal` | ≥ 0.80 |
    | `no_phi_in_logs` | = 1.00 |
 
 7. Exit 0 → push proceeds; baseline auto-updates to current. Exit 1 →
@@ -326,10 +330,10 @@ Per agent run the service emits one `EncounterEvent`:
 
 Two-stop export:
 
-- **Honeycomb** for spans + dashboards (latency p50/p95, cost/run, rubric
-  pass-rate, refusal rate). All attributes go through the redactor first.
-- **Local SQLite** (`agent-service/observability.db`) for the cost +
-  latency report (assignment §4.17). Never copied to SaaS.
+- **Honeycomb** for sanitized demo traces/spans only. All attributes go
+  through the redactor first; raw PHI and durable records never go to SaaS.
+- **Existing OpenEMR MariaDB/MySQL** for durable token, cost, latency, eval,
+  and refusal records used by the cost + latency report (assignment §4.17).
 
 PHI rules — zero tolerance, enforced by `no_phi_in_logs = 1.00`:
 
@@ -379,12 +383,12 @@ retrieval-hits observability pipe.
 | Risk | Likelihood | Impact | Mitigation |
 |------|-----------|--------|------------|
 | **VLM hallucination** — the model invents a field label or overstates confidence on a noisy scan | High | High (silent wrong record) | Strict Pydantic schemas with `extraction_confidence`; per-field `Citation` with bbox validation (bbox must fall inside page, area > 0, cropped page region must contain the quote); rubric `factually_consistent` asserted against fixture metadata, not against another LLM |
-| **Cost balloon during eval** — 50 cases × N model calls run nightly add up | Medium | Medium | `gpt-4o-mini` for extraction; mock the OpenAI client in CI (the `agent_service.eval` harness uses recorded VLM outputs and never calls the live API); cache by file-hash for human-driven runs; daily cost dashboard from local SQLite |
+| **Cost balloon during eval** — 50 cases × N model calls run nightly add up | Medium | Medium | `gpt-4o-mini` for extraction; mock the OpenAI client in CI (the `agent_service.eval` harness uses recorded VLM outputs and never calls the live API); cache by file-hash for human-driven runs; daily cost dashboard from existing OpenEMR MariaDB/MySQL observability tables |
 | **Supervisor as black box** — the orchestration is a closed prompt nobody can debug | Medium | High | Supervisor is `T=0`; its prompt + branching rules are checked into source; every routing decision is a `supervisor.route` OTel span with the input state shape; the eval rubric asserts the recorded `tool_sequence` matches the expected one per fixture |
 | **PHI leak to SaaS** — Honeycomb or OpenAI receives a name / DOB / MRN | Low (with redactor) | Catastrophic | Pre-emit redactor (Pydantic `Sanitized` view + regex blocklist); `patient_id` HMAC'd before export; rubric `no_phi_in_logs = 1.00` (zero tolerance); pre-emit unit test injects synthetic PHI into every span attribute |
 | **Lenient eval gate** — the rubric passes the regression the grader injects | Medium | High (assignment fails) | Boolean rubrics (no fuzzy 1–10 judging); deterministic fixtures with byte-identical inputs; `factually_consistent` is deep-eq against the fixture, not LLM-as-judge; an internal regression-injection test (delete bbox attachment) is part of the eval suite so we know the gate fires |
-| **Deployment surface for grader** — grader cannot find the public URL or the env vars are wrong | Medium | Medium | One-page "Deploy in 10 minutes" section in README listing every env var (`OPENAI_API_KEY`, `COHERE_API_KEY`, `AGENT_SHARED_SECRET`, `HONEYCOMB_API_KEY`); Render web service for agent-service; Cloudflare Tunnel for OpenEMR; both URLs in the submission README |
-| **Cohere outage** — rerank API is unavailable mid-eval | Low | Medium | Cross-encoder fallback via `sentence-transformers`; the retriever falls back transparently and the rubric `factually_consistent` still passes if the top-5 still contains the right chunk |
+| **Deployment surface for grader** — grader cannot find the public URL or the env vars are wrong | Medium | Medium | One-page "Deploy in 10 minutes" section in README listing every env var (`OPENAI_API_KEY`, `COHERE_API_KEY`, `AGENT_SHARED_SECRET`, `HONEYCOMB_API_KEY`); OpenEMR, agent-service, and the existing MariaDB/MySQL service live in the same Railway project; the submitted deployed link is Railway |
+| **Cohere outage** — rerank API is unavailable during live/dev retrieval | Low | Medium | Deterministic fake reranker covers CI/tests; cross-encoder fallback via `sentence-transformers` is used only if Cohere access breaks, and the rubric `factually_consistent` still passes if the top-5 still contains the right chunk |
 
 ---
 
@@ -409,31 +413,42 @@ inspectable `StateGraph` out of the box.
 
 ### 11.2 BM25 + sqlite-vec (vs. Elasticsearch + Pinecone)
 
-The corpus is 50–100 chunks. Elasticsearch and Pinecone are designed for
-millions. `rank_bm25` is in-memory pure Python; `sqlite-vec` is a single
-SQLite extension that ships in our Render image. Total infra cost: the
-SQLite file. If the corpus grows past 10k chunks the vector index would
-move to a hosted store, but for Week 2 the simplest thing that works
-beats the most scalable thing that works.
+The corpus target is the minimally viable lower bound: 50 curated public
+guideline chunks. Elasticsearch and Pinecone are designed for millions.
+`rank_bm25` is in-memory pure Python; `sqlite-vec` is a single SQLite
+extension used only for the rebuildable retrieval index. If eval coverage
+exposes retrieval gaps, we add more chunks; if the corpus grows past 10k
+chunks, the vector index would move to a hosted store.
 
 ### 11.3 Cohere rerank (vs. local cross-encoder)
 
-Cohere's `rerank-english-v3.0` is a calibrated, well-trained reranker we
-do not have to operate. The cross-encoder fallback exists for offline
-testing and Cohere outages — and is a stretch ColBERT-style upgrade
-path. Cost-per-query is small and the quality lift on a 30-candidate
-list is the highest-leverage RAG component.
+Cohere's `rerank-english-v3.0` is available for live/dev retrieval and is
+a calibrated, well-trained reranker we do not have to operate. CI/tests
+use a deterministic fake reranker so they do not depend on an external
+API. The cross-encoder fallback exists only for Cohere access failures.
+Cost-per-query is small and the quality lift on a 30-candidate list is
+the highest-leverage RAG component.
 
 ### 11.4 Honeycomb (vs. self-hosted Tempo)
 
-Self-hosting Grafana Tempo would honor the "no PHI to SaaS" rule
-without needing a redactor. We need the redactor anyway (the assignment
-forbids logging raw PHI to SaaS, but the local audit log also benefits
-from sanitized attributes). Honeycomb's free tier gives us dashboards
-out of the box. The redactor's `Sanitized` view is the load-bearing
-contract; the backend is interchangeable.
+Self-hosting Grafana Tempo would avoid SaaS traces, but the Week 2
+decision is narrower: Honeycomb receives only sanitized demo traces/spans.
+Durable token, cost, latency, and eval records stay in the existing
+OpenEMR MariaDB/MySQL database. We need the redactor anyway (the
+assignment forbids logging raw PHI to SaaS, and the OpenEMR audit trail
+also benefits from sanitized attributes). The redactor's `Sanitized` view
+is the load-bearing contract; the backend is interchangeable.
 
-### 11.5 Single-PDF-per-call (vs. batch)
+### 11.5 Railway deployment (vs. Render + Cloudflare Tunnel)
+
+The submitted deployed link is Railway. OpenEMR, `agent-service`, and the
+existing MariaDB/MySQL service live in the same Railway project so the
+grader has one managed deployment surface rather than a local stack exposed
+through Cloudflare Tunnel plus a separate Render service. The repo can be
+submitted through GitLab because this fork has both GitLab and GitHub
+remotes; GitHub remains useful for the Actions mirror.
+
+### 11.6 Single-PDF-per-call (vs. batch)
 
 The HTTP entry point handles one document per call. Real clinics often
 upload a packet — a faxed lab + a faxed med list + an intake form

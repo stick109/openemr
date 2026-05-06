@@ -47,9 +47,32 @@ from agent_service.tools.document_tools import (
     document_tool_registry,
 )
 
+# M10 read-only patient-evidence tools.  Imported after the M12 imports
+# so the M5 surface above stays untouched and the agent loop (M13) can
+# compose the M10 + M12 registries on demand.
+from agent_service.tools.patient_evidence_tools import (
+    PATIENT_EVIDENCE_TOOL_NAMES,
+    build_patient_evidence_tools,
+    patient_evidence_tool_registry,
+)
+
+# M11 source-drilldown tool.  Appended at the bottom so the M5/M6/M10/M12
+# surface above stays untouched -- the agent loop (M13) is the place
+# that composes the patient-evidence, document, and source-drilldown
+# registries on demand.
+from agent_service.tools.source_drilldown import (
+    SOURCE_DETAIL_BODY_MAX_CHARS,
+    SOURCE_DETAIL_TOOL_NAME,
+    make_source_detail_tool,
+    source_drilldown_tool_registry,
+)
+
 __all__ = [
     "DOCUMENT_TOOL_NAMES",
     "FORBIDDEN_INPUT_KEYS",
+    "PATIENT_EVIDENCE_TOOL_NAMES",
+    "SOURCE_DETAIL_BODY_MAX_CHARS",
+    "SOURCE_DETAIL_TOOL_NAME",
     "STUB_TOOLS",
     "CitationLookup",
     "ToolCallOutcome",
@@ -61,8 +84,12 @@ __all__ = [
     "ToolRegistryError",
     "WriteProposal",
     "build_document_tools",
+    "build_patient_evidence_tools",
     "build_stub_tools",
     "default_registry",
     "document_tool_registry",
     "execute_tool",
+    "make_source_detail_tool",
+    "patient_evidence_tool_registry",
+    "source_drilldown_tool_registry",
 ]

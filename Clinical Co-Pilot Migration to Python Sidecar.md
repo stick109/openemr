@@ -51,7 +51,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M7 | Port intent catalog and capability caps to Python | Done | M5, M6 | M8, M9 |
 | M8 | Port evidence schemas and citation models | Done | M5 | M7, M9 |
 | M9 | Add Python OpenEMR read repository | Done | M3, M8 | M7, M10 |
-| M10 | Implement read-only patient evidence tools | Not started | M7, M8, M9 | M11 |
+| M10 | Implement read-only patient evidence tools | Done | M7, M8, M9 | M11 |
 | M11 | Implement source drilldown tool | Done | M8, M9 | M10 |
 | M12 | Implement document/lab/intake tools in same registry | Done | Sidecar S9-S11, M6 | M10-M11 |
 | M13 | Implement LLM tool-choice agent loop | Not started | M6, M10, M11 | M14, M15 |
@@ -412,9 +412,9 @@ Pass criteria:
 
 ## M10 - Implement Read-Only Patient Evidence Tools
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M7, M8, M9  
 **Can run in parallel with:** M11
 

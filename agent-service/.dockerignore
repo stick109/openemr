@@ -1,0 +1,40 @@
+# Python build / cache artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.venv/
+venv/
+env/
+
+# Tests are not needed in the runtime image
+tests/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# VCS
+.git/
+.gitignore
+
+# Docker artifacts (avoid recursive context inclusion)
+Dockerfile
+.dockerignore
+
+# Local env files — never bake secrets into the image
+.env
+.env.*

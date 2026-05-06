@@ -1,0 +1,24 @@
+{
+  "intent_id": "allergies_to_confirm",
+  "scenario": "happy path",
+  "input": {
+    "user_goal": "Show me allergies to confirm.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 365,
+      "max_rows": 25,
+      "allowed_tools": ["get_allergies_to_confirm", "get_source_detail"]
+    },
+    "evidence_packet_ref": "Two active allergies from lists with display 'allergen: penicillin; reaction: rash; severity: moderate; verification status: confirmed'"
+  },
+  "expected": {
+    "tool_sequence": ["get_allergies_to_confirm"],
+    "citation_ids_required": true,
+    "answer_blocks_min": 1,
+    "verification_status": "passed",
+    "missing_or_uncertain": [],
+    "refusal_reason": null
+  },
+  "notes": "AgentEvidenceResponseBuilder::allergyClaimTexts splits each source into 'allergen', 'reaction', 'severity', 'verification status' segments capped at 140 chars. Inserts 'coded allergen' as a second segment when source_count <= 10."
+}

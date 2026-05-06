@@ -1,0 +1,24 @@
+{
+  "intent_id": "current_medications",
+  "scenario": "unauthorized source",
+  "input": {
+    "user_goal": "Show me current medications.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 365,
+      "max_rows": 25,
+      "allowed_tools": ["get_current_medications", "get_source_detail"]
+    },
+    "evidence_packet_ref": "Toolset receives a billing record (data_class=billing) when only data_class=medications is granted, or repository tries to read a source whose patient_id != context patient"
+  },
+  "expected": {
+    "tool_sequence": ["get_current_medications"],
+    "citation_ids_required": false,
+    "answer_blocks_min": 1,
+    "verification_status": "refused",
+    "missing_or_uncertain": [],
+    "refusal_reason": "data_class_not_granted"
+  },
+  "notes": "Mirrors tests/Tests/Fixtures/Agent/agent-eval-fixtures.json::unauthorized_billing_source. AgentEvidenceToolset::ensureDataClassAllowed throws AgentEvidenceAccessException; controller returns 403 evidence_denied. Sidecar parity: tool executor refuses when data_class not in granted list."
+}

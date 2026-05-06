@@ -1,0 +1,24 @@
+{
+  "intent_id": "basic_patient_data",
+  "scenario": "conflicting data",
+  "input": {
+    "user_goal": "Show me basic patient data.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 0,
+      "max_rows": 10,
+      "allowed_tools": ["get_basic_patient_data", "get_source_detail"]
+    },
+    "evidence_packet_ref": "patient_data row plus a contact_address row whose street disagrees with patient_data.street; both citations included"
+  },
+  "expected": {
+    "tool_sequence": ["get_basic_patient_data"],
+    "citation_ids_required": true,
+    "answer_blocks_min": 1,
+    "verification_status": "passed",
+    "missing_or_uncertain": [],
+    "refusal_reason": null
+  },
+  "notes": "AgentEvidenceResponseBuilder presents both records as separate claims with their own citation_ids; verifier passes because each claim is supported by its own cited source. UI surfaces both addresses for the doctor to reconcile."
+}

@@ -1,0 +1,24 @@
+{
+  "intent_id": "show_source",
+  "scenario": "invalid citation ID",
+  "input": {
+    "user_goal": "Show source evidence behind this claim.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 0,
+      "max_rows": 1,
+      "allowed_tools": ["get_source_detail"]
+    },
+    "evidence_packet_ref": "Provided source_id is malformed (e.g., 'foo bar', '../../etc/passwd', 'medication:lists_medication:not-a-number') or non-existent (e.g., 'medication:lists_medication:99999999')"
+  },
+  "expected": {
+    "tool_sequence": [],
+    "citation_ids_required": false,
+    "answer_blocks_min": 0,
+    "verification_status": "refused",
+    "missing_or_uncertain": [],
+    "refusal_reason": "invalid_source_id"
+  },
+  "notes": "Malformed source_id is rejected by AgentIntentRestController::validatePayload regex; controller returns 400 validationErrors. A well-formed but unknown source_id makes SqlEvidenceRecordRepository::fetchSourceRecord return null, which AgentEvidenceToolset turns into an empty packet, then claims cite the unknown ID and AgentAnswerVerifier rejects with 'cites unknown source_id'."
+}

@@ -1,0 +1,27 @@
+{
+  "intent_id": "basic_patient_data",
+  "scenario": "happy path",
+  "input": {
+    "user_goal": "Show me basic patient data.",
+    "run_context_summary": {
+      "patient_id_present": true,
+      "encounter_id_present": false,
+      "lookback_days": 0,
+      "max_rows": 10,
+      "allowed_tools": ["get_basic_patient_data", "get_source_detail"]
+    },
+    "evidence_packet_ref": "patient_data row plus optional contact_address, contact_telecom, employer_data; demographics:patient_data:<pid> citation present"
+  },
+  "expected": {
+    "tool_sequence": ["get_basic_patient_data"],
+    "citation_ids_required": true,
+    "answer_blocks_min": 1,
+    "verification_status": "passed",
+    "missing_or_uncertain": [
+      "Address was not found in checked evidence from patient_data or structured contact address records.",
+      "Phone was not found in checked evidence from patient_data or structured contact telecom records."
+    ],
+    "refusal_reason": null
+  },
+  "notes": "AgentEvidenceResponseBuilder splits patient row on ';' into one claim per property and adds address/phone missingness when the claim text omits those tokens."
+}

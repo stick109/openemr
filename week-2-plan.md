@@ -126,11 +126,11 @@ component from `intake-forms-plan.md` §3 to its Week-2 fate.
 | Orchestration framework                                                          | **LangGraph** for the supervisor + workers (explicit graph, inspectable hand-offs, fits "make routing decisions inspectable").                                |
 | Schema language                                                                  | **Pydantic v2** (Python). Each schema includes per-field `source_citation: Citation`. JSON-schema is exported for the OpenAI Structured Outputs call.        |
 | Vision extraction model                                                          | **`gpt-4o-mini`** with the Files API + Structured Outputs (matches §4.4 of intake-forms-plan and keeps cost low).                                            |
-| RAG corpus                                                                       | **~50–100 chunks** of public clinical guidelines (USPSTF, CDC, ADA, JNC) curated locally. No external knowledge-base.                                        |
+| RAG corpus                                                                       | **50 chunks minimum** of public clinical guidelines (USPSTF, CDC, ADA, JNC) curated locally. Add more only if eval coverage needs it. No external knowledge-base. |
 | Sparse retriever                                                                 | **BM25** via `rank_bm25` (no Elasticsearch).                                                                                                                  |
 | Dense retriever                                                                  | **`text-embedding-3-small`** stored in **SQLite + sqlite-vec** (no Pinecone). Keeps the deploy cheap.                                                         |
 | Reranker                                                                         | **Cohere Rerank v3** (`rerank-english-v3.0`). Stretch fallback: cross-encoder via `sentence-transformers`.                                                   |
-| Where the agent service is deployed                                              | **Render** (single Python web service) — small, free tier, public URL.                                                                                       |
+| Where the app is deployed                                                        | **Railway** — OpenEMR, the Python sidecar, and the existing MariaDB/MySQL service live in the Railway project.                                                |
 | OpenEMR-side surface                                                             | **Reuse `interface/forms/upload_intake_form/`** from `intake-forms-plan.md` §3.3, with the dropdown extended to include `Lab Report`.                        |
 | Worker naming                                                                    | The assignment says "intake-extractor"; we treat that as "**document-extractor**" (handles both `lab_pdf` and `intake_form`, dispatched on `doc_type`).      |
 | Observability backend                                                            | **OpenTelemetry → Honeycomb (free tier)** for sanitized traces + spans. Durable token/cost/eval records live in the existing OpenEMR MariaDB/MySQL database; no raw PHI goes to SaaS. |
@@ -434,15 +434,15 @@ Each case has `expected: { rubrics: { ... } }`. Rubrics are **boolean only**:
 
 **Gate rule** (from assignment §6.6): build fails if **any** rubric category
 regresses by **more than 5 percentage points** vs. the baseline, OR drops
-below the absolute pass threshold (TBD per category, conservative defaults
-below):
+below the absolute pass threshold. Use minimally viable thresholds for Week 2
+and tighten only after the baseline shows the flow is stable:
 
 | Rubric                | Pass threshold |
 |-----------------------|----------------|
-| `schema_valid`        | ≥ 0.95         |
-| `citation_present`    | ≥ 0.98         |
-| `factually_consistent` | ≥ 0.85         |
-| `safe_refusal`        | ≥ 0.90         |
+| `schema_valid`        | ≥ 0.90         |
+| `citation_present`    | ≥ 0.90         |
+| `factually_consistent` | ≥ 0.80         |
+| `safe_refusal`        | ≥ 0.80         |
 | `no_phi_in_logs`      | = 1.00 (zero tolerance) |
 
 **Hooks:**
@@ -514,13 +514,16 @@ The form's dropdown becomes:
 and the deployment topology diagram
 [`diagrams/08-deployment-topology.drawio`](diagrams/08-deployment-topology.drawio).
 
-Two services:
-- **OpenEMR** — existing docker-compose dev stack, exposed via a free tunnel
-  (Cloudflare Tunnel) so a public URL is available for graders.
-- **agent-service** — Render web service. Env vars: `OPENAI_API_KEY`,
-  `COHERE_API_KEY`, `AGENT_SHARED_SECRET`, `HONEYCOMB_API_KEY`.
+Railway services:
+- **OpenEMR** — deployed OpenEMR web service, publicly reachable for graders.
+- **agent-service** — Python sidecar service in the same Railway project.
+- **MariaDB/MySQL** — existing OpenEMR database service reused for durable
+  observability/cost/eval records.
 
-The `README.md` will document both setups in a single "Deploy in 10 minutes"
+Env vars: `OPENAI_API_KEY`, `COHERE_API_KEY`, `AGENT_SHARED_SECRET`,
+`HONEYCOMB_API_KEY`, `AGENT_SERVICE_URL`.
+
+The `README.md` will document the Railway setup in a "Deploy in 10 minutes"
 section, per submission requirements.
 
 ### 4.15  `W2_ARCHITECTURE.md` (required deliverable)
@@ -639,12 +642,12 @@ checkpoint down into per-day tasks.
 | #  | Question                                                                                              | Owner   | Resolved? |
 |----|-------------------------------------------------------------------------------------------------------|---------|-----------|
 | Q1 | The assignment says "GitLab Repository" but the project is on GitHub — is GitHub OK?                  | User    | **Yes** — the repo has two remotes: one GitHub remote and one GitLab remote. Submission can point to GitLab while keeping GitHub as the working mirror. |
-| Q2 | Pass thresholds in §4.11 — are the proposed values acceptable, or should they come from the Week-1 baseline once measured? | User    | No        |
+| Q2 | Pass thresholds in §4.11 — are the proposed values acceptable, or should they come from the Week-1 baseline once measured? | User    | **Yes** — use minimally viable Week 2 thresholds: `schema_valid ≥ 0.90`, `citation_present ≥ 0.90`, `factually_consistent ≥ 0.80`, `safe_refusal ≥ 0.80`, and `no_phi_in_logs = 1.00`. Tighten later only if the baseline is comfortably above these values. |
 | Q3 | Demographics-merge: is "fill-only-empty" the right Week-2 default, or should we always require user confirmation? | User    | No        |
 | Q4 | Cohere API key — do we have one, or should we go straight to the cross-encoder fallback?              | User    | **Yes** — a Cohere key is available. Use Cohere Rerank for live/dev retrieval; keep the deterministic fake reranker for CI/tests. Cross-encoder remains a fallback only if Cohere access breaks. |
 | Q5 | Honeycomb is a SaaS observability tool — assignment forbids logging raw PHI to SaaS; redactor design is in §4.12 — is the regex+sanitizer view sufficient, or do we need a self-hosted backend (Tempo)? | User    | **Yes** — use Honeycomb for sanitized demo traces only. Store detailed cost/latency/token/eval records in the existing OpenEMR MariaDB/MySQL database, not CouchDB or a separate SQLite/Postgres store. Tempo/Jaeger are unnecessary unless SaaS observability is later banned outright. |
-| Q6 | How many guideline chunks do we need? §3 says ~50–100, but the assignment's "small" is unspecified.    | User    | No        |
-| Q7 | The assignment lists a "**deployed link**" in submission requirements. Is a Cloudflare Tunnel to a local docker stack acceptable, or must OpenEMR itself be on a managed host? | User    | No        |
+| Q6 | How many guideline chunks do we need? §3 says ~50–100, but the assignment's "small" is unspecified.    | User    | **Yes** — use the minimally viable lower bound: 50 curated guideline chunks. Add more only if eval coverage exposes retrieval gaps. |
+| Q7 | The assignment lists a "**deployed link**" in submission requirements. Is a Cloudflare Tunnel to a local docker stack acceptable, or must OpenEMR itself be on a managed host? | User    | **Yes** — use the Railway deployment as the submitted deployed app link. No Cloudflare Tunnel/local-stack deployment is needed for submission. |
 | Q8 | Worker naming: assignment says "intake-extractor", but it must also handle lab PDFs. Confirm we can rename to "document-extractor" in code while keeping the assignment's name in docs. | User    | No        |
 | Q9 | Does the existing Week-1 agent code already include LangGraph / OpenAI Agents SDK?                    | Claude  | **Yes** — No. The current repo ships PHP-only orchestration (`OpenEMR\Services\Intake`, no LangGraph). Week 2 introduces the first Python service, which is the right time to adopt LangGraph (§3 decision row "Orchestration framework"). |
 | Q10 | Does the existing Week-1 code expose an OpenAI client we should reuse for Week 2 (carries over from intake-forms Q1)? | Claude  | **Yes** — `OpenEMR\Services\Intake\OpenAi\OpenAIClient` exists (commit 98d0df801) and stays. It serves PHP-only schema validation paths. The *agent* OpenAI client is in `agent-service/` (Python) and is independent. |
@@ -690,7 +693,7 @@ above):
 | 4.11  | 50-case eval gate + Git Hook + GHA mirror            | Not started | Yes (intake fixtures via §3.1) | 4.4, 4.5, 4.8      |
 | 4.12  | Observability (OTel + cost + redactor)               | Not started | No                             | 4.1                |
 | 4.13  | Encounter-form surface (`registry` + dropdown)        | Not started | **Direct extension of §3.2 + §3.3** |                |
-| 4.14  | Deployment (Render + tunnel)                         | Not started | No                             | 4.1, 4.13          |
+| 4.14  | Deployment (Railway)                                  | Not started | No                             | 4.1, 4.13          |
 | 4.15  | `W2_ARCHITECTURE.md`                                 | **Done**    | No                             | 4.18               |
 | 4.16  | Demo video                                           | Not started | No                             | 4.10, 4.11, 4.14   |
 | 4.17  | Cost & latency report                                | Not started | No                             | 4.11, 4.12         |
@@ -723,7 +726,7 @@ Goal: make every reviewer confident the design holds before any code lands.
 
 - [ ] **Confirm decisions in [§3](#3-decisions-made)** — push back if any look
       wrong (Python service boundary, LangGraph, BM25 + sqlite-vec, Cohere
-      rerank, Render + Cloudflare Tunnel, fill-only-empty merge,
+      rerank, Railway deployment, fill-only-empty merge,
       gpt-4o-mini for extraction).
 - [ ] **Read [`W2_ARCHITECTURE.md`](W2_ARCHITECTURE.md) end-to-end** and
       verify it answers each of: ingestion flow, worker graph, RAG
@@ -745,8 +748,8 @@ one retrieval observable end-to-end.
 
 - [ ] **§4.1 `agent-service/` skeleton** — FastAPI app, one endpoint, shared-secret auth, returns a stubbed ExtractionResult.
 - [ ] **§4.2 schemas finalized** — round-trip + reject-missing-citation tests passing.
-- [ ] **§4.7 corpus** — 50–100 chunks of USPSTF/ADA/JNC/CDC excerpts checked into `agent-service/rag/corpus/`.
-- [ ] **§4.6 RAG (basic)** — BM25 + sqlite-vec dense + RRF (Cohere stub OK if no key yet); top-5 returned for one canned query.
+- [ ] **§4.7 corpus** — 50 chunks of USPSTF/ADA/JNC/CDC excerpts checked into `agent-service/rag/corpus/`.
+- [ ] **§4.6 RAG (basic)** — BM25 + sqlite-vec dense + RRF + Cohere rerank for live/dev; deterministic fake reranker for CI; top-5 returned for one canned query.
 - [ ] **§4.13 OpenEMR integration** — `Lab Report` added to dropdown; registry row updated; no UI work yet on overlay.
 - [ ] **§4.3 ingestion path** — `save.php` POSTs to agent-service; agent-service runs extractor against one fixture lab PDF; intake-form path goes through existing `IntakeFormIngestService`.
 - [ ] **§4.5 intake dispatch** — direct reuse, confirmed by Cypress E2E from intake-forms close-out (commit f761408c4) still green.
@@ -776,7 +779,7 @@ recorded.
   - `.git/hooks/pre-push` invokes the harness.
   - `.github/workflows/agent-eval.yml` runs the same harness.
   - Internal regression-injection test (delete bbox attachment) confirms the gate fires.
-- [ ] **§4.14 Deployment** — Render web service for `agent-service`; Cloudflare Tunnel for OpenEMR. Both URLs in README. Env var list complete.
+- [ ] **§4.14 Deployment** — Railway deployment for OpenEMR plus `agent-service`. Public app URL in README. Env var list complete.
 - [ ] **§4.16 Demo video** — 3–5 minutes following the script in §4.16. Upload in OpenEMR, extraction, click-to-source, eval results, gate failing on regression.
 - [ ] **README** — Week 2 section clearly separated from Week 1 (assignment requires this); deploy in 10 minutes block; env vars listed.
 - [ ] **PHI sweep** — pre-emit unit test injecting synthetic PHI passes; `no_phi_in_logs` rubric is 1.00.
@@ -785,7 +788,7 @@ recorded.
 
 Goal: hit absolute thresholds; round out observability + cost report.
 
-- [ ] **§4.11 thresholds** — `schema_valid ≥ 0.95`, `citation_present ≥ 0.98`, `factually_consistent ≥ 0.85`, `safe_refusal ≥ 0.90`. Tune the extractor prompt or the schema if any rubric is short.
+- [ ] **§4.11 thresholds** — `schema_valid ≥ 0.90`, `citation_present ≥ 0.90`, `factually_consistent ≥ 0.80`, `safe_refusal ≥ 0.80`, `no_phi_in_logs = 1.00`. Tune the extractor prompt or the schema if any rubric is short.
 - [ ] **§4.12 dashboards** — Honeycomb dashboards for latency p50/p95, cost per run, refusal rate, rubric pass-rate.
 - [ ] **§4.17 Cost & latency report** — generated from the OpenEMR MariaDB/MySQL observability records; published as a Markdown file in the repo.
 - [ ] **Architecture doc review** — re-read [`W2_ARCHITECTURE.md`](W2_ARCHITECTURE.md) once everything is wired and update §10/§11 with anything that surprised us.

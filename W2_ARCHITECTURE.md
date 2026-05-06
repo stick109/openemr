@@ -445,6 +445,73 @@ Week 2 ships single-PDF and gets it right.
 
 ---
 
+## 12. Clinical Co-Pilot Migration: Ownership Contract
+
+This section records the post-migration PHP/Python ownership contract for the
+Clinical Co-Pilot work tracked in
+[`Clinical Co-Pilot Migration to Python Sidecar.md`](Clinical%20Co-Pilot%20Migration%20to%20Python%20Sidecar.md).
+It is the architectural authority for what runs where after the cutover and the
+boundary the rest of the migration plan implements against.
+
+### 12.1 Python ownership
+
+The Python sidecar (`agent-service/`) owns the entire clinical reasoning loop:
+
+- Agent and tool selection ("LLM chooses tools" — see §12.3).
+- Retrieval orchestration over OpenEMR records and the guideline corpus.
+- Prompt assembly and structured-output schemas.
+- Answer generation and response shaping.
+- Verifier and refusal logic.
+- Eval harness, fixtures, and rubric scoring.
+- All model-provider calls (OpenAI, Cohere, future providers).
+
+After cutover, PHP performs none of these. The migration plan's M13–M16 land
+the agent loop, response shaping, verifier, and observability in Python; M24
+removes the PHP equivalents.
+
+### 12.2 PHP ownership
+
+PHP (OpenEMR) owns only the boundary concerns it is best at:
+
+- UI rendering inside the encounter and chart views.
+- Authenticated OpenEMR route entry (the `/agent/...` controllers).
+- CSRF and session checks.
+- Current patient and encounter resolution from the authenticated session.
+- Minting of the signed `CopilotRunContext` that carries scoped authority into
+  the sidecar.
+
+PHP becomes a thin proxy: it authenticates the request, resolves scope from
+the session, mints a signed run context, and forwards to the sidecar. It does
+not assemble prompts, choose tools, call models, or shape clinical answers.
+
+### 12.3 LLM tool choice within a runtime-allowed registry
+
+Inside the sidecar, the LLM chooses tools — that is the point of the
+migration. But tool choice is not unbounded. Every tool the model can name
+must be present in the runtime-allowed tool registry for the current
+`CopilotRunContext`. The registry is policy-derived (intent, role, scope), not
+model-derived. A tool name returned by the LLM that is not in the
+runtime-allowed set is rejected by the executor before any side effect.
+
+This preserves the "LLM chooses tools" property without giving the model
+authority over what tools exist.
+
+### 12.4 The model never supplies authority
+
+The model produces tool *arguments*, but it never supplies authoritative
+identifiers, queries, or destinations. Specifically, the model does not
+provide an authoritative `patient_id`, `encounter_id`, `document_id`, raw SQL,
+file path, or write destination. Each of these is sourced from the signed
+`CopilotRunContext` that PHP minted at the route boundary.
+
+The executor injects scope from the run context and rejects any tool call
+whose arguments attempt to override it. This is the load-bearing safety
+property: even a fully compromised prompt cannot widen the patient scope or
+redirect a write, because the authoritative values never enter the model's
+context as something it could change.
+
+---
+
 ## Appendix — diagram index
 
 | File | Type | Section |

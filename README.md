@@ -52,6 +52,16 @@ Check out [DOCKER_README.md](DOCKER_README.md)
 
 Check out [FHIR_README.md](FHIR_README.md)
 
+### Week 2 — Python Agent Sidecar
+
+This fork ships a Python `agent-service` sidecar (FastAPI + LangGraph) that
+backs the Week 2 multimodal evidence agent. OpenEMR keeps CSRF, ACL, file
+validation, and DB writes; the sidecar owns extraction, hybrid RAG, and
+observability. For a deployment guide, env-var reference, and grader run-book
+see [docs/WEEK2_SIDECAR.md](docs/WEEK2_SIDECAR.md). The architecture defense
+lives in [W2_ARCHITECTURE.md](W2_ARCHITECTURE.md), and the frozen HTTP
+contract in [agent-service/CONTRACT.md](agent-service/CONTRACT.md).
+
 ### For Developers
 
 If using OpenEMR directly from the code repository, then the following commands will build OpenEMR (Node.js version 24.* is required) :

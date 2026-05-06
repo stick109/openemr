@@ -4,13 +4,19 @@
  * Upload Intake Form - save.php
  *
  * Handles the multipart upload from new.php. Validates CSRF, ACL and the
- * uploaded PDF, then hands the file off to {@see IntakeFormIngestService}
- * which does the OpenAI-backed extraction and writes the appropriate target
- * rows (patient_data, questionnaire_response, documents). The service is
- * also responsible for inserting the row into form_upload_intake_form and
- * returning an {@see IngestResult} DTO whose `insertedRowId` identifies the
- * row in form_upload_intake_form — that id is what FormService::addForm()
- * needs to register the form against the encounter.
+ * uploaded PDF, then routes the file to the appropriate extraction back-end:
+ *
+ *  - **lab_pdf** documents are sent to the Python agent-service sidecar via
+ *    {@see AgentServiceClient} (Week 2). The sidecar handles PDF parsing,
+ *    extraction, guideline retrieval, and summary generation.
+ *
+ *  - **Demographics / MedicalHistory / Consent** (and Auto-classified)
+ *    continue to use {@see IntakeFormIngestService} with the direct OpenAI
+ *    extraction path.
+ *
+ * Backward compatibility: when the sidecar is not configured (missing env
+ * vars), lab_pdf uploads fail gracefully with a user-facing error instead
+ * of silently falling through.
  *
  * @package   OpenEMR
  * @link      https://www.open-emr.org
@@ -29,6 +35,11 @@ use OpenEMR\Common\Acl\AclMain;
 use OpenEMR\Common\Csrf\CsrfUtils;
 use OpenEMR\Common\Session\SessionWrapperFactory;
 use OpenEMR\Core\OEEnvBag;
+use OpenEMR\Services\Agent\Sidecar\AgentRunResult;
+use OpenEMR\Services\Agent\Sidecar\AgentServiceClient;
+use OpenEMR\Services\Agent\Sidecar\AgentServiceException;
+use OpenEMR\Services\Agent\Sidecar\AgentSidecarConfig;
+use OpenEMR\Services\Agent\Sidecar\SharedUploadManager;
 use OpenEMR\Services\FormService;
 use OpenEMR\Services\Intake\Dispatcher\ConsentDispatcher;
 use OpenEMR\Services\Intake\Dispatcher\DemographicsDispatcher;
@@ -122,36 +133,141 @@ if ($pidInt <= 0 || $encounterInt <= 0) {
     $renderFailure(xl('No active patient or encounter context.'));
 }
 
-// Contract: IntakeFormIngestService throws IntakeFormException (a
-// \RuntimeException subclass) for any recoverable failure — validation,
-// OpenAI errors, downstream DB problems. Anything outside that hierarchy
-// (\Error, \TypeError, etc.) is genuinely unexpected and is allowed to
-// propagate to the global handler. The service returns an IngestResult DTO;
-// `insertedRowId` is the form_upload_intake_form row id that
-// FormService::addForm() needs to wire the encounter timeline entry.
-try {
-    $service = new IntakeFormIngestService(
-        openAiClient: new OpenAIClient($logger, OEEnvBag::getInstance()),
-        logger: $logger,
-        clock: ServiceContainer::getClock(),
-        demographicsDispatcher: new DemographicsDispatcher($logger),
-        medicalHistoryDispatcher: new MedicalHistoryDispatcher($logger, ServiceContainer::getClock()),
-        consentDispatcher: new ConsentDispatcher(),
-        session: $session,
-    );
-    $result = $service->ingest($pidInt, $encounterInt, $tmpPath, $formType);
-} catch (IntakeFormException $e) {
-    $logger->error('IntakeFormIngestService::ingest failed.', [
+// -----------------------------------------------------------------------
+// Routing: lab_pdf -> sidecar; intake form types -> IntakeFormIngestService
+// -----------------------------------------------------------------------
+$useSidecar = $formType === 'lab_pdf';
+
+if ($useSidecar) {
+    // -- Sidecar path (lab_pdf, and potentially intake_form in Week 2) ---
+    $sidecarConfig = AgentSidecarConfig::fromEnvironment(OEEnvBag::getInstance());
+
+    if (!$sidecarConfig->isConfigured()) {
+        $logger->error('Sidecar not configured for lab_pdf upload.', [
+            'issue' => $sidecarConfig->getConfigurationIssue(),
+        ]);
+        $renderFailure(xl('Lab report processing is not available. The agent service is not configured.'));
+    }
+
+    $traceId = bin2hex(random_bytes(16));
+    $traceId = substr($traceId, 0, 8) . '-' . substr($traceId, 8, 4) . '-'
+        . '4' . substr($traceId, 13, 3) . '-'
+        . dechex(8 | (hexdec(substr($traceId, 16, 1)) & 0x3)) . substr($traceId, 17, 3) . '-'
+        . substr($traceId, 20, 12);
+
+    $uploadManager = new SharedUploadManager($logger);
+    $sidecarClient = new AgentServiceClient($sidecarConfig, $logger);
+
+    try {
+        $sharedPath = $uploadManager->store(
+            $tmpPath,
+            $traceId,
+            $uploadedFile->getClientOriginalName(),
+        );
+
+        $sidecarResult = $sidecarClient->run(
+            patientId: $pidInt,
+            filePath: $sharedPath,
+            docType: $formType,
+            encounterId: $encounterInt,
+            traceId: $traceId,
+        );
+    } catch (AgentServiceException $e) {
+        $logger->error('Agent sidecar call failed.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'form_type' => $formType,
+            'trace_id' => $traceId,
+            'error_code' => $e->errorCode,
+            'detail' => $e->detail,
+            'exception' => $e,
+        ]);
+        // Sidecar error/refusal blocks persistence — no DB writes happen.
+        $renderFailure(xl('The document could not be processed. Please retry or contact support.'));
+    } catch (\RuntimeException $e) {
+        $logger->error('Sidecar upload preparation failed.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'trace_id' => $traceId,
+            'exception' => $e,
+        ]);
+        $renderFailure(xl('The document could not be processed. Please retry or contact support.'));
+    }
+
+    $logger->info('Sidecar extraction completed for lab_pdf.', [
         'pid' => $pidInt,
         'encounter' => $encounterInt,
-        'form_type' => $formType,
-        'exception' => $e,
+        'trace_id' => $traceId,
+        'confidence' => $sidecarResult->extractionConfidence,
+        'cost_usd' => $sidecarResult->costUsd,
     ]);
-    $renderFailure(xl('The intake form could not be processed. Please retry or contact support.'));
+
+    // TODO(S16+): persist sidecar extraction result into OpenEMR tables.
+    // For now the sidecar result is logged; downstream persistence is the
+    // responsibility of subsequent implementation steps. The form row is
+    // still recorded below so the encounter timeline entry exists.
+    $authUserIdRaw = $session->get('authUserID');
+    $authUserIdString = is_scalar($authUserIdRaw) ? (string) $authUserIdRaw : '0';
+    $insertedRowId = \OpenEMR\Common\Database\QueryUtils::sqlInsert(
+        'INSERT INTO `form_upload_intake_form`
+            (`date`, `pid`, `encounter`, `user`, `groupname`, `authorized`, `activity`,
+             `form_type`, `document_id`, `inserted_row_id`, `diff_preview`)
+            VALUES (?, ?, ?, ?, ?, 1, 1, ?, 0, 0, ?)',
+        [
+            (new \DateTimeImmutable())->format('Y-m-d H:i:s'),
+            $pidInt,
+            $encounterInt,
+            $authUserIdString,
+            'Default',
+            $formType,
+            json_encode([
+                'sidecar_trace_id' => $traceId,
+                'extraction_confidence' => $sidecarResult->extractionConfidence,
+                'cost_usd' => $sidecarResult->costUsd,
+                'tool_sequence' => $sidecarResult->toolSequence,
+            ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES),
+        ]
+    );
+
+    $result = new \OpenEMR\Services\Intake\IngestResult(
+        formType: $formType,
+        documentId: 0,
+        insertedRowId: $insertedRowId,
+        diffPreview: [],
+    );
+} else {
+    // -- Legacy intake-form path (Demographics, MedicalHistory, Consent) --
+    // Contract: IntakeFormIngestService throws IntakeFormException (a
+    // \RuntimeException subclass) for any recoverable failure — validation,
+    // OpenAI errors, downstream DB problems. Anything outside that hierarchy
+    // (\Error, \TypeError, etc.) is genuinely unexpected and is allowed to
+    // propagate to the global handler. The service returns an IngestResult
+    // DTO; `insertedRowId` is the form_upload_intake_form row id that
+    // FormService::addForm() needs to wire the encounter timeline entry.
+    try {
+        $service = new IntakeFormIngestService(
+            openAiClient: new OpenAIClient($logger, OEEnvBag::getInstance()),
+            logger: $logger,
+            clock: ServiceContainer::getClock(),
+            demographicsDispatcher: new DemographicsDispatcher($logger),
+            medicalHistoryDispatcher: new MedicalHistoryDispatcher($logger, ServiceContainer::getClock()),
+            consentDispatcher: new ConsentDispatcher(),
+            session: $session,
+        );
+        $result = $service->ingest($pidInt, $encounterInt, $tmpPath, $formType);
+    } catch (IntakeFormException $e) {
+        $logger->error('IntakeFormIngestService::ingest failed.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'form_type' => $formType,
+            'exception' => $e,
+        ]);
+        $renderFailure(xl('The intake form could not be processed. Please retry or contact support.'));
+    }
 }
 
 if ($result->insertedRowId === null || $result->insertedRowId <= 0) {
-    $logger->error('IntakeFormIngestService::ingest returned an invalid result.', [
+    $logger->error('Ingestion returned an invalid result.', [
         'pid' => $pidInt,
         'encounter' => $encounterInt,
         'form_type' => $formType,

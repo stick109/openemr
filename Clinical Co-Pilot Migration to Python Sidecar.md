@@ -56,7 +56,7 @@ Use one of: `Not started`, `In progress`, `Blocked`, `Done`, `Skipped`.
 | M12 | Implement document/lab/intake tools in same registry | Done | Sidecar S9-S11, M6 | M10-M11 |
 | M13 | Implement LLM tool-choice agent loop | Not started | M6, M10, M11 | M14, M15 |
 | M14 | Port answer schema and response shaping | Done | M8 | M13, M15 |
-| M15 | Port verifier/refusal rules to Python | Not started | M8, M14 | M13 |
+| M15 | Port verifier/refusal rules to Python | Done | M8, M14 | M13 |
 | M16 | Add PHI-safe sidecar observability for tool calls | Not started | M6, M13 | M17 |
 | M17 | Add PHP thin proxy to sidecar copilot endpoint | Not started | M2-M4 | M13-M16 |
 | M18 | Add shadow mode comparing PHP and Python outputs | Not started | M13-M17 | M19 |
@@ -566,9 +566,9 @@ Pass criteria:
 
 ## M15 - Port Verifier/Refusal Rules to Python
 
-- [ ] Done
+- [x] Done
 
-**Status:** Not started  
+**Status:** Done  
 **Depends on:** M8, M14  
 **Can run in parallel with:** M13
 

@@ -284,7 +284,76 @@ linked with `railway link`.
 
 ---
 
-## 7. Cross-references
+## 7. Eval gate (pre-push hook + CI)
+
+The 50-case offline eval at
+[`agent-service/agent_service/eval/`](../agent-service/agent_service/eval/)
+gates every push and every pull request. It compares per-rubric pass rates
+against the checked-in baseline at
+[`agent-service/agent_service/eval/baseline.json`](../agent-service/agent_service/eval/baseline.json)
+and exits non-zero on any threshold breach or regression.
+
+### 7.1 Install the local pre-push hook
+
+The hook source lives at [`scripts/hooks/pre-push`](../scripts/hooks/pre-push)
+and is copied into `.git/hooks/pre-push` by a one-shot installer. The
+installer is non-destructive — if a `pre-push` hook already exists at the
+target path, it is renamed to `pre-push.bak.<unix-timestamp>` before being
+overwritten, and a warning is printed.
+
+**Windows (PowerShell):**
+
+```powershell
+./scripts/install-eval-hook.ps1
+```
+
+**macOS / Linux (bash):**
+
+```bash
+./scripts/install-eval-hook.sh
+```
+
+After installation, every `git push` runs the eval first. A failing eval
+aborts the push before any data is sent to the remote.
+
+### 7.2 GitHub Actions
+
+The same eval runs in CI on every pull request and on every push to
+`master` and `codex/**` branches. The workflow is defined at
+[`.github/workflows/agent-eval.yml`](../.github/workflows/agent-eval.yml)
+and uses the identical command as the local hook
+(`python -m agent_service.eval --baseline agent_service/eval/baseline.json`),
+so a clean local run is a strong signal that CI will pass.
+
+CI installs `agent-service` via `pip install -e ".[dev]"` from the
+`agent-service/` directory, sets `OPENAI_API_KEY` to the empty string so
+the FakeLLMClient guard does not reject construction, and fails the
+workflow on any non-zero exit from the eval runner.
+
+### 7.3 Bypass for emergencies
+
+If you absolutely must push without running the eval (for example, an
+infrastructure-only doc fix while the OpenAI API is unavailable), set
+`SKIP_EVAL_HOOK=1` for that one invocation:
+
+**bash / Git Bash:**
+
+```bash
+SKIP_EVAL_HOOK=1 git push
+```
+
+**PowerShell:**
+
+```powershell
+$env:SKIP_EVAL_HOOK = "1"; git push; Remove-Item Env:SKIP_EVAL_HOOK
+```
+
+This is for emergencies only. The CI gate is not bypassable, so any push
+that would have failed the local hook will still be caught before merge.
+
+---
+
+## 8. Cross-references
 
 - [`agent-service/CONTRACT.md`](../agent-service/CONTRACT.md) — frozen HTTP
   contract (request/response shape, error codes, auth).

@@ -345,6 +345,15 @@ through the form so the sidecar runs the full pipeline.
   shape and the aggregation logic, not to estimate production cost; see the
   bottleneck section of [WEEK2_SIDECAR.md](WEEK2_SIDECAR.md) for the
   end-to-end OpenAI-backed cost projection.
+- **Fresh `docker compose down -v && docker compose up` is verified
+  end-to-end.** A previous container-build issue caused
+  `auto_configure.php` (in the pinned `openemr/openemr` base image) to call
+  `new Installer($settings)` with one argument while the source-overlaid
+  `Installer` required two, looping the openemr container in
+  `auto_setup`. That is fixed: the `$logger` argument now defaults to a
+  PSR-3 `NullLogger`, so the legacy CLI shim continues to work after a
+  source overlay. See `library/classes/Installer.class.php` for the
+  docblock explanation.
 
 ---
 

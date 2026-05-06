@@ -37,6 +37,7 @@ services:
     - sitesvolume:/var/www/localhost/htdocs/openemr/sites:rw
     - logvolume:/var/log
     - couchdbvolume:/couchdb/data
+    - agent-uploads:/var/uploads/agent:rw
     environment:
       DEBUG_COLORS: "true"
       TERM: xterm-256color
@@ -86,6 +87,8 @@ services:
       OPENEMR_SETTING_SMTP_Auth: 'TRUE'
       OPENEMR_SETTING_practice_return_email_path: 'noreply@openemr.local'
       OPENEMR_SETTING_Patient_Reminder_Sender_Name: 'OpenEMR Reminders'
+      OPENEMR_AGENT_SIDECAR_URL: 'http://agent-service:8010'
+      OPENEMR_AGENT_SIDECAR_SECRET: '${OPENEMR_AGENT_SIDECAR_SECRET:-dev-shared-secret}'
     depends_on:
       mysql:
         condition: service_healthy
@@ -176,6 +179,20 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+  # Agent sidecar service — placeholder for the Python agent-service.
+  # Uncomment and set the image once the sidecar container is published.
+  # agent-service:
+  #   restart: always
+  #   image: ${AGENT_SERVICE_IMAGE:-openemr/agent-service:latest}
+  #   ports:
+  #   - "${WT_AGENT_PORT:-8010}:8010"
+  #   volumes:
+  #   - agent-uploads:/var/uploads/agent:ro
+  #   environment:
+  #     OPENEMR_AGENT_SIDECAR_SECRET: '${OPENEMR_AGENT_SIDECAR_SECRET:-dev-shared-secret}'
+  #   depends_on:
+  #     openemr:
+  #       condition: service_healthy
 volumes:
   databasevolume: {}
   assetvolume: {}
@@ -188,3 +205,4 @@ volumes:
   logvolume: {}
   couchdbvolume: {}
   mailpitvolume: {}
+  agent-uploads: {}

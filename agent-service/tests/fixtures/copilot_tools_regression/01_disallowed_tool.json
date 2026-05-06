@@ -1,0 +1,72 @@
+{
+  "fixture_id": "regression_disallowed_tool",
+  "intent_id": "current_medications",
+  "user_goal": "Show me current medications.",
+  "tool_payloads": {
+    "get_current_medications": {
+      "records": [
+        {"id": 1, "medication": "Lisinopril 10 mg PO daily"}
+      ],
+      "citations": [
+        {
+          "source_type": "patient_record",
+          "source_id": "med:1",
+          "label": "Active medication list"
+        }
+      ]
+    },
+    "get_active_allergies": {
+      "records": [],
+      "citations": []
+    }
+  },
+  "scripted_turns": [
+    {
+      "tool_calls": [
+        {
+          "call_id": "c0",
+          "tool_name": "get_current_medications",
+          "arguments": {}
+        },
+        {
+          "call_id": "c1",
+          "tool_name": "get_active_allergies",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "final_response": {
+        "answer_block_heading": "Current medications",
+        "claims": [
+          {
+            "text": "Lisinopril 10 mg PO daily",
+            "citation_ids": ["med:1"],
+            "certainty": "active"
+          }
+        ],
+        "citation_ids": ["med:1"],
+        "certainty": "high",
+        "missing_or_uncertain": [],
+        "verification_status": "passed",
+        "citations": [
+          {
+            "source_type": "patient_record",
+            "source_id": "med:1",
+            "label": "Active medication list"
+          }
+        ]
+      }
+    }
+  ],
+  "expected": {
+    "halt_reason": "completed",
+    "rubrics": {
+      "tool_allowed": false,
+      "required_evidence_checked": true
+    },
+    "expected_failure": true
+  },
+  "regression": true,
+  "notes": "Model invokes get_active_allergies which is not in the current_medications intent's allowed_tools set; tool_allowed should be false."
+}

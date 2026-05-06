@@ -1,0 +1,55 @@
+{
+  "fixture_id": "regression_missing_citation",
+  "intent_id": "current_medications",
+  "user_goal": "Show me current medications.",
+  "tool_payloads": {
+    "get_current_medications": {
+      "records": [
+        {"id": 1, "medication": "Lisinopril 10 mg PO daily"}
+      ],
+      "citations": [
+        {
+          "source_type": "patient_record",
+          "source_id": "med:1",
+          "label": "Active medication list"
+        }
+      ]
+    }
+  },
+  "scripted_turns": [
+    {
+      "tool_calls": [
+        {
+          "call_id": "c0",
+          "tool_name": "get_current_medications",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "final_response": {
+        "answer_block_heading": "Current medications",
+        "claims": [
+          {
+            "text": "Lisinopril 10 mg PO daily",
+            "citation_ids": [],
+            "certainty": "active"
+          }
+        ],
+        "citation_ids": [],
+        "certainty": "high",
+        "missing_or_uncertain": [],
+        "verification_status": "passed",
+        "citations": []
+      }
+    }
+  ],
+  "expected": {
+    "rubrics": {
+      "citation_present": false
+    },
+    "expected_failure": true
+  },
+  "regression": true,
+  "notes": "Active claim with empty citation_ids exercises the citation_present rubric. Verifier flags it too -- factually_consistent and verification_passed will also be false."
+}

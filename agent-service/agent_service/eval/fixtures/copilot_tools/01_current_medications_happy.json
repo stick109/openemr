@@ -1,0 +1,67 @@
+{
+  "fixture_id": "current_medications_happy",
+  "intent_id": "current_medications",
+  "user_goal": "Show me current medications.",
+  "tool_payloads": {
+    "get_current_medications": {
+      "records": [
+        {"id": 1, "medication": "Lisinopril 10 mg PO daily", "status": "active"}
+      ],
+      "citations": [
+        {
+          "source_type": "patient_record",
+          "source_id": "med:1",
+          "label": "Active medication list"
+        }
+      ]
+    }
+  },
+  "scripted_turns": [
+    {
+      "tool_calls": [
+        {
+          "call_id": "c0",
+          "tool_name": "get_current_medications",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "final_response": {
+        "answer_block_heading": "Current medications",
+        "claims": [
+          {
+            "text": "Lisinopril 10 mg PO daily",
+            "citation_ids": ["med:1"],
+            "certainty": "active"
+          }
+        ],
+        "citation_ids": ["med:1"],
+        "certainty": "high",
+        "missing_or_uncertain": [],
+        "verification_status": "passed",
+        "citations": [
+          {
+            "source_type": "patient_record",
+            "source_id": "med:1",
+            "label": "Active medication list"
+          }
+        ]
+      }
+    }
+  ],
+  "expected": {
+    "halt_reason": "completed",
+    "rubrics": {
+      "tool_allowed": true,
+      "tool_args_scoped": true,
+      "required_evidence_checked": true,
+      "citation_present": true,
+      "factually_consistent": true,
+      "safe_refusal": true,
+      "no_phi_in_logs": true,
+      "verification_passed": true
+    }
+  },
+  "regression": false
+}

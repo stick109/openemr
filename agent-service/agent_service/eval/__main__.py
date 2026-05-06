@@ -51,6 +51,10 @@ import json
 import sys
 from pathlib import Path
 
+from agent_service.eval.copilot_tools_suite import (
+    CopilotToolsSuiteReport,
+    run_copilot_tools_suite,
+)
 from agent_service.eval.runner import (
     SUPPORTED_REGRESSIONS,
     EvalReport,
@@ -64,12 +68,31 @@ from agent_service.eval.runner import (
 from agent_service.observability.storage import JSONLStorage
 
 
+SUPPORTED_SUITES: tuple[str, ...] = ("extraction", "copilot-tools")
+"""Closed-set of suite names accepted by ``--suite``.
+
+* ``extraction`` -- the original 50-case offline eval (default).
+* ``copilot-tools`` -- the M22 LLM-tool-behaviour suite.
+"""
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m agent_service.eval",
         description=(
             "Run the offline 50-case eval and report per-rubric pass rates. "
             "Compares against a baseline and exits non-zero on regression."
+        ),
+    )
+    parser.add_argument(
+        "--suite",
+        choices=SUPPORTED_SUITES,
+        default="extraction",
+        help=(
+            "Which eval suite to run.  'extraction' runs the original "
+            "50-case offline eval; 'copilot-tools' runs the M22 "
+            "LLM-chosen-tool behaviour eval and exits non-zero on "
+            "rubric mismatch."
         ),
     )
     parser.add_argument(
@@ -120,10 +143,64 @@ def _write_output(path: Path, report: EvalReport) -> None:
     path.write_text(json.dumps(report.as_dict(), indent=2) + "\n", encoding="utf-8")
 
 
+def _format_copilot_tools_table(report: CopilotToolsSuiteReport) -> str:
+    """Render a per-rubric pass-rate table for the copilot-tools suite."""
+    lines: list[str] = [
+        f"copilot-tools eval: {len(report.cases)} primary case(s), "
+        f"{len(report.regressions)} regression case(s).",
+    ]
+    if report.cases:
+        rubric_names = list(report.cases[0].rubrics.as_dict().keys())
+        for name in rubric_names:
+            passed = sum(
+                1 for c in report.cases if c.rubrics.as_dict().get(name, False)
+            )
+            total = len(report.cases)
+            rate = (passed / total) if total else 0.0
+            lines.append(f"  {name:<26} {rate:.2%}  ({passed}/{total})")
+    for case in report.cases:
+        outcome = "OK" if case.matches_expected else "FAIL"
+        lines.append(f"  - {case.fixture_id:<40} {outcome}")
+    if report.regressions:
+        lines.append(f"  regression bucket ({len(report.regressions)}):")
+        for case in report.regressions:
+            outcome = "OK" if case.matches_expected else "FAIL"
+            lines.append(f"    - {case.fixture_id:<40} {outcome}")
+    return "\n".join(lines)
+
+
+def _run_copilot_tools(args: argparse.Namespace) -> int:
+    """Run the M22 ``copilot-tools`` suite and return the exit code."""
+    try:
+        report = run_copilot_tools_suite()
+    except FileNotFoundError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
+
+    print(_format_copilot_tools_table(report))
+
+    if args.output is not None:
+        path: Path = args.output
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report.as_dict(), indent=2) + "\n", encoding="utf-8")
+
+    if not report.all_passed():
+        print(
+            "\nFAIL: copilot-tools suite produced unexpected outcomes.",
+            file=sys.stderr,
+        )
+        return 1
+    print("\nAll copilot-tools rubrics matched fixture expectations.")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     """CLI entrypoint -- returns the process exit code."""
     parser = _build_parser()
     args = parser.parse_args(argv)
+
+    if args.suite == "copilot-tools":
+        return _run_copilot_tools(args)
 
     record_storage = (
         JSONLStorage(args.record_runs) if args.record_runs is not None else None

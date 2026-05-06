@@ -1,0 +1,67 @@
+{
+  "fixture_id": "basic_patient_data_happy",
+  "intent_id": "basic_patient_data",
+  "user_goal": "Show me basic patient data.",
+  "tool_payloads": {
+    "get_basic_patient_data": {
+      "records": [
+        {"id": 1, "field": "demographic snapshot"}
+      ],
+      "citations": [
+        {
+          "source_type": "patient_record",
+          "source_id": "pat:1",
+          "label": "Patient record snapshot"
+        }
+      ]
+    }
+  },
+  "scripted_turns": [
+    {
+      "tool_calls": [
+        {
+          "call_id": "c0",
+          "tool_name": "get_basic_patient_data",
+          "arguments": {}
+        }
+      ]
+    },
+    {
+      "final_response": {
+        "answer_block_heading": "Basic patient data",
+        "claims": [
+          {
+            "text": "Demographic snapshot retrieved.",
+            "citation_ids": ["pat:1"],
+            "certainty": "supported"
+          }
+        ],
+        "citation_ids": ["pat:1"],
+        "certainty": "medium",
+        "missing_or_uncertain": [],
+        "verification_status": "passed",
+        "citations": [
+          {
+            "source_type": "patient_record",
+            "source_id": "pat:1",
+            "label": "Patient record snapshot"
+          }
+        ]
+      }
+    }
+  ],
+  "expected": {
+    "halt_reason": "completed",
+    "rubrics": {
+      "tool_allowed": true,
+      "tool_args_scoped": true,
+      "required_evidence_checked": true,
+      "citation_present": true,
+      "factually_consistent": true,
+      "safe_refusal": true,
+      "no_phi_in_logs": true,
+      "verification_passed": true
+    }
+  },
+  "regression": false
+}

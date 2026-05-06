@@ -179,6 +179,36 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+  # One-shot init service that auto-registers the Week 2
+  # "Upload Document (Co-Pilot)" encounter form in the dev-easy stack.
+  #
+  # OpenEMR's core install does not register custom forms in
+  # interface/forms/* — normally an admin must visit
+  # Admin -> Forms -> Forms Administration and click "Register". For the
+  # demo we want a fresh `docker compose down -v && docker compose up`
+  # to land with the form ready to use, so this sidecar runs after the
+  # openemr container reports healthy (i.e. auto_configure.php finished)
+  # and applies the idempotent SQL in init/register-week2-forms.sql.
+  #
+  # DEV-EASY ONLY: production OpenEMR installs continue to use the
+  # upgrade SQL pipeline (sql/8_1_0-to-8_1_1_upgrade.sql).
+  forms-bootstrap:
+    image: mariadb:11.8.6@sha256:78a5047d3ba33975f183f183c2464cc7f1eab13ec8667e57cc9a5821d6da7577
+    restart: "no"
+    entrypoint: ["/bin/sh", "/init/run-forms-bootstrap.sh"]
+    environment:
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MYSQL_USER: openemr
+      MYSQL_PASS: openemr
+      MYSQL_DATABASE: openemr
+    volumes:
+    - ./init:/init:ro
+    depends_on:
+      mysql:
+        condition: service_healthy
+      openemr:
+        condition: service_healthy
   # Agent sidecar service — Python FastAPI app in ../../agent-service.
   # Reads documents written to the shared agent-uploads volume by OpenEMR
   # and exposes the agent pipeline at http://agent-service:8010.

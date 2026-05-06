@@ -31,13 +31,31 @@ from unittest import mock
 import pytest
 from fastapi.testclient import TestClient
 
+from agent_service.api.copilot import (
+    get_llm_tool_choice_client,
+    get_registry_builder,
+)
 from agent_service.api.dependencies import (
     get_clock,
     get_secret_resolver,
     get_settings_dep,
 )
 from agent_service.auth.copilot_run_context import SecretResolver
+from agent_service.clients.tool_choice import (
+    FakeLLMToolChoiceClient,
+    LLMFinalMessage,
+    LLMToolChoiceTurn,
+    ScriptedTurn,
+)
 from agent_service.config import Settings
+from agent_service.schemas.copilot import (
+    AnswerBlock,
+    Citation,
+    Claim,
+    CopilotRunResponse,
+)
+from agent_service.tools.definition import ToolDefinition
+from agent_service.tools.registry import ToolRegistry
 
 
 # ---------------------------------------------------------------------------
@@ -290,16 +308,135 @@ class TestRunContextRejection:
 # ---------------------------------------------------------------------------
 
 
+def _empty_schema() -> dict[str, Any]:
+    return {"type": "object", "properties": {}, "additionalProperties": False}
+
+
+def _med_executor(
+    _ctx: Any,
+    _runtime_args: Any,
+) -> dict[str, Any]:
+    return {
+        "records": [{"id": 1}],
+        "citations": [
+            Citation(
+                source_type="patient_record",
+                source_id="med:1",
+                label="Active medication list",
+            ),
+        ],
+    }
+
+
+def _build_test_registry_with_meds() -> ToolRegistry:
+    registry = ToolRegistry()
+    registry.register(
+        ToolDefinition(
+            name="get_basic_patient_data",
+            description="Return basic patient data.",
+            input_schema=_empty_schema(),
+            required_capability="read_basic_patient_data",
+            source_types=("patient_record",),
+            read_only=True,
+            max_rows=25,
+            executor=_med_executor,
+        ),
+    )
+    return registry
+
+
+def _scripted_completed_response() -> CopilotRunResponse:
+    return CopilotRunResponse(
+        answer_blocks=[
+            AnswerBlock(
+                heading="Current medications",
+                claims=[
+                    Claim(
+                        text="Lisinopril 10 mg PO daily",
+                        citation_ids=["med:1"],
+                        certainty="active",
+                    ),
+                ],
+            ),
+        ],
+        claims=[
+            Claim(
+                text="Lisinopril 10 mg PO daily",
+                citation_ids=["med:1"],
+                certainty="active",
+            ),
+        ],
+        citation_ids=["med:1"],
+        certainty="high",
+        missing_or_uncertain=[],
+        citations=[
+            Citation(
+                source_type="patient_record",
+                source_id="med:1",
+                label="Active medication list",
+            ),
+        ],
+        tool_sequence=[],
+        verification_status="passed",
+        cost_usd=0.0,
+        latency_ms_per_step={},
+        trace_id="trace-abcd-efgh",
+    )
+
+
+@pytest.fixture()
+def loop_overrides(client: TestClient) -> Iterator[None]:
+    """Inject a fake LLM client + minimal registry so the loop can run.
+
+    The fake replays a scripted single-turn final message. The registry
+    only carries ``get_basic_patient_data`` which matches the
+    ``allowed_tools`` claim on ``VALID_CLAIMS``.
+    """
+    from agent_service.main import app
+
+    fake = FakeLLMToolChoiceClient(
+        script=(
+            ScriptedTurn(
+                turn=LLMToolChoiceTurn(
+                    final_message=LLMFinalMessage(
+                        parsed_response=_scripted_completed_response(),
+                    ),
+                ),
+            ),
+        ),
+    )
+    registry = _build_test_registry_with_meds()
+
+    app.dependency_overrides[get_llm_tool_choice_client] = lambda: fake
+    app.dependency_overrides[get_registry_builder] = lambda: (lambda _ctx: registry)
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_llm_tool_choice_client, None)
+        app.dependency_overrides.pop(get_registry_builder, None)
+
+
 class TestRunContextAccepted:
-    def test_valid_token_with_intent_id_reaches_stub(self, client: TestClient) -> None:
+    def test_valid_token_with_intent_id_returns_response(
+        self,
+        client: TestClient,
+        loop_overrides: None,
+    ) -> None:
+        # ``intent_id`` selects ``current_medications`` -- the fake LLM
+        # produces a final message immediately, so no tools are called.
         resp = client.post("/api/copilot/run", json=_request_payload())
 
-        assert resp.status_code == 501
+        assert resp.status_code == 200
         body = resp.json()
-        assert body["error"] == "not_implemented"
-        assert "M13" in body["message"] or "stub" in body["message"].lower()
+        assert body["verification_status"] == "passed"
+        assert body["citation_ids"] == ["med:1"]
 
-    def test_valid_token_with_user_goal_reaches_stub(self, client: TestClient) -> None:
+    def test_valid_token_with_user_goal_returns_response(
+        self,
+        client: TestClient,
+        loop_overrides: None,
+    ) -> None:
+        # The user_goal-only path also flows through the fake-backed loop.
         payload = _request_payload(
             intent_id=None,
             user_goal="What are this patient's active allergies?",
@@ -307,11 +444,15 @@ class TestRunContextAccepted:
 
         resp = client.post("/api/copilot/run", json=payload)
 
-        assert resp.status_code == 501
+        assert resp.status_code == 200
         body = resp.json()
-        assert body["error"] == "not_implemented"
+        assert body["verification_status"] == "passed"
 
-    def test_response_body_never_echoes_the_wire_token(self, client: TestClient) -> None:
+    def test_response_body_never_echoes_the_wire_token(
+        self,
+        client: TestClient,
+        loop_overrides: None,
+    ) -> None:
         # Sanity check: the success path must not include the signed
         # token, even indirectly.
         payload = _request_payload()

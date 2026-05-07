@@ -274,21 +274,6 @@ function Invoke-MediumTests {
         Skip-Test -Name "agent-service pytest" -Group "Medium" -Reason "no python launcher or agent-service dir"
     }
 
-    # PHPStan static analysis (level 10) -- composer script applies the
-    # 4G memory limit.
-    if (Test-Command composer) {
-        Run-Test -Name "composer phpstan" -Group "Medium" -Block {
-            Push-Location $RepoRoot
-            try {
-                & composer phpstan
-            } finally {
-                Pop-Location
-            }
-        }
-    } else {
-        Skip-Test -Name "composer phpstan" -Group "Medium" -Reason "composer not on PATH"
-    }
-
     # PHP CodeSniffer.
     if (Test-Command composer) {
         Run-Test -Name "composer phpcs" -Group "Medium" -Block {

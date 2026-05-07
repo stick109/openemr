@@ -127,7 +127,9 @@ function Assert-NoMatchInTree {
     param([string[]]$Roots, [string]$Pattern, [string]$Description)
     foreach ($root in $Roots) {
         if (-not (Test-Path $root)) { continue }
-        $hits = Select-String -Path (Join-Path $root '*') -Recurse -Pattern $Pattern -ErrorAction SilentlyContinue
+        $files = Get-ChildItem -Path $root -Recurse -File -ErrorAction SilentlyContinue
+        if (-not $files) { continue }
+        $hits = $files | Select-String -Pattern $Pattern -ErrorAction SilentlyContinue
         if ($hits) {
             $sample = $hits | Select-Object -First 5 | ForEach-Object { "  - $($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
             throw "$Description failed: forbidden pattern '$Pattern' still present under $root`n$($sample -join "`n")"

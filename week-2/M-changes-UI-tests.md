@@ -30,9 +30,6 @@ Then walk through this checklist in the deployed app.
   PHP container. `docker compose config` should show the same value mounted
   in both. The PHP minter (M3) uses key version `v1`.
 
-- Default routing mode is `php` (legacy path). Per-intent overrides are set
-  via env vars matching `OPENEMR_COPILOT_INTENT_MODE_<UPPER_INTENT_ID>`.
-
 ## Checklist
 
 ### 1. Login
@@ -46,34 +43,17 @@ Then walk through this checklist in the deployed app.
       1 active allergy, 1 active problem, 2 recent encounters
 - [ ] Open an encounter
 
-### 3. Default mode (PHP path) — sanity that legacy still renders
+### 3. Read-only intents (M19, M20)
 
-(With no `OPENEMR_COPILOT_INTENT_MODE_*` and no `OPENEMR_COPILOT_DEFAULT_MODE`
-set: every intent goes through the PHP path that delegates to the sidecar via
-M17 only when the appropriate flags are flipped. With nothing flipped, the
-legacy PHP UI is gone after M24 — the controller only knows `php`/`shadow`/
-`sidecar` modes. Confirm the controller still works in `php` mode.)
+All six read-only intents now route through the sidecar by default — no
+env-var flipping needed. Walk through each one:
 
-- [ ] Open the **Clinical Co-Pilot** panel (sidebar / encounter UI)
-- [ ] Click **"Basic patient data"** intent button
-- [ ] Confirm a response renders (it may be a placeholder/legacy-fallback
-      shape since M24 removed the live PHP answer-builder, but the UI must
-      not crash)
-
-### 4. Sidecar mode — read-only intents (M19, M20)
-
-For each of the six read-only intents, set `OPENEMR_COPILOT_INTENT_MODE_<ID>=sidecar`
-in the OpenEMR container's env (or `.env` file used by Compose), restart
-the openemr container, and exercise the button:
-
-| Intent | Env var to flip |
-|---|---|
-| basic_patient_data | `OPENEMR_COPILOT_INTENT_MODE_BASIC_PATIENT_DATA=sidecar` |
-| current_medications | `OPENEMR_COPILOT_INTENT_MODE_CURRENT_MEDICATIONS=sidecar` |
-| allergies_to_confirm | `OPENEMR_COPILOT_INTENT_MODE_ALLERGIES_TO_CONFIRM=sidecar` |
-| recent_events | `OPENEMR_COPILOT_INTENT_MODE_RECENT_EVENTS=sidecar` |
-| changed_since_last_visit | `OPENEMR_COPILOT_INTENT_MODE_CHANGED_SINCE_LAST_VISIT=sidecar` |
-| show_source | `OPENEMR_COPILOT_INTENT_MODE_SHOW_SOURCE=sidecar` |
+- basic_patient_data
+- current_medications
+- allergies_to_confirm
+- recent_events
+- changed_since_last_visit
+- show_source
 
 For each one:
 
@@ -86,46 +66,20 @@ For each one:
 - [ ] Clicking a citation chip opens the source drilldown panel and
       shows bounded source detail (record body excerpt, occurred_at)
 
-### 5. Source drilldown specific cases (M11)
+### 4. Source drilldown specific cases (M11)
 
-- [ ] With **show_source** in sidecar mode, open the panel and select a
-      previously-cited source — bounded detail renders, no PDF/raw text spill
+- [ ] Open the panel and select a previously-cited source — bounded detail
+      renders, no PDF/raw text spill
 - [ ] Manually craft a URL with a citation_id from a different patient's
       record (e.g., copy a citation_id from another patient's panel) — the
       drilldown shows an "unauthorized" or empty-state message, NOT another
       patient's data
 - [ ] Drilldown for a malformed citation_id shows a graceful error state
 
-### 6. Shadow mode (M18)
-
-Set `OPENEMR_COPILOT_INTENT_MODE_BASIC_PATIENT_DATA=shadow` (legacy answer
-shown to user, sidecar called in parallel for comparison). Restart openemr.
-
-- [ ] Click "Basic patient data"
-- [ ] User-visible response is the LEGACY-style answer (shadow returns the
-      legacy build path's answer to the UI)
-- [ ] In `docker compose --project-name openemr logs openemr` look for an
-      INFO entry tagged `Sidecar shadow comparison` with PSR-3 context fields:
-      `trace_id`, `intent_id`, `verification_status_match`,
-      `cited_source_ids_match`, `php_cited_count`, `sidecar_cited_count`,
-      `headings_match`
-- [ ] Confirm the shadow log entry has NO claim text, evidence body, or
-      patient identifiers beyond `trace_id` + `intent_id`
-
-### 7. Emergency disable (M19)
-
-Set `OPENEMR_COPILOT_EMERGENCY_DISABLE=1` while individual intents have
-`...=sidecar`. Restart openemr.
-
-- [ ] Click an intent button
-- [ ] The route uses the legacy/PHP code path regardless of per-intent mode
-- [ ] Unset `OPENEMR_COPILOT_EMERGENCY_DISABLE` (or set to 0) — sidecar mode
-      resumes per the per-intent settings
-
-### 8. Two-phase write proposal (M21)
+### 5. Two-phase write proposal (M21)
 
 Pre-req: an uploaded lab PDF that the sidecar's extractor produced an
-observation for, in shadow or sidecar mode for `current_medications`.
+observation for, for `current_medications`.
 
 - [ ] Trigger a write proposal flow (sidecar tool
       `persist_lab_observation_proposal` returns a typed proposal)
@@ -136,7 +90,7 @@ observation for, in shadow or sidecar mode for `current_medications`.
       previous result, no double-write in the procedure_order table
 - [ ] Cross-patient citation_id in proposal → 422
 
-### 9. Per-tool-call observability (M16)
+### 6. Per-tool-call observability (M16)
 
 In another terminal:
 
@@ -153,7 +107,7 @@ docker compose --project-name openemr logs -f agent-service
 - [ ] No event contains: full names, DOB, address, MRN, phone, email,
       document text, raw evidence body, prompt text
 
-### 10. CI workflow visibility (M23)
+### 7. CI workflow visibility (M23)
 
 - [ ] In the GitHub repo, open Actions → confirm `Copilot Migration` workflow
       ran on the latest push

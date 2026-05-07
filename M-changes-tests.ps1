@@ -362,26 +362,8 @@ Test-Step "Static M17: PHP thin proxy to sidecar copilot" {
     Assert-FileContains "src/RestControllers/Agent/AgentIntentRestController.php" "CopilotSidecarClient" "M17 controller wiring"
 }
 
-Test-Step "Static M18: shadow mode comparator + record" {
-    Assert-FileExists "src/Services/Agent/Sidecar/ShadowComparator.php"        "M18 comparator class"
-    Assert-FileExists "src/Services/Agent/Sidecar/ShadowComparisonRecord.php"  "M18 record value object"
-    Assert-FileExists "tests/Tests/Isolated/Services/Agent/Sidecar/ShadowComparatorTest.php" "M18 comparator test"
-    Assert-FileExists "agent-service/tests/test_shadow_contract.py" "M18 Python contract test"
-}
-
-Test-Step "Static M19: per-intent cutover flags" {
-    Assert-FileExists "src/Services/Agent/Sidecar/IntentMode.php"              "M19 mode enum"
-    Assert-FileExists "src/Services/Agent/Sidecar/CopilotSidecarRouting.php"   "M19 routing class"
-    Assert-FileExists "tests/Tests/Isolated/Services/Agent/Sidecar/CopilotSidecarRoutingTest.php" "M19 routing test"
-    Assert-FileContains "src/Services/Agent/Sidecar/IntentMode.php"        "case Php"        "M19 IntentMode::Php"
-    Assert-FileContains "src/Services/Agent/Sidecar/IntentMode.php"        "case Shadow"     "M19 IntentMode::Shadow"
-    Assert-FileContains "src/Services/Agent/Sidecar/IntentMode.php"        "case Sidecar"    "M19 IntentMode::Sidecar"
-    Assert-FileContains "src/Services/Agent/Sidecar/CopilotSidecarRouting.php" "emergencyDisable" "M19 emergency disable"
-}
-
 Test-Step "Static M20: per-intent parity tests" {
     Assert-FileExists "agent-service/tests/test_intent_parity.py"  "M20 parity test"
-    Assert-FileExists ".env.copilot-cutover.example"               "M20 cutover env example"
     foreach ($intent in @(
         "basic_patient_data","current_medications","allergies_to_confirm",
         "recent_events","changed_since_last_visit","show_source"
@@ -574,20 +556,8 @@ if ($SkipPhpTests) {
         & php vendor/bin/phpunit -c phpunit-isolated.xml --filter "CopilotSidecarClient"
     }
 
-    Test-Step "PHP: ShadowComparator (M18)" {
-        & php vendor/bin/phpunit -c phpunit-isolated.xml --filter "ShadowComparator"
-    }
-
-    Test-Step "PHP: CopilotSidecarRouting + IntentMode (M19)" {
-        & php vendor/bin/phpunit -c phpunit-isolated.xml --filter "CopilotSidecarRouting"
-    }
-
     Test-Step "PHP: AgentProposalCommitController (M21)" {
         & php vendor/bin/phpunit -c phpunit-isolated.xml --filter "AgentProposalCommitController"
-    }
-
-    Test-Step "PHP: IntentCutoverPlan (M20)" {
-        & php vendor/bin/phpunit -c phpunit-isolated.xml --filter "IntentCutoverPlan"
     }
 
     Test-Step "PHP: full Copilot+Sidecar+Agent isolated suites" {

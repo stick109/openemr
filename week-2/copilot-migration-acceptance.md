@@ -32,9 +32,7 @@ ripgrep: 0 matches anywhere in the repository.
 - [x] PHP retains the agreed UI-and-context surface:
       `OpenEMR\Services\Agent\Copilot\CopilotRunContext` (M3),
       `OpenEMR\Services\Agent\Sidecar\CopilotSidecarClient` (M17),
-      `OpenEMR\Services\Agent\Sidecar\ShadowComparator` (M18),
-      `OpenEMR\Services\Agent\Sidecar\CopilotSidecarRouting` and the
-      `IntentMode` enum (M19), the proposal-commit REST endpoint at
+      the proposal-commit REST endpoint at
       `src/RestControllers/Agent/AgentProposalCommitController.php` (M21),
       M2 DTOs under `src/Services/Agent/Sidecar/`, and the intent catalog
       source-of-truth in `src/Services/Agent/AgentIntentCatalog.php`. The

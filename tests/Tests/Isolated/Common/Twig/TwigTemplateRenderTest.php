@@ -66,6 +66,10 @@ class TwigTemplateRenderTest extends TestCase
 
         $expected = file_get_contents($fixturePath);
         self::assertIsString($expected, "Failed to read fixture: $fixturePath");
+        // Normalize line endings so fixtures (LF) match rendered output on
+        // any platform (Windows Twig may produce CRLF).
+        $expected = str_replace("\r\n", "\n", $expected);
+        $rendered = str_replace("\r\n", "\n", $rendered);
         self::assertSame(
             $expected,
             $rendered,

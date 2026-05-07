@@ -158,7 +158,7 @@ if (-not $nowLine) {
 $containerNow = [DateTime]::ParseExact($nowLine, "yyyy-MM-dd HH:mm:ss", $culture)
 $cutoff = $containerNow.AddHours(-$Hours)
 
-$rawLines = & docker compose --project-name $ProjectName exec -T openemr /root/devtools php-log
+$rawLines = & docker compose --project-name $ProjectName exec -T openemr cat /var/log/apache2/error.log
 if ($LASTEXITCODE -ne 0) {
     throw "Failed to read PHP error log (exit $LASTEXITCODE)."
 }

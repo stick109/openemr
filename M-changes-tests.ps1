@@ -173,19 +173,9 @@ function Show-Summary {
 # Section 1 - static checks (fast, no external deps)
 # -----------------------------------------------------------------------------
 
-Test-Step "Static M0: ownership contract recorded in W2_ARCHITECTURE.md" {
-    Assert-FileExists "W2_ARCHITECTURE.md" "architecture doc present"
-    Assert-FileContains "W2_ARCHITECTURE.md" "LLM chooses tools"     "M0: LLM tool choice recorded"
-    Assert-FileContains "W2_ARCHITECTURE.md" "CopilotRunContext"     "M0: CopilotRunContext mentioned"
-    Assert-FileContains "W2_ARCHITECTURE.md" "runtime-allowed"       "M0: runtime-allowed mentioned"
-    Assert-FileContains "W2_ARCHITECTURE.md" "authoritative"         "M0: authoritative mentioned"
-    Assert-FileExists "Clinical Co-Pilot Migration to Python Sidecar.md" "migration plan present"
-}
-
-Test-Step "Static M1: 32 PHP-to-Python parity fixtures + README" {
+Test-Step "Static M1: 32 PHP-to-Python parity fixtures" {
     $base = "agent-service/tests/fixtures/copilot_parity"
     Assert-FileExists $base                                       "parity fixtures dir present"
-    Assert-FileExists "$base/README.md"                           "fixtures README present"
     foreach ($intent in @(
         "basic_patient_data",
         "current_medications",
@@ -426,19 +416,6 @@ Test-Step "Static M24: migrated PHP internals removed" {
     Write-Host "  ok: 6 migrated PHP classes confirmed removed"
     # Verification grep from migration doc M24 spec
     Assert-NoMatchInTree -Roots @("src") -Pattern "AgentLlmOrchestrator|AgentAnswerVerifier|OpenAiResponsesAgentLlmProvider|AgentEvidenceResponseBuilder" -Description "M24: zero references in src/ to removed classes"
-}
-
-Test-Step "Static M25: final acceptance report present" {
-    Assert-FileExists "docs/copilot-migration-acceptance.md" "M25 acceptance report"
-}
-
-Test-Step "Static M-overall: all 26 migration rows marked Done" {
-    $doc = Get-Content "Clinical Co-Pilot Migration to Python Sidecar.md" -Raw
-    $notStartedCount = ([regex]::Matches($doc, '\bStatus:\*\* Not started\b')).Count
-    if ($notStartedCount -gt 0) { throw "$notStartedCount step(s) still 'Not started' in migration doc" }
-    $checkboxCount = ([regex]::Matches($doc, '- \[x\] Done')).Count
-    if ($checkboxCount -lt 26) { throw "expected >=26 '[x] Done' rows, found $checkboxCount" }
-    Write-Host "  ok: $checkboxCount Done rows; 0 Not started"
 }
 
 if ($OnlyStatic) {

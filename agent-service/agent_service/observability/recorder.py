@@ -1,12 +1,20 @@
 """Append-only sinks for :class:`RunEvent` documents (M16).
 
-Two implementations are shipped:
+Three implementations are shipped:
 
 * :class:`JsonlEventRecorder` -- one event per line in a ``.jsonl`` file.
-  This is the production default.  Concurrent appends within a process
-  are guarded by a ``threading.Lock``; cross-process concurrency relies
-  on the OS atomicity guarantee for ``O_APPEND`` writes below
-  ``PIPE_BUF`` (well above our event size).
+  This is the production default for offline analysis.  Concurrent
+  appends within a process are guarded by a ``threading.Lock``;
+  cross-process concurrency relies on the OS atomicity guarantee for
+  ``O_APPEND`` writes below ``PIPE_BUF`` (well above our event size).
+* :class:`LoggingEventRecorder` -- emits each event as a single JSON log
+  record at INFO level via :mod:`logging`.  The intended sink is the
+  process's stdout stream (uvicorn's logging configuration), so demo
+  deployments can ``docker compose logs -f agent-service`` and watch
+  the agent-loop event sequence in real time.
+* :class:`MultiplexEventRecorder` -- fan-out wrapper that delegates each
+  ``record`` call to one or more underlying sinks, so a deployment can
+  persist events to JSONL *and* tail them from stdout simultaneously.
 * :class:`NullEventRecorder` -- no-op sink for tests that exercise the
   agent loop without caring about observability.
 
@@ -17,7 +25,9 @@ can be swapped without modifying the loop.
 from __future__ import annotations
 
 import json
+import logging
 import threading
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol, runtime_checkable
@@ -132,6 +142,114 @@ class JsonlEventRecorder:
 
 
 # ---------------------------------------------------------------------------
+# Logging sink
+# ---------------------------------------------------------------------------
+
+
+_DEFAULT_LOGGER_NAME = "agent_service.observability"
+
+
+class LoggingEventRecorder:
+    """Emit each event as a single JSON-encoded INFO log record.
+
+    Intended for demo / development deployments that want the agent-loop
+    event sequence to surface in container logs (``docker compose logs
+    -f agent-service``) without spinning up a JSONL tail.
+
+    The events are already PHI-scrubbed at construction by
+    :class:`agent_service.observability.events.RunEvent`, so this sink
+    does no further redaction -- the bytes that hit ``logger.info`` are
+    the same bytes :class:`JsonlEventRecorder` would have appended to a
+    file.
+
+    Logging configuration
+    ---------------------
+    Uvicorn installs a stdout handler on the root logger at INFO level
+    when started with default flags.  Records emitted on the
+    ``agent_service.observability`` logger therefore propagate up the
+    hierarchy and reach stdout without further configuration.  The
+    constructor enforces a minimum log level of ``INFO`` on the logger
+    itself so a stricter root level (e.g. ``WARNING``) does not silently
+    swallow these events.
+    """
+
+    def __init__(
+        self,
+        *,
+        logger: logging.Logger | None = None,
+        level: int = logging.INFO,
+    ) -> None:
+        self._logger: logging.Logger = (
+            logger if logger is not None else logging.getLogger(_DEFAULT_LOGGER_NAME)
+        )
+        # Uvicorn does not configure non-uvicorn loggers, so the
+        # ``agent_service.observability`` logger inherits whatever level
+        # the root logger has.  We force INFO on this specific logger so
+        # the event stream surfaces even when the root logger is left at
+        # the Python default (WARNING).
+        if self._logger.level == logging.NOTSET or self._logger.level > level:
+            self._logger.setLevel(level)
+        self._level: int = level
+
+    @property
+    def logger(self) -> logging.Logger:
+        """Return the underlying :class:`logging.Logger` for inspection."""
+        return self._logger
+
+    def record(self, event: RunEvent) -> None:
+        """Log one JSON-encoded event at INFO level."""
+        # ``model_dump`` then ``json.dumps`` mirrors the JSONL recorder's
+        # encoding (``separators=(",", ":")`` for compact output, ISO
+        # 8601 occurred_at) so a single set of tools (``jq``, ``grep``)
+        # works over both sinks.
+        payload = event.model_dump(mode="python", exclude_none=True)
+        # ``mode="python"`` returns a ``datetime`` for ``occurred_at``;
+        # serialise it the same way the JSONL recorder does so the wire
+        # format stays stable.
+        if "occurred_at" in payload:
+            payload["occurred_at"] = event.occurred_at.isoformat()
+        line = json.dumps(payload, separators=(",", ":"))
+        # Use the closed-set event_type as the log message so log
+        # aggregators can group on it without parsing the JSON suffix.
+        self._logger.log(self._level, "run_event %s", line)
+
+
+# ---------------------------------------------------------------------------
+# Multiplex / fan-out sink
+# ---------------------------------------------------------------------------
+
+
+class MultiplexEventRecorder:
+    """Fan-out wrapper that records every event to several backends.
+
+    Construction order is preserved: each underlying recorder receives
+    the event in the order supplied, even if an earlier sink raises.
+    Failures from one sink do not stop the rest from running, so a flaky
+    file system does not blind the stdout stream (and vice versa).
+    """
+
+    def __init__(self, recorders: Iterable[EventRecorder]) -> None:
+        self._recorders: tuple[EventRecorder, ...] = tuple(recorders)
+
+    @property
+    def recorders(self) -> Sequence[EventRecorder]:
+        """Return the underlying recorders (insertion order)."""
+        return self._recorders
+
+    def record(self, event: RunEvent) -> None:
+        """Dispatch the event to every wrapped recorder."""
+        first_error: BaseException | None = None
+        for recorder in self._recorders:
+            try:
+                recorder.record(event)
+            except BaseException as exc:  # noqa: BLE001 -- best-effort fan-out
+                if first_error is None:
+                    first_error = exc
+        if first_error is not None:
+            raise first_error
+
+
+# ---------------------------------------------------------------------------
 # Null sink
 # ---------------------------------------------------------------------------
 
@@ -148,5 +266,7 @@ class NullEventRecorder:
 __all__ = [
     "EventRecorder",
     "JsonlEventRecorder",
+    "LoggingEventRecorder",
+    "MultiplexEventRecorder",
     "NullEventRecorder",
 ]

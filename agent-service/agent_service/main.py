@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import Any
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
@@ -15,6 +16,49 @@ from agent_service.schemas.api import (
     AgentRunRequest,
     AgentRunResponse,
 )
+
+
+def _configure_observability_logging() -> None:
+    """Ensure ``agent_service.observability`` records reach stdout.
+
+    Uvicorn configures its own loggers (``uvicorn``, ``uvicorn.access``,
+    ``uvicorn.error``) at INFO level on a stdout stream handler, but it
+    leaves application loggers at the Python default (``WARNING`` on the
+    root logger, no handlers attached). When :class:`LoggingEventRecorder`
+    emits an event it lands on ``agent_service.observability``; without
+    a handler somewhere up the chain that record is silently dropped.
+
+    We attach a stream handler directly to the observability logger and
+    disable propagation so the records do not double-print through
+    uvicorn's root handler. The handler is idempotent: re-importing the
+    module (e.g. test reloads) does not stack duplicate handlers.
+    """
+    obs_logger = logging.getLogger("agent_service.observability")
+    obs_logger.setLevel(logging.INFO)
+    # Avoid stacking duplicate handlers on hot reloads / repeated imports.
+    if not any(
+        isinstance(h, logging.StreamHandler)
+        and getattr(h, "_agent_observability_handler", False)
+        for h in obs_logger.handlers
+    ):
+        handler = logging.StreamHandler(stream=sys.stdout)
+        handler.setLevel(logging.INFO)
+        handler.setFormatter(
+            logging.Formatter(
+                "%(asctime)s %(levelname)s %(name)s %(message)s",
+            ),
+        )
+        # Tag the handler so we can detect it on subsequent imports
+        # without depending on object identity.
+        handler._agent_observability_handler = True  # type: ignore[attr-defined]
+        obs_logger.addHandler(handler)
+    # Don't propagate to the root logger -- uvicorn's root handler would
+    # otherwise emit each record a second time.
+    obs_logger.propagate = False
+
+
+_configure_observability_logging()
+
 
 logger = logging.getLogger(__name__)
 

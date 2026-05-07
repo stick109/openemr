@@ -22,6 +22,12 @@ Optional env vars:
     OBSERVABILITY_EVENTS_PATH    -- M16 per-tool-call event JSONL path.  Unset
                                     means events are dropped on the floor
                                     (NullEventRecorder).
+    OBSERVABILITY_EVENTS_STDOUT  -- when truthy ("1", "true", "yes"), the
+                                    sidecar additionally emits each
+                                    observability event as a JSON log
+                                    record at INFO level so demo
+                                    deployments can tail them via
+                                    ``docker compose logs -f``.
 """
 
 from __future__ import annotations
@@ -111,6 +117,13 @@ class Settings:
     # compile.
     observability_events_path: Path | None = None
 
+    # M16 follow-up: when ``True``, the sidecar emits each event as a
+    # single JSON log record at INFO level (in addition to the JSONL file
+    # if one is also configured).  Demo deployments enable this so the
+    # event stream is visible via ``docker compose logs -f``; production
+    # deployments leave it off and rely on the JSONL sink.
+    observability_events_stdout: bool = False
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
@@ -136,4 +149,5 @@ def get_settings() -> Settings:
         openemr_db_pass_ro=_optional_env("OPENEMR_DB_PASS_RO"),
         openemr_db_timeout_s=_int_env("OPENEMR_DB_TIMEOUT_S", 5),
         observability_events_path=events_path,
+        observability_events_stdout=_bool_env("OBSERVABILITY_EVENTS_STDOUT"),
     )

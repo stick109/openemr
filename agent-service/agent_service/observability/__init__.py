@@ -31,6 +31,8 @@ from agent_service.observability.events import (
 from agent_service.observability.recorder import (
     EventRecorder,
     JsonlEventRecorder,
+    LoggingEventRecorder,
+    MultiplexEventRecorder,
     NullEventRecorder,
 )
 from agent_service.observability.run_record import RunRecord
@@ -45,6 +47,8 @@ __all__ = [
     "EventType",
     "JSONLStorage",
     "JsonlEventRecorder",
+    "LoggingEventRecorder",
+    "MultiplexEventRecorder",
     "NullEventRecorder",
     "RunEvent",
     "RunEventPhiError",

@@ -42,6 +42,8 @@ from agent_service.loop import AgentLoop, AgentLoopConfig, RegistryBuilder
 from agent_service.observability.recorder import (
     EventRecorder,
     JsonlEventRecorder,
+    LoggingEventRecorder,
+    MultiplexEventRecorder,
     NullEventRecorder,
 )
 from agent_service.repository.openemr import (
@@ -196,9 +198,25 @@ def get_registry_builder() -> RegistryBuilder:
 def get_event_recorder() -> EventRecorder:
     """Return the per-tool-call observability sink for the agent loop (M16).
 
-    When ``OBSERVABILITY_EVENTS_PATH`` is configured, returns a
-    :class:`JsonlEventRecorder` writing to that path.  Otherwise events
-    are dropped through a :class:`NullEventRecorder`.
+    Routing matrix (most specific first):
+
+    +--------------------------------+------------------------------+----------------------------------------+
+    | ``OBSERVABILITY_EVENTS_PATH``  | ``OBSERVABILITY_EVENTS_STDOUT`` | recorder                               |
+    +================================+==============================+========================================+
+    | set                            | truthy                       | :class:`MultiplexEventRecorder` over   |
+    |                                |                              | :class:`JsonlEventRecorder` and        |
+    |                                |                              | :class:`LoggingEventRecorder`          |
+    +--------------------------------+------------------------------+----------------------------------------+
+    | set                            | unset / falsy                | :class:`JsonlEventRecorder`            |
+    +--------------------------------+------------------------------+----------------------------------------+
+    | unset                          | truthy                       | :class:`LoggingEventRecorder`          |
+    +--------------------------------+------------------------------+----------------------------------------+
+    | unset                          | unset / falsy                | :class:`NullEventRecorder`             |
+    +--------------------------------+------------------------------+----------------------------------------+
+
+    The demo dev-easy compose stack sets ``OBSERVABILITY_EVENTS_STDOUT=1``
+    so the event sequence is visible via ``docker compose logs -f
+    agent-service`` without configuring a JSONL path.
 
     Tests override this dependency directly when they want to capture
     events for inspection -- the per-request resolution model means a
@@ -211,9 +229,20 @@ def get_event_recorder() -> EventRecorder:
         # in a test environment. The agent loop already routes through a
         # NullEventRecorder by default so this is a safe fallback.
         return NullEventRecorder()
-    if settings.observability_events_path is None:
+
+    sinks: list[EventRecorder] = []
+    if settings.observability_events_path is not None:
+        sinks.append(
+            JsonlEventRecorder(path=settings.observability_events_path),
+        )
+    if settings.observability_events_stdout:
+        sinks.append(LoggingEventRecorder())
+
+    if not sinks:
         return NullEventRecorder()
-    return JsonlEventRecorder(path=settings.observability_events_path)
+    if len(sinks) == 1:
+        return sinks[0]
+    return MultiplexEventRecorder(sinks)
 
 
 def get_agent_loop(

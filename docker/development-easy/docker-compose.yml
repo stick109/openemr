@@ -244,6 +244,12 @@ services:
       OPENEMR_DB_USER_RO: '${OPENEMR_DB_USER_RO:-openemr}'
       OPENEMR_DB_PASS_RO: '${OPENEMR_DB_PASS_RO:-openemr}'
       OPENEMR_DB_TIMEOUT_S: '5'
+      # M16 follow-up: emit each agent-loop observability event as a
+      # JSON log record so demo deployments can ``docker compose logs
+      # -f agent-service`` and watch the run.received -> tool.* ->
+      # verifier.finished -> response.returned sequence.  Disable in
+      # production deployments that prefer the JSONL sink only.
+      OBSERVABILITY_EVENTS_STDOUT: '${OBSERVABILITY_EVENTS_STDOUT:-1}'
     healthcheck:
       test:
       - CMD

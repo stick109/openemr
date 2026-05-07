@@ -118,8 +118,7 @@ class PatientAgentTabTest extends TestCase
         $this->assertStringContainsString("active_patient_context: 'server-session'", $this->scriptContent);
         $this->assertStringContainsString('fetch(apiUrl', $this->scriptContent);
         $this->assertStringContainsString('js-agent-prompt-preview', $this->templateContent);
-        $this->assertStringContainsString('readonly', $this->templateContent);
-        $this->assertStringContainsString('aria-readonly="true"', $this->templateContent);
+        $this->assertStringNotContainsString('readonly', $this->templateContent);
         $this->assertStringContainsString('disabled>{{ "Send"|xlt }}</button>', $this->templateContent);
         $this->assertStringContainsString('var intentPrompts = new Map', $this->scriptContent);
         $this->assertStringContainsString("intentPrompts.get(intentId) || ''", $this->scriptContent);

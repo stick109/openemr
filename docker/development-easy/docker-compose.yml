@@ -235,6 +235,15 @@ services:
       HONEYCOMB_API_KEY: '${HONEYCOMB_API_KEY:-}'
       AGENT_LOG_LEVEL: '${AGENT_LOG_LEVEL:-INFO}'
       AGENT_DEBUG: '${AGENT_DEBUG:-false}'
+      # OpenEMR DB connection for M9's OpenEmrReadRepository.  Reads only --
+      # the sidecar uses these to fetch evidence (medications, allergies,
+      # encounters, etc.) for the agent loop's read-only tools.
+      OPENEMR_DB_HOST: 'mysql'
+      OPENEMR_DB_PORT: '3306'
+      OPENEMR_DB_NAME: 'openemr'
+      OPENEMR_DB_USER_RO: '${OPENEMR_DB_USER_RO:-openemr}'
+      OPENEMR_DB_PASS_RO: '${OPENEMR_DB_PASS_RO:-openemr}'
+      OPENEMR_DB_TIMEOUT_S: '5'
     healthcheck:
       test:
       - CMD

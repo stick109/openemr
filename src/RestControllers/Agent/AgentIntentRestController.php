@@ -350,11 +350,17 @@ final class AgentIntentRestController
     {
         $rows = [];
         foreach ($response->answerBlocks as $block) {
-            $rows[] = [
+            $row = [
                 'type' => $block->type,
                 'content' => $block->content,
                 'citation_indices' => $block->citationIndices,
+                'heading' => $block->heading,
+                'claims' => $block->claims,
             ];
+            if ($block->bodyMarkdown !== null) {
+                $row['body_markdown'] = $block->bodyMarkdown;
+            }
+            $rows[] = $row;
         }
         return $rows;
     }

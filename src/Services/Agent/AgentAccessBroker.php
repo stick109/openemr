@@ -39,6 +39,23 @@ final class AgentAccessBroker
      *     tools: list<string>
      * }>
      */
+    /**
+     * Sidecar tool names (Python registry) granted by each access policy.
+     *
+     * The legacy ``tools`` field used :class:`AgentIntentCatalog` intent IDs
+     * (e.g. ``current_medications``) -- but the Python sidecar's tool
+     * registry exposes real tool names (e.g. ``get_current_medications``).
+     * The intersection between ``context.allowed_tools`` and
+     * ``registry.list_names()`` was empty whenever the controller minted a
+     * run-context off these policies, so the LLM saw zero tools and
+     * always returned a refusal envelope.
+     *
+     * Each policy now grants the full set of sidecar tool names that
+     * its data classes require; per-intent restriction still happens
+     * inside the agent loop via the M7 ``IntentCatalog`` (each intent
+     * limits to a small subset, e.g. ``current_medications`` only
+     * exposes ``get_current_medications`` + ``get_source_detail``).
+     */
     private const ACCESS_POLICIES = [
         [
             'section' => 'patients',
@@ -46,10 +63,10 @@ final class AgentAccessBroker
             'permission' => '',
             'data_classes' => ['demographics', 'recent_events'],
             'tools' => [
-                AgentIntentCatalog::BASIC_PATIENT_DATA,
-                AgentIntentCatalog::RECENT_EVENTS,
-                AgentIntentCatalog::CHANGED_SINCE_LAST_VISIT,
-                AgentIntentCatalog::SHOW_SOURCE,
+                'get_basic_patient_data',
+                'get_recent_events',
+                'get_changes_since_last_visit',
+                'get_source_detail',
             ],
         ],
         [
@@ -58,8 +75,9 @@ final class AgentAccessBroker
             'permission' => '',
             'data_classes' => ['medications', 'allergies'],
             'tools' => [
-                AgentIntentCatalog::CURRENT_MEDICATIONS,
-                AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
+                'get_current_medications',
+                'get_active_allergies',
+                'get_source_detail',
             ],
         ],
         [

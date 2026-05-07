@@ -37,7 +37,7 @@ Then walk through this checklist in the deployed app.
 
 ### 1. Login
 
-- [ ] Browse to https://localhost:9300/
+- [ ] Browse to http://localhost:8300/
 - [ ] Log in as `admin` / `pass`
 
 ### 2. Patient and encounter setup

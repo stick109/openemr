@@ -23,6 +23,7 @@ The router is mounted under the ``/api/copilot`` prefix in
 from __future__ import annotations
 
 import logging
+from functools import lru_cache
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -43,8 +44,13 @@ from agent_service.observability.recorder import (
     JsonlEventRecorder,
     NullEventRecorder,
 )
+from agent_service.repository.openemr import (
+    OpenEmrReadRepository,
+    RepositoryConfigurationError,
+)
 from agent_service.schemas.copilot import CopilotRunRequest, CopilotRunResponse
-from agent_service.tools.registry import ToolRegistry, default_registry
+from agent_service.tools.composed_registry import compose_production_registry
+from agent_service.tools.registry import ToolRegistry
 from agent_service.verifier import AnswerVerifier
 
 
@@ -110,19 +116,79 @@ def get_llm_tool_choice_client() -> LLMToolChoiceClient:
     return OpenAIToolChoiceClient(api_key=settings.openai_api_key)
 
 
+@lru_cache(maxsize=1)
+def _cached_repository() -> OpenEmrReadRepository | None:
+    """Return a process-wide :class:`OpenEmrReadRepository` or ``None``.
+
+    Builds the repository via :meth:`OpenEmrReadRepository.from_settings`
+    once per process. ``OpenEmrReadRepository`` is immutable post-construction
+    and shares a connection factory closure that is safe to use across
+    requests, so caching at module scope avoids re-validating the DB
+    settings on every request.
+
+    Returns ``None`` -- and emits a one-time WARNING -- when the
+    M9 :class:`RepositoryConfigurationError` fires (missing or empty
+    ``OPENEMR_DB_*`` settings) or when ``AGENT_SHARED_SECRET`` is unset
+    so :func:`get_settings` itself raises. Callers translate ``None``
+    into an empty-registry builder so the API stays alive on a
+    misconfigured deployment instead of crashing at boot. Every tool
+    call then trips the M6 ``tool_unknown`` reason -- a far better
+    failure mode than refusing to serve any traffic.
+    """
+    try:
+        settings: Settings = get_settings()
+    except RuntimeError:
+        logger.warning(
+            "OpenEMR read repository unavailable: settings unavailable; "
+            "the agent loop will return tool_unknown for every call until "
+            "AGENT_SHARED_SECRET and OPENEMR_DB_* are configured.",
+        )
+        return None
+    try:
+        return OpenEmrReadRepository.from_settings(settings)
+    except RepositoryConfigurationError as exc:
+        logger.warning(
+            "OpenEMR read repository unavailable; the agent loop will "
+            "return tool_unknown for every call until configuration is "
+            "fixed",
+            extra={"missing_settings": list(exc.missing)},
+        )
+        return None
+
+
 def get_registry_builder() -> RegistryBuilder:
     """Return the registry builder used for new runs.
 
-    The default builder ignores the run context and returns the
-    inert :func:`default_registry` -- safe at import time but useless
-    in production because every tool is a stub. Real production wiring
-    overrides this to compose ``patient_evidence_tool_registry`` /
-    ``source_drilldown_tool_registry`` / ``document_tool_registry``;
-    tests override it with a tightly-scoped fake registry.
-    """
+    Production wiring composes the M10 patient-evidence registry, the
+    M11 source-drilldown registry, and the M12 document-tool registry
+    into a single per-context :class:`ToolRegistry` backed by the M9
+    :class:`OpenEmrReadRepository`. The repository is built once per
+    process via :func:`_cached_repository` (it is immutable and safe to
+    share); each request then clones a fresh registry so any future
+    per-context tailoring can mutate the registry without leaking
+    across requests.
 
-    def _build(_context: CopilotRunContext) -> ToolRegistry:
-        return default_registry()
+    On a misconfigured deployment (missing
+    ``AGENT_SHARED_SECRET`` or required ``OPENEMR_DB_*`` settings)
+    :func:`_cached_repository` returns ``None`` and we hand back a
+    builder that yields an empty :class:`ToolRegistry`. The API stays
+    alive; every tool call will then surface as M6
+    ``tool_unknown`` rather than a startup crash. This is intentional:
+    config errors should fail at first use, not at boot, so the auth
+    and validation layers above remain testable.
+
+    Tests override this dependency with a tightly-scoped fake registry.
+    """
+    repository = _cached_repository()
+
+    if repository is None:
+        def _empty_builder(_context: CopilotRunContext) -> ToolRegistry:
+            return ToolRegistry()
+
+        return _empty_builder
+
+    def _build(context: CopilotRunContext) -> ToolRegistry:
+        return compose_production_registry(context, repository=repository)
 
     return _build
 

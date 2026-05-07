@@ -22,7 +22,9 @@ param(
 
     [string]$PhpMyAdminPort,
 
-    [string]$MysqlPort
+    [string]$MysqlPort,
+
+    [string]$AgentPort
 )
 
 $ErrorActionPreference = "Stop"
@@ -371,6 +373,14 @@ function Get-OpenEmrHttpsEndpoint {
     return "https://localhost:$(Get-PortValue -Name "WT_HTTPS_PORT" -DefaultValue "9300")/"
 }
 
+function Get-AgentServiceBaseUrl {
+    return "http://localhost:$(Get-PortValue -Name "WT_AGENT_PORT" -DefaultValue "8010")/"
+}
+
+function Get-AgentServiceHealthEndpoint {
+    return "$(Get-AgentServiceBaseUrl)healthz"
+}
+
 function Get-EndpointPort {
     param([string]$Uri)
 
@@ -409,16 +419,33 @@ function Get-OpenEmrStartupDetail {
     return ($details -join "; ")
 }
 
+function Get-AgentServiceStartupDetail {
+    $container = @(Get-DockerComposeContainers | Where-Object { $_.Service -eq "agent-service" } | Select-Object -First 1)
+    if ($container.Count -eq 0) {
+        return "agent-service container is missing"
+    }
+
+    return "agent-service container: state=$($container[0].State), health=$($container[0].Health), status=$($container[0].Status)"
+}
+
 function Wait-OpenEmrEndpoints {
     param(
         [string]$HttpEndpoint,
         [string]$HttpsEndpoint,
+        [string]$AgentEndpoint,
         [string[]]$ExpectedServices,
         [int]$PollSeconds
     )
 
+    $hasAgent = -not [string]::IsNullOrWhiteSpace($AgentEndpoint)
+
     Write-Host ""
-    Write-Host "Waiting for OpenEMR HTTP and HTTPS endpoints to serve normally..."
+    if ($hasAgent) {
+        Write-Host "Waiting for OpenEMR HTTP, HTTPS, and agent-service endpoints to serve normally..."
+    }
+    else {
+        Write-Host "Waiting for OpenEMR HTTP and HTTPS endpoints to serve normally..."
+    }
 
     while ($true) {
         $httpPort = Get-EndpointPort -Uri $HttpEndpoint
@@ -430,10 +457,24 @@ function Wait-OpenEmrEndpoints {
         $httpProbe = if ($httpTcp.Ready) { Test-HttpEndpoint -Uri $HttpEndpoint } else { [pscustomobject]@{ Ready = $false; Detail = "not attempted because TCP is unavailable" } }
         $httpsProbe = if ($httpsTcp.Ready) { Test-HttpEndpoint -Uri $HttpsEndpoint } else { [pscustomobject]@{ Ready = $false; Detail = "not attempted because TCP is unavailable" } }
 
-        if ($httpProbe.Ready -and $httpsProbe.Ready) {
+        $agentReady = $true
+        $agentPort = $null
+        $agentTcp = $null
+        $agentProbe = $null
+        if ($hasAgent) {
+            $agentPort = Get-EndpointPort -Uri $AgentEndpoint
+            $agentTcp = Test-TcpPort -HostName "localhost" -Port $agentPort
+            $agentProbe = if ($agentTcp.Ready) { Test-HttpEndpoint -Uri $AgentEndpoint } else { [pscustomobject]@{ Ready = $false; Detail = "not attempted because TCP is unavailable" } }
+            $agentReady = $agentProbe.Ready
+        }
+
+        if ($httpProbe.Ready -and $httpsProbe.Ready -and $agentReady) {
             Write-Host "OpenEMR endpoints are ready."
             Write-Host "HTTP:  $HttpEndpoint ($($httpProbe.Detail))"
             Write-Host "HTTPS: $HttpsEndpoint ($($httpsProbe.Detail))"
+            if ($hasAgent) {
+                Write-Host "Agent: $AgentEndpoint ($($agentProbe.Detail))"
+            }
             return
         }
 
@@ -443,6 +484,11 @@ function Wait-OpenEmrEndpoints {
         Write-Host "HTTP endpoint:       $($httpProbe.Detail)"
         Write-Host "HTTPS port $httpsPort TCP: $($httpsTcp.Detail)"
         Write-Host "HTTPS endpoint:      $($httpsProbe.Detail)"
+        if ($hasAgent) {
+            Write-Host "Agent port $agentPort TCP: $($agentTcp.Detail)"
+            Write-Host "Agent endpoint:      $($agentProbe.Detail)"
+            Write-Host "Agent blocker:       $(Get-AgentServiceStartupDetail)"
+        }
         Write-Host "Compose services:    $(Get-DockerComposeServiceBlockers -ExpectedServices $ExpectedServices)"
         Write-Host "Blocker: $(Get-OpenEmrStartupDetail)"
 
@@ -456,6 +502,7 @@ Set-PortOverride -Name "WT_HTTP_PORT" -Value $HttpPort
 Set-PortOverride -Name "WT_HTTPS_PORT" -Value $HttpsPort
 Set-PortOverride -Name "WT_PMA_PORT" -Value $PhpMyAdminPort
 Set-PortOverride -Name "WT_MYSQL_PORT" -Value $MysqlPort
+Set-PortOverride -Name "WT_AGENT_PORT" -Value $AgentPort
 
 $repoRoot = $PSScriptRoot
 $composeDirectory = Get-ComposeDirectory -SelectedProfile $Profile
@@ -483,6 +530,8 @@ try {
     $httpEndpoint = Get-OpenEmrHttpEndpoint
     $httpsEndpoint = Get-OpenEmrHttpsEndpoint
     $expectedServices = Get-DockerComposeServices
+    $includeAgent = $expectedServices -contains "agent-service"
+    $agentEndpoint = if ($includeAgent) { Get-AgentServiceHealthEndpoint } else { $null }
     $containers = @(Get-DockerComposeContainers)
     $stackRunning = Test-DockerComposeStackRunning -ExpectedServices $expectedServices -Containers $containers
 
@@ -493,7 +542,7 @@ try {
         if (-not $Restart) {
             Write-Host "No stack changes made. Use -Restart to stop and start the running stack."
             if (-not $Foreground) {
-                Wait-OpenEmrEndpoints -HttpEndpoint $httpEndpoint -HttpsEndpoint $httpsEndpoint -ExpectedServices $expectedServices -PollSeconds $ReadinessPollSeconds
+                Wait-OpenEmrEndpoints -HttpEndpoint $httpEndpoint -HttpsEndpoint $httpsEndpoint -AgentEndpoint $agentEndpoint -ExpectedServices $expectedServices -PollSeconds $ReadinessPollSeconds
             }
             return
         }
@@ -524,7 +573,11 @@ try {
             Write-Host "MySQL:         localhost:$(Get-PortValue -Name "WT_MYSQL_PORT" -DefaultValue "8320")"
         }
 
-        Wait-OpenEmrEndpoints -HttpEndpoint $httpEndpoint -HttpsEndpoint $httpsEndpoint -ExpectedServices $expectedServices -PollSeconds $ReadinessPollSeconds
+        if ($includeAgent) {
+            Write-Host "Agent service: $(Get-AgentServiceBaseUrl)"
+        }
+
+        Wait-OpenEmrEndpoints -HttpEndpoint $httpEndpoint -HttpsEndpoint $httpsEndpoint -AgentEndpoint $agentEndpoint -ExpectedServices $expectedServices -PollSeconds $ReadinessPollSeconds
 
         Write-Host "Opening HTTPS endpoint in the default browser..."
         Start-Process -FilePath $httpsEndpoint

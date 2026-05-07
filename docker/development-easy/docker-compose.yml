@@ -97,6 +97,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      agent-service:
+        condition: service_healthy
     healthcheck:
       test:
       - CMD
@@ -220,6 +222,7 @@ services:
   agent-service:
     restart: always
     container_name: agent-service
+    image: ${AGENT_SERVICE_LOCAL_IMAGE:-agent-service-local:latest}
     build:
       context: ../../agent-service
       dockerfile: Dockerfile
@@ -255,6 +258,9 @@ services:
       # verifier.finished -> response.returned sequence.  Disable in
       # production deployments that prefer the JSONL sink only.
       OBSERVABILITY_EVENTS_STDOUT: '${OBSERVABILITY_EVENTS_STDOUT:-1}'
+    depends_on:
+      mysql:
+        condition: service_healthy
     healthcheck:
       test:
       - CMD

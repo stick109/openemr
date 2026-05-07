@@ -8,6 +8,10 @@ param(
 
     [string]$DockerfilePath = "Dockerfile.railway",
 
+    [string]$LocalAgentImageName = "agent-service-local:latest",
+
+    [string]$AgentDockerfilePath = "agent-service\Dockerfile",
+
     [switch]$NoPull
 )
 
@@ -47,6 +51,7 @@ function Invoke-DockerBuild {
     param(
         [string]$Dockerfile,
         [string]$ImageName,
+        [string]$Context = ".",
         [switch]$Pull
     )
 
@@ -58,12 +63,21 @@ function Invoke-DockerBuild {
     $arguments += $Dockerfile
     $arguments += "--tag"
     $arguments += $ImageName
-    $arguments += "."
+    $arguments += $Context
 
     & docker @arguments
     if ($LASTEXITCODE -ne 0) {
         throw "docker $($arguments -join ' ') failed with exit code $LASTEXITCODE."
     }
+}
+
+function Get-DockerComposeServices {
+    $output = & docker compose --project-name $ProjectName config --services
+    if ($LASTEXITCODE -ne 0) {
+        throw "docker compose config --services failed with exit code $LASTEXITCODE."
+    }
+
+    return @($output | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
 }
 
 Confirm-DockerCompose
@@ -72,6 +86,8 @@ $repoRoot = $PSScriptRoot
 $composeDirectory = Get-ComposeDirectory -SelectedProfile $Profile
 $composeFile = Join-Path $repoRoot (Join-Path $composeDirectory "docker-compose.yml")
 $localDockerfile = Join-Path $repoRoot $DockerfilePath
+$localAgentDockerfile = Join-Path $repoRoot $AgentDockerfilePath
+$localAgentContext = Split-Path -Parent $localAgentDockerfile
 
 if (-not (Test-Path $composeFile)) {
     throw "Compose file not found at $composeDirectory\docker-compose.yml."
@@ -86,15 +102,26 @@ try {
     Write-Host "Using Dockerfile: $DockerfilePath"
     Write-Host "Building local OpenEMR image: $LocalImageName"
 
-    if (-not $NoPull) {
-        Push-Location (Join-Path $repoRoot $composeDirectory)
-        try {
+    Push-Location (Join-Path $repoRoot $composeDirectory)
+    try {
+        $services = Get-DockerComposeServices
+
+        if (-not $NoPull) {
             Write-Host "Pulling compose dependency images..."
             Invoke-DockerCompose -ComposeArguments @("pull", "--ignore-buildable")
         }
-        finally {
-            Pop-Location
+    }
+    finally {
+        Pop-Location
+    }
+
+    $includeAgent = $services -contains "agent-service"
+    if ($includeAgent) {
+        if (-not (Test-Path $localAgentDockerfile)) {
+            throw "Agent Dockerfile not found at $AgentDockerfilePath."
         }
+        Write-Host "Using agent Dockerfile: $AgentDockerfilePath"
+        Write-Host "Building local agent-service image: $LocalAgentImageName"
     }
 
     Invoke-DockerBuild -Dockerfile $localDockerfile -ImageName $LocalImageName -Pull:(-not $NoPull)
@@ -103,7 +130,18 @@ try {
         Write-Host "Set OPENEMR_LOCAL_IMAGE=$LocalImageName before running run-docker.ps1 so Compose uses this tag."
     }
 
+    if ($includeAgent) {
+        Invoke-DockerBuild -Dockerfile $localAgentDockerfile -ImageName $LocalAgentImageName -Context $localAgentContext -Pull:(-not $NoPull)
+
+        if ($LocalAgentImageName -ne "agent-service-local:latest") {
+            Write-Host "Set AGENT_SERVICE_LOCAL_IMAGE=$LocalAgentImageName before running run-docker.ps1 so Compose uses this tag."
+        }
+    }
+
     Write-Host "Local OpenEMR image is ready. Run run-docker.ps1 -Restart from the repository root to recreate the app container from it."
+    if ($includeAgent) {
+        Write-Host "Local agent-service image is ready as well."
+    }
 }
 finally {
     Pop-Location

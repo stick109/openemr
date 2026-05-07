@@ -14,6 +14,10 @@
         - .git/hooks/pre-push (HARD GATE: 50-case agent eval)
         - package.json (lint:js, stylelint, test:js)
         - CLAUDE.md devtools commands (unit-test, services-test, api-test)
+        - live-agent-container-tests.ps1 (HTTP smoke tests against the
+          running agent-service sidecar; verifies behaviours the
+          in-process FastAPI TestClient cannot prove -- topology, env
+          wiring, signed run_context HMAC, shared volume)
 
     The 50-case agent eval is the assignment's HARD GATE. It is included
     in the Slow group and runs the same command the pre-push hook runs.
@@ -288,6 +292,24 @@ function Invoke-SlowTests {
     } else {
         Skip-Test -Name "agent eval (50-case HARD GATE)" -Group "Slow" -Reason "no python launcher or agent-service dir"
         Skip-Test -Name "agent eval (copilot-tools suite)" -Group "Slow" -Reason "no python launcher or agent-service dir"
+    }
+
+    # Live HTTP smoke tests against the running agent-service sidecar.
+    # The script is self-contained: it has its own group skipping,
+    # docker-project detection (via `docker compose -p openemr`), and
+    # graceful behaviour when the sidecar is unreachable. We invoke it
+    # as a child script and let its exit code drive PASS/FAIL here.
+    # Skipped under -SkipDocker since the suite needs a running stack
+    # to do anything useful.
+    $liveScript = Join-Path -Path $RepoRoot -ChildPath "live-agent-container-tests.ps1"
+    if ($SkipDocker) {
+        Skip-Test -Name "live-agent-container-tests.ps1" -Group "Slow" -Reason "-SkipDocker"
+    } elseif (-not (Test-Path -LiteralPath $liveScript)) {
+        Skip-Test -Name "live-agent-container-tests.ps1" -Group "Slow" -Reason "script not found at $liveScript"
+    } else {
+        Run-Test -Name "live-agent-container-tests.ps1" -Group "Slow" -Block {
+            & $liveScript
+        }
     }
 
     # Docker-backed devtools suites (unit-test, services-test, api-test).

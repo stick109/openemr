@@ -42,9 +42,10 @@ $arrOeUiSettings = [
 ];
 $oemr_ui = new OemrUI($arrOeUiSettings);
 $agentCatalog = new AgentIntentCatalog();
+$nonButtonIntentIds = [AgentIntentCatalog::SHOW_SOURCE, AgentIntentCatalog::FREE_TEXT];
 $displayIntents = array_values(array_filter(
     $agentCatalog->all(),
-    static fn (array $intent): bool => ($intent['intent_id'] ?? null) !== AgentIntentCatalog::SHOW_SOURCE
+    static fn (array $intent): bool => !in_array($intent['intent_id'], $nonButtonIntentIds, true)
 ));
 $sourceIntent = $agentCatalog->get(AgentIntentCatalog::SHOW_SOURCE);
 $agentSiteId = (string) ($session->get('site_id') ?? 'default');

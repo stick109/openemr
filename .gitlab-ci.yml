@@ -1,0 +1,36 @@
+##
+# OpenEMR Sidecar -- GitLab CI mirror of .github/workflows/agent-eval.yml.
+#
+# Runs the offline 50-case eval on every push to master / codex/** and on
+# merge requests targeting those branches. Mirrors the GitHub Actions
+# workflow and the local pre-push hook so the gate behaves the same locally,
+# on GitHub, and on GitLab.
+
+stages:
+  - eval
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+  # FakeLLMClient guards against accidental real-API calls; the eval runner
+  # always uses recorded responses, so the live API key must be empty in CI.
+  OPENAI_API_KEY: ""
+
+agent-eval:
+  stage: eval
+  image: python:3.11
+  interruptible: true
+  cache:
+    key:
+      files:
+        - agent-service/pyproject.toml
+    paths:
+      - .pip-cache/
+  script:
+    - python -m pip install --upgrade pip
+    - cd agent-service
+    - pip install -e ".[dev]"
+    - python -m agent_service.eval --baseline agent_service/eval/baseline.json
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && ($CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "master" || $CI_MERGE_REQUEST_TARGET_BRANCH_NAME =~ /^codex\//)'
+    - if: '$CI_COMMIT_BRANCH == "master"'
+    - if: '$CI_COMMIT_BRANCH =~ /^codex\//'

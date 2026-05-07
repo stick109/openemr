@@ -13,6 +13,7 @@
         var statusNode = panel.querySelector('.js-agent-status');
         var outputNode = panel.querySelector('.js-agent-output');
         var promptPreviewNode = panel.querySelector('.js-agent-prompt-preview');
+        var sendButton = panel.querySelector('.js-agent-send-preview');
         var buttons = Array.prototype.slice.call(panel.querySelectorAll('.js-agent-intent'));
         var intentLabels = new Map();
         var intentPrompts = new Map();
@@ -179,6 +180,16 @@
                 clearNode(outputNode);
             }
             setButtonsDisabled(loading);
+            if (!loading) {
+                syncSendButtonState();
+            }
+        }
+
+        function syncSendButtonState() {
+            if (!sendButton || !promptPreviewNode) {
+                return;
+            }
+            sendButton.disabled = promptPreviewNode.value.trim() === '';
         }
 
         function showOutput() {
@@ -261,8 +272,8 @@
             appendTextElement(outputNode, 'div', 'small text-muted', messages.evidence + ': ' + evidence);
         }
 
-        async function requestIntent(intentId, sourceId) {
-            if (promptPreviewNode) {
+        async function requestIntent(intentId, sourceId, userGoal) {
+            if (promptPreviewNode && intentId !== 'free_text') {
                 promptPreviewNode.value = intentId === 'show_source' && sourceId
                     ? messages.sourcePrompt
                     : intentPrompts.get(intentId) || '';
@@ -283,6 +294,9 @@
                 };
                 if (sourceId) {
                     payload.source_id = sourceId;
+                }
+                if (typeof userGoal === 'string' && userGoal !== '') {
+                    payload.user_goal = userGoal;
                 }
 
                 var response = await fetch(apiUrl, {
@@ -324,6 +338,33 @@
                 requestIntent(button.dataset.intentId);
             });
         });
+
+        function submitUserGoal() {
+            if (!promptPreviewNode) {
+                return;
+            }
+            var userGoal = promptPreviewNode.value.trim();
+            if (userGoal === '') {
+                return;
+            }
+            requestIntent('free_text', null, userGoal);
+        }
+
+        if (promptPreviewNode) {
+            promptPreviewNode.addEventListener('input', syncSendButtonState);
+            promptPreviewNode.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                    event.preventDefault();
+                    submitUserGoal();
+                }
+            });
+        }
+
+        if (sendButton) {
+            sendButton.addEventListener('click', submitUserGoal);
+        }
+
+        syncSendButtonState();
     }
 
     function initPanels() {

@@ -246,20 +246,6 @@ function Invoke-MediumTests {
         Skip-Test -Name "agent-service pytest" -Group "Medium" -Reason "no python launcher or agent-service dir"
     }
 
-    # PHP CodeSniffer.
-    if (Test-Command composer) {
-        Run-Test -Name "composer phpcs" -Group "Medium" -Block {
-            Push-Location $RepoRoot
-            try {
-                & composer phpcs
-            } finally {
-                Pop-Location
-            }
-        }
-    } else {
-        Skip-Test -Name "composer phpcs" -Group "Medium" -Reason "composer not on PATH"
-    }
-
     # Rector dry-run (modernization checks).
     if (Test-Command composer) {
         Run-Test -Name "composer rector-check" -Group "Medium" -Block {

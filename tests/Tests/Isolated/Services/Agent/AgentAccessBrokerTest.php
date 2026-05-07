@@ -57,19 +57,24 @@ class AgentAccessBrokerTest extends TestCase
         $this->assertSame('allowed', $decision->getReasonCode());
         $this->assertSame('test-token-current_medications-123', $decision->getAccessToken()?->getTokenId());
         $this->assertSame([
-            'demographics',
-            'recent_events',
+            'patient_record',
+            'encounters',
+            'labs',
+            'vitals',
+            'procedures',
             'medications',
             'allergies',
+            'problems',
+            'document',
             'appointments',
         ], $decision->getAccessToken()?->getGrantedDataClasses());
         $this->assertSame([
-            AgentIntentCatalog::BASIC_PATIENT_DATA,
-            AgentIntentCatalog::RECENT_EVENTS,
-            AgentIntentCatalog::CHANGED_SINCE_LAST_VISIT,
-            AgentIntentCatalog::SHOW_SOURCE,
-            AgentIntentCatalog::CURRENT_MEDICATIONS,
-            AgentIntentCatalog::ALLERGIES_TO_CONFIRM,
+            'get_basic_patient_data',
+            'get_recent_events',
+            'get_changes_since_last_visit',
+            'get_source_detail',
+            'get_current_medications',
+            'get_active_allergies',
         ], $decision->getAccessToken()?->getGrantedTools());
         $this->assertSame([
             ['section' => 'patients', 'value' => 'demo', 'permission' => ''],
@@ -98,8 +103,15 @@ class AgentAccessBrokerTest extends TestCase
 
         $this->assertTrue($decision->isAllowed());
         $this->assertSame([
-            'demographics',
-            'recent_events',
+            'patient_record',
+            'encounters',
+            'labs',
+            'vitals',
+            'procedures',
+            'medications',
+            'allergies',
+            'problems',
+            'document',
         ], $decision->getAccessToken()?->getGrantedDataClasses());
         $this->assertNotContains(AgentIntentCatalog::CURRENT_MEDICATIONS, $decision->getAccessToken()?->getGrantedTools());
         $this->assertSame(1, $this->auditEvents[0]['success']);

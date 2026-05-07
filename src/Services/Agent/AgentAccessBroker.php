@@ -55,13 +55,37 @@ final class AgentAccessBroker
      * inside the agent loop via the M7 ``IntentCatalog`` (each intent
      * limits to a small subset, e.g. ``current_medications`` only
      * exposes ``get_current_medications`` + ``get_source_detail``).
+     *
+     * ``data_classes`` uses the **sidecar source-type taxonomy** (matching
+     * the Python ``EvidenceSourceType`` enum and each tool's
+     * ``source_types`` tuple under ``agent_service.tools``). The controller
+     * forwards these verbatim as ``allowed_source_types`` on the minted
+     * :class:`CopilotRunContext`, where the executor's
+     * ``_has_required_source_types`` guard checks set-intersection against
+     * each tool's declared types. A vocabulary mismatch here yields an
+     * empty intersection and every tool call returns a refusal payload,
+     * so these strings must stay in lockstep with the Python registry.
      */
     private const ACCESS_POLICIES = [
         [
             'section' => 'patients',
             'value' => 'demo',
             'permission' => '',
-            'data_classes' => ['demographics', 'recent_events'],
+            'data_classes' => [
+                // Source types covering get_basic_patient_data,
+                // get_recent_events, get_changes_since_last_visit, and
+                // get_source_detail (everything the sidecar tools
+                // wired below can return citations for).
+                'patient_record',
+                'encounters',
+                'labs',
+                'vitals',
+                'procedures',
+                'medications',
+                'allergies',
+                'problems',
+                'document',
+            ],
             'tools' => [
                 'get_basic_patient_data',
                 'get_recent_events',
@@ -84,6 +108,10 @@ final class AgentAccessBroker
             'section' => 'patients',
             'value' => 'appt',
             'permission' => '',
+            // No sidecar appointment tool exists yet; we keep an empty
+            // tool list and a placeholder source-type tag so the policy
+            // entry is syntactically valid and ready for a future
+            // ``get_upcoming_appointments`` wiring.
             'data_classes' => ['appointments'],
             'tools' => [],
         ],

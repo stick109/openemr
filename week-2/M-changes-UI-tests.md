@@ -98,7 +98,7 @@ In another terminal:
 docker compose --project-name openemr logs -f agent-service
 ```
 
-- [ ] Click any sidecar-mode intent button
+- [ ] Click any intent button
 - [ ] Logs show the event sequence:
       `run.received` → `model.turn.started` → `tool.started` →
       `tool.finished` → `model.turn.finished` → `verifier.finished` →
@@ -120,7 +120,6 @@ docker compose --project-name openemr logs -f agent-service
 All checkboxes above marked. If any item fails:
 
 1. Capture the screen state and the relevant log excerpt
-2. Note which env-var combination was active
-3. Triage before recording the demo video
+2. Triage before recording the demo video
 
 After all items pass, the migration is verified end-to-end through the UI.

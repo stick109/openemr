@@ -70,11 +70,12 @@
             parent.appendChild(claimText);
         }
 
-        function appendCitationLinks(parent, citationIds) {
+        function appendCitationLinks(parent, citationIds, citationLabels) {
             if (!Array.isArray(citationIds) || citationIds.length === 0) {
                 return;
             }
 
+            var labelMap = citationLabels instanceof Map ? citationLabels : null;
             var sourceContainer = document.createElement('span');
             sourceContainer.className = 'agent-panel__source-list text-muted';
             sourceContainer.appendChild(document.createTextNode(' ('));
@@ -86,7 +87,10 @@
                 sourceLink.textContent = citationIds.length === 1
                     ? messages.source
                     : messages.source + ' ' + (index + 1);
-                sourceLink.setAttribute('aria-label', messages.sourceAria + ': ' + citationId);
+                var citationLabel = labelMap ? labelMap.get(citationId) : '';
+                var hoverLabel = citationLabel ? citationLabel : citationId;
+                sourceLink.setAttribute('title', hoverLabel);
+                sourceLink.setAttribute('aria-label', messages.sourceAria + ': ' + hoverLabel);
                 sourceLink.addEventListener('click', function () {
                     requestIntent('show_source', citationId);
                 });
@@ -99,14 +103,37 @@
             parent.appendChild(sourceContainer);
         }
 
-        function appendCitationText(parent, citationIds) {
+        function buildCitationLabelMap(citations) {
+            var labelMap = new Map();
+            if (!Array.isArray(citations)) {
+                return labelMap;
+            }
+            citations.forEach(function (citation) {
+                if (!citation || typeof citation !== 'object') {
+                    return;
+                }
+                var sourceId = typeof citation.source_id === 'string' ? citation.source_id : '';
+                var label = typeof citation.label === 'string' ? citation.label : '';
+                if (sourceId !== '' && label !== '') {
+                    labelMap.set(sourceId, label);
+                }
+            });
+            return labelMap;
+        }
+
+        function appendCitationText(parent, citationIds, citationLabels) {
             if (!Array.isArray(citationIds) || citationIds.length === 0) {
                 return;
             }
 
+            var labelMap = citationLabels instanceof Map ? citationLabels : null;
+            var rendered = citationIds.map(function (citationId) {
+                var label = labelMap ? labelMap.get(citationId) : '';
+                return label ? label : citationId;
+            });
             var citationContainer = document.createElement('span');
             citationContainer.className = 'agent-panel__source-list text-muted';
-            citationContainer.textContent = ' (' + citationIds.join(', ') + ')';
+            citationContainer.textContent = ' (' + rendered.join(', ') + ')';
             parent.appendChild(citationContainer);
         }
 
@@ -184,6 +211,7 @@
             }
 
             var citationRenderer = data.intent_id === 'show_source' ? appendCitationText : appendCitationLinks;
+            var citationLabels = buildCitationLabelMap(data.citations);
 
             (data.answer.answer_blocks || []).forEach(function (block) {
                 if (shouldShowBlockHeading(block, data)) {
@@ -206,7 +234,7 @@
                         || claimCitationKey === ''
                         || claimCitationKey !== previousCitationKey
                     ) {
-                        citationRenderer(item, claimCitationIds);
+                        citationRenderer(item, claimCitationIds, citationLabels);
                     }
                     previousCitationKey = claimCitationKey;
                     list.appendChild(item);
@@ -221,7 +249,7 @@
                 data.answer.missing_or_uncertain.forEach(function (item) {
                     var missingItem = document.createElement('li');
                     appendClaimText(missingItem, item.text || '');
-                    citationRenderer(missingItem, item.citation_ids);
+                    citationRenderer(missingItem, item.citation_ids, citationLabels);
                     missingList.appendChild(missingItem);
                 });
                 outputNode.appendChild(missingList);

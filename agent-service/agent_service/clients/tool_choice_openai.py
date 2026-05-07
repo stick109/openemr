@@ -28,6 +28,28 @@ Design notes
   ``tool_call_completion`` raises :class:`LLMNotConfiguredError`, which
   the loop maps to a ``model_error`` refusal with a clearly-typed cause
   rather than a generic ``RuntimeError``.
+
+Structured outputs (M13 follow-up)
+----------------------------------
+The agent loop's ``_build_final_response`` only knows how to copy a
+pre-shaped :class:`CopilotRunResponse` out of ``LLMFinalMessage``. Real
+OpenAI returns natural-language ``content`` (no ``parsed_response``), so
+without parsing every production run hits the ``unparseable response``
+refusal branch. To fix this we:
+
+1. Always attach a ``response_format`` of ``{"type": "json_schema", ...}``
+   to the chat-completions request. The schema mirrors the verifier-
+   facing subset of :class:`CopilotRunResponse`. On tool-calling turns
+   the model ignores the schema (it returns ``tool_calls`` instead). On
+   the final turn the model emits JSON content matching the schema.
+2. After the SDK call returns, when ``content`` is non-empty we parse it
+   with :func:`_parse_final_response_content` and surface the resulting
+   :class:`CopilotRunResponse` on ``LLMFinalMessage.parsed_response``.
+   The loop's ``model_copy`` overrides the placeholder ``cost_usd`` /
+   ``latency_ms_per_step`` / ``trace_id`` with real values.
+3. If the JSON fails to decode or fails schema validation we log a
+   warning and leave ``parsed_response=None``; the loop's existing
+   refusal fallback still ships a deterministic envelope.
 """
 
 from __future__ import annotations
@@ -39,15 +61,18 @@ from collections.abc import Mapping, Sequence
 from typing import Any
 
 import openai
+from pydantic import ValidationError
 
 from agent_service.clients.tool_choice import (
     LLMFinalMessage,
     LLMToolCallChoice,
     LLMToolChoiceTurn,
 )
+from agent_service.schemas.copilot import CopilotRunResponse
 
 
 __all__ = [
+    "COPILOT_ANSWER_JSON_SCHEMA",
     "DEFAULT_OPENAI_MODEL",
     "LLMNotConfiguredError",
     "OPENAI_MODEL_ENV_VAR",
@@ -59,6 +84,190 @@ _LOGGER = logging.getLogger("agent_service.clients.tool_choice_openai")
 
 DEFAULT_OPENAI_MODEL: str = "gpt-4o-mini"
 OPENAI_MODEL_ENV_VAR: str = "OPENEMR_COPILOT_OPENAI_MODEL"
+
+
+# JSON Schema describing the verifier-facing subset of
+# :class:`CopilotRunResponse`. Field names and enum values mirror the
+# Pydantic models exactly (see ``agent_service/schemas/copilot.py``):
+# ``answer_blocks[].claims[].{text, citation_ids, certainty}``,
+# ``missing_or_uncertain[].{text, citation_ids}``, top-level
+# ``citation_ids``, and the four-valued top-level ``certainty`` enum.
+# OpenAI structured outputs require ``additionalProperties: false`` on
+# every object and every property listed in ``required`` -- this schema
+# satisfies both.
+COPILOT_ANSWER_JSON_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": [
+        "answer_blocks",
+        "missing_or_uncertain",
+        "citation_ids",
+        "certainty",
+    ],
+    "properties": {
+        "answer_blocks": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["heading", "claims"],
+                "properties": {
+                    "heading": {"type": "string"},
+                    "claims": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "additionalProperties": False,
+                            "required": ["text", "citation_ids", "certainty"],
+                            "properties": {
+                                "text": {"type": "string"},
+                                "citation_ids": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                },
+                                "certainty": {
+                                    "type": "string",
+                                    "enum": [
+                                        "high",
+                                        "medium",
+                                        "low",
+                                        "unknown",
+                                    ],
+                                },
+                            },
+                        },
+                    },
+                },
+            },
+        },
+        "missing_or_uncertain": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["text", "citation_ids"],
+                "properties": {
+                    "text": {"type": "string"},
+                    "citation_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                    },
+                },
+            },
+        },
+        "citation_ids": {
+            "type": "array",
+            "items": {"type": "string"},
+        },
+        "certainty": {
+            "type": "string",
+            "enum": ["high", "medium", "low", "unknown"],
+        },
+    },
+}
+
+
+_RESPONSE_FORMAT: dict[str, Any] = {
+    "type": "json_schema",
+    "json_schema": {
+        "name": "copilot_answer",
+        "schema": COPILOT_ANSWER_JSON_SCHEMA,
+        "strict": True,
+    },
+}
+
+
+# Placeholder values for fields the agent loop overwrites via
+# ``model_copy`` after structured-output parsing. They have to satisfy
+# the Pydantic validators (``trace_id`` requires ``min_length=1``,
+# ``cost_usd`` requires ``ge=0``) but their concrete values are never
+# observed by callers.
+_PLACEHOLDER_TRACE_ID: str = "pending"
+
+
+def _parse_final_response_content(content: str) -> CopilotRunResponse | None:
+    """Parse the model's JSON content into a :class:`CopilotRunResponse`.
+
+    Returns ``None`` when ``content`` is empty, fails to decode as JSON,
+    or fails Pydantic validation. The agent loop's existing fallback
+    ships a deterministic refusal envelope in that case, so the LLM
+    client never has to fabricate a partial response.
+
+    The model only produces a verifier-facing subset of the wire shape
+    (see :data:`COPILOT_ANSWER_JSON_SCHEMA`). The loop fills in
+    ``tool_sequence`` / ``cost_usd`` / ``latency_ms_per_step`` /
+    ``trace_id`` via :meth:`CopilotRunResponse.model_copy`. We synthesise
+    the remaining required fields here:
+
+    * ``claims`` -- flatten ``answer_blocks[].claims[]`` in document
+      order so the verifier can iterate without descending into blocks.
+    * ``citations`` -- empty list; the renderer treats ``citation_ids``
+      as the source of truth and the M14 builder only populates the
+      detailed ``Citation`` objects when the upstream tool surfaced a
+      label/url. Real OpenAI runs cannot synthesise those without
+      hallucinating, so we leave them empty.
+    * ``verification_status`` -- ``"passed"``; the loop hands the
+      response to the verifier (M15) immediately afterwards, which
+      flips it to ``"refused"`` if any claim cites an unknown source.
+    """
+    if not content:
+        return None
+    try:
+        decoded = json.loads(content)
+    except json.JSONDecodeError:
+        _LOGGER.warning(
+            "OpenAI final-message content was not valid JSON; "
+            "falling back to deterministic refusal.",
+        )
+        return None
+    if not isinstance(decoded, dict):
+        _LOGGER.warning(
+            "OpenAI final-message JSON did not decode to an object; "
+            "falling back to deterministic refusal.",
+        )
+        return None
+
+    answer_blocks = decoded.get("answer_blocks")
+    if not isinstance(answer_blocks, list):
+        _LOGGER.warning(
+            "OpenAI final-message JSON missing 'answer_blocks' list; "
+            "falling back to deterministic refusal.",
+        )
+        return None
+
+    flat_claims: list[dict[str, Any]] = []
+    for block in answer_blocks:
+        if not isinstance(block, dict):
+            continue
+        block_claims = block.get("claims")
+        if not isinstance(block_claims, list):
+            continue
+        for claim in block_claims:
+            if isinstance(claim, dict):
+                flat_claims.append(claim)
+
+    payload: dict[str, Any] = {
+        "answer_blocks": answer_blocks,
+        "claims": flat_claims,
+        "citation_ids": decoded.get("citation_ids", []),
+        "certainty": decoded.get("certainty", "unknown"),
+        "missing_or_uncertain": decoded.get("missing_or_uncertain", []),
+        "citations": [],
+        "tool_sequence": [],
+        "verification_status": "passed",
+        "cost_usd": 0.0,
+        "latency_ms_per_step": {},
+        "trace_id": _PLACEHOLDER_TRACE_ID,
+    }
+
+    try:
+        return CopilotRunResponse.model_validate(payload)
+    except ValidationError:
+        _LOGGER.warning(
+            "OpenAI final-message JSON failed CopilotRunResponse validation; "
+            "falling back to deterministic refusal.",
+        )
+        return None
 
 
 class LLMNotConfiguredError(RuntimeError):
@@ -350,8 +559,14 @@ class OpenAIToolChoiceClient:
           the final answer, so we return them and ignore any sibling
           text.
         * Otherwise we surface ``content`` as
-          :class:`LLMFinalMessage`. The loop converts an empty / un-
-          parseable ``content`` into a deterministic refusal envelope.
+          :class:`LLMFinalMessage`. The structured-output JSON schema is
+          attached to every request, so the model's ``content`` on the
+          final turn should already be valid JSON matching
+          :data:`COPILOT_ANSWER_JSON_SCHEMA`. We parse it via
+          :func:`_parse_final_response_content` and surface the
+          resulting :class:`CopilotRunResponse` on
+          :attr:`LLMFinalMessage.parsed_response`. If parsing fails the
+          loop's existing fallback handles it.
         * Network / rate-limit / SDK failures propagate untouched.
         """
         sdk_messages = _coerce_messages(messages)
@@ -360,6 +575,7 @@ class OpenAIToolChoiceClient:
         kwargs: dict[str, Any] = {
             "model": self._model,
             "messages": sdk_messages,
+            "response_format": _RESPONSE_FORMAT,
         }
         if sdk_tools:
             kwargs["tools"] = sdk_tools
@@ -374,8 +590,12 @@ class OpenAIToolChoiceClient:
             return LLMToolChoiceTurn(tool_calls=tool_calls)
 
         content = getattr(message, "content", None) or ""
+        parsed = _parse_final_response_content(content)
         return LLMToolChoiceTurn(
-            final_message=LLMFinalMessage(content=content),
+            final_message=LLMFinalMessage(
+                content=content,
+                parsed_response=parsed,
+            ),
         )
 
 

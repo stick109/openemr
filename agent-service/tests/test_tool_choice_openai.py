@@ -43,6 +43,7 @@ from agent_service.clients.tool_choice import (
     LLMToolChoiceTurn,
 )
 from agent_service.clients.tool_choice_openai import (
+    COPILOT_ANSWER_JSON_SCHEMA,
     DEFAULT_OPENAI_MODEL,
     LLMNotConfiguredError,
     OPENAI_MODEL_ENV_VAR,
@@ -50,6 +51,7 @@ from agent_service.clients.tool_choice_openai import (
     _MissingOpenAIKeyClient,
 )
 from agent_service.config import get_settings
+from agent_service.schemas.copilot import CopilotRunResponse
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +479,287 @@ class TestSdkRequestConstruction:
                     },
                 },
             },
+        ]
+
+
+# ===================================================================
+# Structured-output parsing (M13 follow-up)
+# ===================================================================
+
+
+_VALID_FINAL_JSON: dict[str, Any] = {
+    "answer_blocks": [
+        {
+            "heading": "Current medications",
+            "claims": [
+                {
+                    "text": "Patient is on lisinopril 10 mg daily.",
+                    "citation_ids": ["med:lists:1"],
+                    "certainty": "high",
+                },
+            ],
+        },
+    ],
+    "missing_or_uncertain": [],
+    "citation_ids": ["med:lists:1"],
+    "certainty": "high",
+}
+
+
+class TestResponseFormat:
+    """``response_format`` is always attached to the SDK request."""
+
+    def test_response_format_present_on_tool_call_turns(self) -> None:
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=_tool_call_message(
+                calls=[
+                    {
+                        "id": "c0",
+                        "name": "tool_one",
+                        "arguments": json.dumps({}),
+                    },
+                ],
+            ),
+        )
+
+        client.tool_call_completion(messages=[], tools=[])
+
+        kwargs = sdk.chat.completions.create.call_args.kwargs
+        assert "response_format" in kwargs
+        rf = kwargs["response_format"]
+        assert rf["type"] == "json_schema"
+        assert rf["json_schema"]["name"] == "copilot_answer"
+        assert rf["json_schema"]["strict"] is True
+        assert rf["json_schema"]["schema"] == COPILOT_ANSWER_JSON_SCHEMA
+
+    def test_response_format_present_on_content_turns(self) -> None:
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content="{}"),
+        )
+
+        client.tool_call_completion(messages=[], tools=[])
+
+        kwargs = sdk.chat.completions.create.call_args.kwargs
+        assert kwargs["response_format"]["type"] == "json_schema"
+
+    def test_schema_matches_copilot_run_response_subset(self) -> None:
+        """The schema's required-property names must mirror the Pydantic
+        models exactly so structured outputs decode into a valid
+        :class:`CopilotRunResponse` after the loop fills in the rest."""
+        required = COPILOT_ANSWER_JSON_SCHEMA["required"]
+        assert set(required) == {
+            "answer_blocks",
+            "missing_or_uncertain",
+            "citation_ids",
+            "certainty",
+        }
+        # Closed-set certainty enum must match the top-level Literal in
+        # CopilotRunResponse exactly.
+        assert COPILOT_ANSWER_JSON_SCHEMA["properties"]["certainty"][
+            "enum"
+        ] == ["high", "medium", "low", "unknown"]
+        # ``additionalProperties: false`` is mandatory at every level for
+        # OpenAI's strict structured-output validation.
+        block_schema = (
+            COPILOT_ANSWER_JSON_SCHEMA["properties"]["answer_blocks"]["items"]
+        )
+        assert block_schema["additionalProperties"] is False
+        claim_schema = block_schema["properties"]["claims"]["items"]
+        assert claim_schema["additionalProperties"] is False
+        assert set(claim_schema["required"]) == {
+            "text",
+            "citation_ids",
+            "certainty",
+        }
+
+
+class TestStructuredOutputParsing:
+    """The adapter parses JSON content into ``CopilotRunResponse``."""
+
+    def test_valid_json_yields_parsed_response(self) -> None:
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content=json.dumps(_VALID_FINAL_JSON)),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.tool_calls == ()
+        assert turn.final_message is not None
+        parsed = turn.final_message.parsed_response
+        assert isinstance(parsed, CopilotRunResponse)
+        assert len(parsed.answer_blocks) == 1
+        block = parsed.answer_blocks[0]
+        assert block.heading == "Current medications"
+        assert len(block.claims) == 1
+        only_claim = block.claims[0]
+        assert only_claim.text == "Patient is on lisinopril 10 mg daily."
+        assert list(only_claim.citation_ids) == ["med:lists:1"]
+        assert only_claim.certainty == "high"
+        # Top-level claims is the union of every claim across blocks.
+        assert len(parsed.claims) == 1
+        assert parsed.claims[0].text == only_claim.text
+        assert list(parsed.citation_ids) == ["med:lists:1"]
+        assert parsed.certainty == "high"
+        assert parsed.missing_or_uncertain == []
+        # The loop overrides these via ``model_copy`` immediately after.
+        assert parsed.tool_sequence == []
+        assert parsed.cost_usd == 0.0
+        assert parsed.latency_ms_per_step == {}
+        assert parsed.verification_status == "passed"
+
+    def test_content_is_still_surfaced_alongside_parsed_response(
+        self,
+    ) -> None:
+        """``content`` round-trips even when parsing succeeds; the loop
+        uses it for observability when the parsed shape is missing."""
+        client, sdk = _make_client()
+        raw = json.dumps(_VALID_FINAL_JSON)
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content=raw),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        assert turn.final_message.content == raw
+
+    def test_invalid_json_yields_none_parsed_response(self) -> None:
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content="{not valid json"),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        assert turn.final_message.parsed_response is None
+        # Original content is preserved so the loop's refusal path can
+        # still log it (PHI scanning happens upstream).
+        assert turn.final_message.content == "{not valid json"
+
+    def test_empty_content_yields_none_parsed_response(self) -> None:
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content=""),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        assert turn.final_message.parsed_response is None
+        assert turn.final_message.content == ""
+
+    def test_null_content_yields_none_parsed_response(self) -> None:
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=SimpleNamespace(content=None, tool_calls=None),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        assert turn.final_message.parsed_response is None
+
+    def test_non_object_json_yields_none_parsed_response(self) -> None:
+        """A bare JSON array or string must not crash the parser."""
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content=json.dumps([1, 2, 3])),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        assert turn.final_message.parsed_response is None
+
+    def test_missing_answer_blocks_yields_none_parsed_response(self) -> None:
+        client, sdk = _make_client()
+        # Object without the required ``answer_blocks`` key.
+        bad_payload = {
+            "missing_or_uncertain": [],
+            "citation_ids": [],
+            "certainty": "unknown",
+        }
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content=json.dumps(bad_payload)),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        assert turn.final_message.parsed_response is None
+
+    def test_invalid_certainty_value_yields_none_parsed_response(self) -> None:
+        """A certainty enum outside the closed set fails Pydantic
+        validation; the loop's deterministic refusal handles it."""
+        client, sdk = _make_client()
+        bad_payload = {
+            "answer_blocks": [],
+            "missing_or_uncertain": [],
+            "citation_ids": [],
+            "certainty": "very-high",  # not in enum
+        }
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content=json.dumps(bad_payload)),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        assert turn.final_message.parsed_response is None
+
+    def test_multiple_blocks_flatten_into_top_level_claims(self) -> None:
+        """``parsed.claims`` is the in-order union of every block's
+        claims, mirroring what the M14 builder produces."""
+        client, sdk = _make_client()
+        payload = {
+            "answer_blocks": [
+                {
+                    "heading": "Block A",
+                    "claims": [
+                        {
+                            "text": "claim a1",
+                            "citation_ids": ["a:1"],
+                            "certainty": "high",
+                        },
+                        {
+                            "text": "claim a2",
+                            "citation_ids": ["a:2"],
+                            "certainty": "medium",
+                        },
+                    ],
+                },
+                {
+                    "heading": "Block B",
+                    "claims": [
+                        {
+                            "text": "claim b1",
+                            "citation_ids": ["b:1"],
+                            "certainty": "low",
+                        },
+                    ],
+                },
+            ],
+            "missing_or_uncertain": [],
+            "citation_ids": ["a:1", "a:2", "b:1"],
+            "certainty": "medium",
+        }
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content=json.dumps(payload)),
+        )
+
+        turn = client.tool_call_completion(messages=[], tools=[])
+
+        assert turn.final_message is not None
+        parsed = turn.final_message.parsed_response
+        assert parsed is not None
+        assert [c.text for c in parsed.claims] == [
+            "claim a1",
+            "claim a2",
+            "claim b1",
         ]
 
 

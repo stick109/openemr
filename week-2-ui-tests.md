@@ -1,10 +1,9 @@
 # Week 2 — UI Tests
 
-Comprehensive manual UI test checklist for the Week 2 Clinical Co-Pilot.
-Mirrors the six demo segments from Week-2-Assignment.pdf.
+Comprehensive, self-contained manual UI test checklist for the Week 2 Clinical
+Co-Pilot. Mirrors the six demo segments from Week-2-Assignment.pdf and adds the
+sidecar-migration verifications needed before recording the demo.
 
-For M-series targeted UI checks (sidecar migration intents, write proposals,
-per-tool observability), see [week-2/M-changes-UI-tests.md](week-2/M-changes-UI-tests.md).
 For the demo run-of-show, see [week-2/DEMO.md](week-2/DEMO.md).
 
 ## Preconditions
@@ -16,7 +15,13 @@ For the demo run-of-show, see [week-2/DEMO.md](week-2/DEMO.md).
 - [ ] Sample intake form at `intake-forms/intake-Demographics-<pid>-*.pdf`
       (regenerate via `./generate-intake-form.ps1` if absent)
 - [ ] Logged in as `admin` / `pass` at https://localhost:9300/
-- [ ] Demo patient + encounter pre-opened (synthetic data only)
+- [ ] Demo patient pre-opened (synthetic data only) with at least:
+      2 active medications, 1 active allergy, 1 active problem, 2 recent
+      encounters — needed by the read-only intent checks below
+- [ ] One encounter for the demo patient is open
+- [ ] `agent-service` and `openemr` containers share `AGENT_SHARED_SECRET`
+      (verify with `docker compose --project-name openemr config` —
+      same value mounted in both, PHP minter uses key version `v1`)
 - [ ] Browser dev tools open to **Console** + **Network** tabs (PHI watch)
 - [ ] In a side terminal: `docker compose --project-name openemr logs -f agent-service`
 
@@ -103,10 +108,51 @@ For the demo run-of-show, see [week-2/DEMO.md](week-2/DEMO.md).
 - [ ] Span attributes are sanitized — no document text or identifiers in
       span fields
 
+## 7. Read-only intents  (sidecar-routed, all 6 buttons)
+
+All six read-only intents route through the sidecar by default — no env-var
+flipping needed. Walk through each one:
+
+- `basic_patient_data`
+- `current_medications`
+- `allergies_to_confirm`
+- `recent_events`
+- `changed_since_last_visit`
+- `show_source`
+
+For each intent button:
+
+- [ ] Click the intent button in the Co-Pilot panel
+- [ ] Response renders within ~5 seconds
+- [ ] Answer blocks populate (heading + claim text)
+- [ ] At least one citation chip appears next to claims that need them
+- [ ] Hovering a citation chip shows the source label (medication name,
+      allergy substance, encounter date, etc.)
+- [ ] Clicking a citation chip opens the source drilldown panel with
+      bounded source detail (record body excerpt, occurred_at) — no PDF
+      or raw-text spill
+- [ ] Drilldown for a malformed `citation_id` shows a graceful error
+      state (not a stack trace, not another patient's data)
+
+## 8. Write proposal  (two-phase, idempotent, scoped)
+
+Pre-req: a lab PDF already uploaded to the demo patient (segment 1) and the
+sidecar's extractor produced an observation usable by `current_medications`.
+
+- [ ] Trigger a write-proposal flow — sidecar tool
+      `persist_lab_observation_proposal` returns a typed proposal payload
+- [ ] PHP commit endpoint `POST /apis/api/agent/proposals/commit` accepts a
+      valid signed `run_context` + proposal — confirm via Network tab or a
+      curl with a valid token
+- [ ] Replay the same commit (same `idempotency_key`) — server returns the
+      previous result; `procedure_order` table shows no double-write
+- [ ] Submit a proposal whose `citation_id` belongs to a different patient →
+      server returns **422** (cross-patient rejection works)
+
 ## Pass criteria
 
 - All checkboxes ticked
-- No JS console errors (Console tab clean across all six segments)
+- No JS console errors (Console tab clean across all eight segments)
 - No raw PHI in `agent-service` logs (verified by tailing during the run)
 - No surprising cross-origin or third-party network calls in dev tools
 - If any item fails: capture screen state + relevant log excerpt and triage

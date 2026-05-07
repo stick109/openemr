@@ -54,9 +54,11 @@ PS> Invoke-WebRequest http://localhost:8300/ -MaximumRedirection 0
 
 ## 2. Eval gate (S20, S22)
 
-Always unset `OPENAI_API_KEY` for eval/test runs - the `FakeLLMClient` refuses
-to construct while it is set, as a safety guard against accidental real-API
-calls.
+Unset `OPENAI_API_KEY` for direct eval/test invocations - the `FakeLLMClient`
+refuses to construct while it is set, as a safety guard against accidental
+real-API calls. The pre-push hook unsets it automatically in its own
+subshell, so `git push` works regardless of whether the key is exported in
+your shell.
 
 ```powershell
 $env:OPENAI_API_KEY = $null
@@ -195,19 +197,43 @@ before recording the demo video.
 
 - [ ] Stack is up: `.\run-docker.ps1` reports all services healthy.
 - [ ] `form_upload_intake_form` is registered in OpenEMR.
-      - Log in at <http://localhost:8300/> as `admin` / `pass`.
-      - Navigate to **Administration -> Forms -> Forms Administration**.
-      - Confirm "Upload Intake Form" appears in the **Registered** list. If
-        not, click **Register** beside it - registering runs
-        `interface/forms/upload_intake_form/table.sql`, which creates both
-        `form_upload_intake_form` and `form_upload_intake_form_citation`.
-      - Verify the citation table exists:
+      - On the dev-easy stack, registration is now automatic: the
+        `forms-bootstrap` init service in
+        `docker/development-easy/docker-compose.yml` runs after the
+        `openemr` container reports healthy and applies the idempotent SQL
+        in `docker/development-easy/init/register-week2-forms.sql`. A
+        fresh `docker compose down -v && docker compose up` lands with
+        the form ready to use - no Forms Administration click required.
+      - Verify the bootstrap ran clean:
+        ```powershell
+        docker compose --project-name openemr logs forms-bootstrap
+        ```
+        Expected last lines:
+        ```
+        [forms-bootstrap] Verifying registration:
+        name        directory           state
+        Upload Document (Co-Pilot)  upload_intake_form  1
+        [forms-bootstrap] Done.
+        ```
+      - Verify the tables and registry row directly:
         ```powershell
         docker compose --project-name openemr exec -T mysql mariadb -uroot -proot openemr `
           -e "SHOW TABLES LIKE 'form_upload_intake_form%';"
+        docker compose --project-name openemr exec -T mysql mariadb -uroot -proot openemr `
+          -e "SELECT name, directory, state FROM registry WHERE directory = 'upload_intake_form';"
         ```
         Expected: both `form_upload_intake_form` and
-        `form_upload_intake_form_citation`.
+        `form_upload_intake_form_citation` tables exist, and the registry
+        returns one row with `state = 1`.
+      - Optional UI check: log in at <http://localhost:8300/> as
+        `admin` / `pass`, navigate to **Administration -> Forms -> Forms
+        Administration**, and confirm "Upload Document (Co-Pilot)" is
+        listed under **Registered**. The "Register" button beside the
+        form should NOT be visible - the bootstrap already inserted the
+        row.
+      - Production OpenEMR installs continue to use the upgrade SQL
+        pipeline (`sql/8_1_0-to-8_1_1_upgrade.sql`); the
+        `forms-bootstrap` service is dev-easy-only.
 - [ ] At least one patient exists. (Bundled OpenEMR demo data ships with one
       patient; otherwise create one via **Patient -> New/Search -> New
       Patient**.)
@@ -294,10 +320,14 @@ through the form so the sidecar runs the full pipeline.
 
 ## 7. Known issues / caveats
 
-- **`OPENAI_API_KEY` must be unset** for `py -m agent_service.eval` and
-  `py -m pytest`. The `FakeLLMClient` raises by design if the env var is
-  set, to prevent real-API calls. PowerShell pattern:
+- **`OPENAI_API_KEY` must be unset** for direct invocations of
+  `py -m agent_service.eval` and `py -m pytest`. The `FakeLLMClient` raises
+  by design if the env var is set, to prevent real-API calls. PowerShell
+  pattern:
   `$env:OPENAI_API_KEY = $null; <command>; $env:OPENAI_API_KEY = "<your-key>"`.
+  The pre-push hook (`scripts/hooks/pre-push`) handles this automatically -
+  it unsets `OPENAI_API_KEY` in its own subshell before running the eval,
+  so `git push` does not require the manual workaround.
 - **`mysql` client is not in the MySQL container's `$PATH`.** Use
   `docker compose ... exec -T mysql mariadb ...` (the image is MariaDB
   11.8.6). The wrapper `mysql` binary is not installed.
@@ -315,6 +345,15 @@ through the form so the sidecar runs the full pipeline.
   shape and the aggregation logic, not to estimate production cost; see the
   bottleneck section of [WEEK2_SIDECAR.md](WEEK2_SIDECAR.md) for the
   end-to-end OpenAI-backed cost projection.
+- **Fresh `docker compose down -v && docker compose up` is verified
+  end-to-end.** A previous container-build issue caused
+  `auto_configure.php` (in the pinned `openemr/openemr` base image) to call
+  `new Installer($settings)` with one argument while the source-overlaid
+  `Installer` required two, looping the openemr container in
+  `auto_setup`. That is fixed: the `$logger` argument now defaults to a
+  PSR-3 `NullLogger`, so the legacy CLI shim continues to work after a
+  source overlay. See `library/classes/Installer.class.php` for the
+  docblock explanation.
 
 ---
 

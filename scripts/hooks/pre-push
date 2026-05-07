@@ -22,6 +22,14 @@
 # Use this sparingly. CI runs the same eval on every pull request and on
 # pushes to master / codex/**, so a bypassed push will still be caught
 # before merge.
+#
+# OPENAI_API_KEY handling
+# -----------------------
+# The hook unsets OPENAI_API_KEY in its own subshell before invoking the
+# eval. The eval always uses FakeLLMClient, which deliberately refuses to
+# construct while OPENAI_API_KEY is set (a safety guard against accidental
+# real-API calls). The unset is scoped to this hook process only and does
+# not affect the developer's outer shell.
 
 set -euo pipefail
 
@@ -29,6 +37,12 @@ if [[ "${SKIP_EVAL_HOOK:-0}" == "1" ]]; then
     echo "[pre-push] SKIP_EVAL_HOOK=1 set -- skipping agent eval (emergency bypass)." >&2
     exit 0
 fi
+
+# FakeLLMClient guards against accidental real-API calls when OPENAI_API_KEY
+# is set; the eval always uses fake clients, so unset within this hook
+# process. This is scoped to the hook subshell only — the developer's outer
+# shell is unaffected.
+unset OPENAI_API_KEY
 
 # Resolve repository root from the hook's location. `.git/hooks/pre-push` is
 # two levels below the repo root, but the installer copies us there from

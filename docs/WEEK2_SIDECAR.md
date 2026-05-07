@@ -316,6 +316,11 @@ overwritten, and a warning is printed.
 After installation, every `git push` runs the eval first. A failing eval
 aborts the push before any data is sent to the remote.
 
+The hook unsets `OPENAI_API_KEY` in its own subshell before invoking the
+eval, so developers with a real key exported in their shell can push
+without a manual workaround. The unset is scoped to the hook process — the
+outer shell environment is unchanged.
+
 ### 7.2 GitHub Actions
 
 The same eval runs in CI on every pull request and on every push to

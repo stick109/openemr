@@ -23,6 +23,7 @@ use OpenEMR\Common\Crypto\PasswordBasedCrypto;
 use OpenEMR\Common\Installer\InstallerInterface;
 use OpenEMR\Gacl\GaclApi;
 use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 
 /**
  * @phpstan-import-type InstallParams from InstallerInterface
@@ -65,13 +66,24 @@ class Installer implements InstallerInterface
     public string $source_site_id;
     public string $translation_sql;
 
+    private LoggerInterface $logger;
+
     /**
      * Initialize the Installer with configuration variables.
      *
+     * The $logger argument is intentionally optional (defaults to a
+     * {@see NullLogger}) so the upstream `openemr/openemr` Docker image's
+     * `auto_configure.php` shim — which still calls `new Installer($settings)`
+     * with a single argument — keeps working when this checkout's source is
+     * overlaid on top of an image released before PR #10575 added the logger
+     * parameter. In-tree call sites pass an explicit logger; do not rely on
+     * the default in new code — call {@see setLogger()} or pass one in.
+     *
      * @param InstallParams $cgi_variables Configuration array containing installation parameters
      */
-    public function __construct(array $cgi_variables, private LoggerInterface $logger)
+    public function __construct(array $cgi_variables, ?LoggerInterface $logger = null)
     {
+        $this->logger = $logger ?? new NullLogger();
         $this->initializeParams($cgi_variables);
     }
 

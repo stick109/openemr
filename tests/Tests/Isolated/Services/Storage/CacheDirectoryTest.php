@@ -15,6 +15,7 @@ namespace OpenEMR\Tests\Isolated\Services\Storage;
 use InvalidArgumentException;
 use OpenEMR\Services\Storage\CacheDirectory;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RequiresOperatingSystemFamily;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
@@ -65,6 +66,11 @@ final class CacheDirectoryTest extends TestCase
         self::assertStringEndsWith('/mpdf', $mpdf);
     }
 
+    /**
+     * Windows does not support Unix file permissions; chmod() is a no-op
+     * and fileperms() always returns 0777.
+     */
+    #[RequiresOperatingSystemFamily('Linux')]
     public function testForCreatesDirectoryWithRestrictivePermissions(): void
     {
         $cache = new CacheDirectory($this->testBaseDir);
@@ -75,6 +81,11 @@ final class CacheDirectoryTest extends TestCase
         self::assertSame(0700, $perms);
     }
 
+    /**
+     * Windows requires elevated (Administrator) privileges to create
+     * symlinks, so this test is limited to Linux/macOS.
+     */
+    #[RequiresOperatingSystemFamily('Linux')]
     public function testForRejectsSymlink(): void
     {
         $realDir = $this->testBaseDir . '/real';
@@ -109,6 +120,11 @@ final class CacheDirectoryTest extends TestCase
         ];
     }
 
+    /**
+     * Windows does not support Unix file permissions; chmod() is a no-op
+     * so insecure-permission rejection cannot be tested there.
+     */
+    #[RequiresOperatingSystemFamily('Linux')]
     #[DataProvider('insecurePermissionsProvider')]
     public function testForRejectsInsecurePermissions(int $mode): void
     {

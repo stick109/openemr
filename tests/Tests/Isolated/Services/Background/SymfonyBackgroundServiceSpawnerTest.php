@@ -21,10 +21,12 @@ use Psr\Log\LoggerInterface;
 
 /**
  * Covers SymfonyBackgroundServiceSpawner's error/parse paths using a
- * fake `bin/console` shell script as the child. The test injects a
- * controlled project dir and PHP binary (`/bin/sh`) so the spawner
- * shells out to a script we fully control rather than bootstrapping
- * a real OpenEMR child.
+ * fake `bin/console` PHP script as the child. The test injects a
+ * controlled project dir so the spawner shells out to a script we
+ * fully control rather than bootstrapping a real OpenEMR child.
+ *
+ * The fixture is written in PHP (not shell) so the tests run on both
+ * Unix and Windows without requiring `/bin/sh`.
  */
 #[Group('isolated')]
 #[Group('background-services')]
@@ -40,145 +42,104 @@ class SymfonyBackgroundServiceSpawnerTest extends TestCase
     {
         parent::setUp();
         // The spawner invokes `{phpBinary} {projectDir}/bin/console ...`.
-        // By setting phpBinary to /bin/sh and pointing it at a script
-        // we control, the command-line invocation becomes
-        //   /bin/sh <script> background:services run --name=... --json [--force]
+        // We use PHP_BINARY (the real PHP interpreter) and point it at a
+        // PHP script we control. The command-line invocation becomes:
+        //   php <script> background:services run --name=... --json [--force]
         // which lets the script decide how to respond per service name.
-        $this->fakeProjectDir = sys_get_temp_dir() . '/oe-spawner-' . uniqid('', true);
-        mkdir($this->fakeProjectDir . '/bin', 0755, true);
-        $this->fakeConsoleScript = $this->fakeProjectDir . '/bin/console';
-        file_put_contents($this->fakeConsoleScript, <<<'SH'
-            #!/bin/sh
-            # Fake console for SymfonyBackgroundServiceSpawnerTest.
-            # Selects behavior based on the --name= argument. The spawner
-            # passes the per-invocation nonce via OPENEMR_BG_NONCE; each
-            # fixture that produces a legitimate status line echoes the
-            # same nonce so the parent accepts it.
-            n="${OPENEMR_BG_NONCE:-}"
-            # Check for --force flag once, used by fixtures that want to
-            # branch on it. Looped separately from the per-name dispatch.
-            force=0
-            for arg in "$@"; do
-                if [ "$arg" = "--force" ]; then
-                    force=1
-                fi
-            done
-            for arg in "$@"; do
-                case "$arg" in
-                    --name=clean_exit_no_json)
-                        exit 0
-                        ;;
-                    --name=exits_nonzero)
-                        echo "fatal error" >&2
-                        exit 137
-                        ;;
-                    --name=emits_executed)
-                        printf '{"name":"emits_executed","status":"executed","nonce":"%s"}\n' "$n"
-                        exit 0
-                        ;;
-                    --name=prints_garbage_then_json)
-                        echo "PHP Deprecated: something"
-                        printf '{"name":"prints_garbage_then_json","status":"not_due","nonce":"%s"}\n' "$n"
-                        exit 0
-                        ;;
-                    --name=json_missing_status)
-                        printf '{"name":"json_missing_status","nonce":"%s"}\n' "$n"
-                        exit 0
-                        ;;
-                    --name=name_mismatch)
-                        # Service that prints a forged status line tagged
-                        # with the right nonce but the wrong service name.
-                        # Parser must still reject it on the name check.
-                        printf '{"name":"not_the_expected_one","status":"executed","nonce":"%s"}\n' "$n"
-                        exit 0
-                        ;;
-                    --name=shutdown_forges_status)
-                        # Simulates the CWE-345 spoofing vector: the
-                        # command emits its legitimate JSON (error), then
-                        # a register_shutdown_function in the service's
-                        # own code prints a forged "executed" line AFTER
-                        # the command's own line. The parser scans from
-                        # the end, so without the nonce check the forged
-                        # line would win. With the nonce check, the forged
-                        # line (no/wrong nonce) is rejected and the
-                        # legitimate line's "error" wins.
-                        printf '{"name":"shutdown_forges_status","status":"error","nonce":"%s"}\n' "$n"
-                        echo '{"name":"shutdown_forges_status","status":"executed","nonce":"forged-by-shutdown-handler"}'
-                        exit 0
-                        ;;
-                    --name=stderr_with_control_chars)
-                        # BEL, CR, and an overly long error body to
-                        # exercise the log-sanitization path. Includes a
-                        # trailing newline + tab in the middle so the
-                        # test can assert those are escaped (not stripped)
-                        # for line-oriented log backends.
-                        printf 'boom\a\rline1\nline2\tcol\n' >&2
-                        printf '%.0sA' $(seq 1 3000) >&2
-                        exit 3
-                        ;;
-                    --name=floods_stdout)
-                        # Writes well past the spawner's per-stream
-                        # buffer cap (64KiB). Used to verify the spawner
-                        # enforces the cap, terminates the child, and
-                        # returns error.
-                        yes A | head -c 200000
-                        # Reach here only if yes is terminated by a
-                        # broken pipe before we can emit the status.
-                        printf '{"name":"floods_stdout","status":"executed","nonce":"%s"}\n' "$n"
-                        exit 0
-                        ;;
-                    --name=reports_force)
-                        # Emits "executed" only when --force was passed,
-                        # "skipped" otherwise. Lets the test confirm the
-                        # spawner actually forwards --force to the child.
-                        if [ "$force" = "1" ]; then
-                            printf '{"name":"reports_force","status":"executed","nonce":"%s"}\n' "$n"
-                        else
-                            printf '{"name":"reports_force","status":"skipped","nonce":"%s"}\n' "$n"
-                        fi
-                        exit 0
-                        ;;
-                    --name=floods_stderr)
-                        # Writes well past the spawner's per-stream buffer
-                        # cap (64KiB) to stderr. Used to verify the cap is
-                        # enforced on the stderr side too, not just stdout.
-                        yes A | head -c 200000 >&2
-                        # Reach here only if yes is terminated by a
-                        # broken pipe before we can emit the status.
-                        printf '{"name":"floods_stderr","status":"executed","nonce":"%s"}\n' "$n"
-                        exit 0
-                        ;;
-                    --name=emits_non_array_json)
-                        # A line starting with `{` that does NOT decode to
-                        # a JSON object (malformed) exercises the
-                        # !is_array($decoded) branch in parseJsonStatus.
-                        # The parser must skip past it without erroring.
-                        echo '{not valid json at all'
-                        printf '{"name":"emits_non_array_json","status":"executed","nonce":"%s"}\n' "$n"
-                        exit 0
-                        ;;
-                    --name=only_non_array_json)
-                        # Same as above but WITHOUT a valid trailing line,
-                        # so parseJsonStatus falls through to null and the
-                        # spawner returns status=error. This covers the
-                        # !is_array continue-path without relying on a
-                        # subsequent valid line.
-                        echo '{ trailing but malformed'
-                        exit 0
-                        ;;
-                    --name=sleeps_forever)
-                        # Used only for the timeout test; the test uses
-                        # a very short subprocess timeout so this
-                        # doesn't actually delay the suite.
-                        sleep 30
-                        exit 0
-                        ;;
-                esac
-            done
-            echo "unrecognized fixture" >&2
-            exit 2
-            SH);
-        chmod($this->fakeConsoleScript, 0755);
+        $this->fakeProjectDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'oe-spawner-' . uniqid('', true);
+        mkdir($this->fakeProjectDir . DIRECTORY_SEPARATOR . 'bin', 0755, true);
+        $this->fakeConsoleScript = $this->fakeProjectDir . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'console';
+        file_put_contents($this->fakeConsoleScript, <<<'PHP'
+            <?php
+            // Fake console for SymfonyBackgroundServiceSpawnerTest.
+            // Selects behavior based on the --name= argument. The spawner
+            // passes the per-invocation nonce via OPENEMR_BG_NONCE; each
+            // fixture that produces a legitimate status line echoes the
+            // same nonce so the parent accepts it.
+            $nonce = getenv('OPENEMR_BG_NONCE') ?: '';
+            $force = in_array('--force', $argv, true);
+            $name = null;
+            foreach ($argv as $arg) {
+                if (str_starts_with($arg, '--name=')) {
+                    $name = substr($arg, 7);
+                    break;
+                }
+            }
+            switch ($name) {
+                case 'clean_exit_no_json':
+                    exit(0);
+                case 'exits_nonzero':
+                    fwrite(STDERR, "fatal error\n");
+                    exit(137);
+                case 'emits_executed':
+                    echo json_encode(['name' => 'emits_executed', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'prints_garbage_then_json':
+                    echo "PHP Deprecated: something\n";
+                    echo json_encode(['name' => 'prints_garbage_then_json', 'status' => 'not_due', 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'json_missing_status':
+                    echo json_encode(['name' => 'json_missing_status', 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'name_mismatch':
+                    echo json_encode(['name' => 'not_the_expected_one', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'shutdown_forges_status':
+                    // Simulates CWE-345 spoofing: legitimate JSON (error),
+                    // then a forged "executed" line from a shutdown handler.
+                    echo json_encode(['name' => 'shutdown_forges_status', 'status' => 'error', 'nonce' => $nonce]) . "\n";
+                    echo '{"name":"shutdown_forges_status","status":"executed","nonce":"forged-by-shutdown-handler"}' . "\n";
+                    exit(0);
+                case 'stderr_with_control_chars':
+                    // BEL, CR, and an overly long error body to exercise the
+                    // log-sanitization path. Includes newline + tab so the
+                    // test can assert those are escaped (not stripped).
+                    fwrite(STDERR, "boom\x07\rline1\nline2\tcol\n");
+                    fwrite(STDERR, str_repeat('A', 3000));
+                    exit(3);
+                case 'floods_stdout':
+                    // Writes well past the spawner's per-stream buffer cap
+                    // (64KiB) to exercise the overflow termination path.
+                    $chunk = str_repeat('A', 8192);
+                    for ($i = 0; $i < 30; $i++) {
+                        echo $chunk;
+                    }
+                    echo json_encode(['name' => 'floods_stdout', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'reports_force':
+                    $status = $force ? 'executed' : 'skipped';
+                    echo json_encode(['name' => 'reports_force', 'status' => $status, 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'floods_stderr':
+                    // Writes well past the spawner's per-stream buffer cap
+                    // (64KiB) to stderr to exercise the overflow path.
+                    $chunk = str_repeat('A', 8192);
+                    for ($i = 0; $i < 30; $i++) {
+                        fwrite(STDERR, $chunk);
+                    }
+                    echo json_encode(['name' => 'floods_stderr', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'emits_non_array_json':
+                    echo "{not valid json at all\n";
+                    echo json_encode(['name' => 'emits_non_array_json', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                    exit(0);
+                case 'only_non_array_json':
+                    echo "{ trailing but malformed\n";
+                    exit(0);
+                case 'sleeps_forever':
+                    // Used only for the timeout test; the test uses a very
+                    // short subprocess timeout so this doesn't actually
+                    // delay the suite.
+                    sleep(30);
+                    exit(0);
+                default:
+                    fwrite(STDERR, "unrecognized fixture\n");
+                    exit(2);
+            }
+            PHP);
+        if (PHP_OS_FAMILY !== 'Windows') {
+            chmod($this->fakeConsoleScript, 0755);
+        }
 
         $this->logger = new CapturingLogger();
     }
@@ -199,14 +160,14 @@ class SymfonyBackgroundServiceSpawnerTest extends TestCase
 
     private function makeSpawner(): SymfonyBackgroundServiceSpawner
     {
-        // Shell out to /bin/sh <fake-console> so the spawner's
-        // PHP_BINARY-based invocation still produces a runnable
-        // command line, and each test case can control exit codes
-        // and stdout via the fake console's case statement.
+        // Use PHP_BINARY to invoke the fake console script (a PHP
+        // script) so the spawner's invocation produces a runnable
+        // command line on every platform, and each test case can
+        // control exit codes and stdout via the script's switch
+        // statement.
         return new SymfonyBackgroundServiceSpawner(
             $this->fakeProjectDir,
             $this->logger,
-            '/bin/sh',
         );
     }
 

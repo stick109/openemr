@@ -105,6 +105,13 @@ final readonly class CacheDirectory
 
     private function validatePermissions(string $path): void
     {
+        // Windows does not support Unix file permissions. chmod() is a
+        // no-op and fileperms() always returns 0777. Windows uses ACLs
+        // for access control, so the Unix permission check is skipped.
+        if (\PHP_OS_FAMILY === 'Windows') {
+            return;
+        }
+
         $perms = fileperms($path);
         if ($perms === false) {
             // @codeCoverageIgnoreStart

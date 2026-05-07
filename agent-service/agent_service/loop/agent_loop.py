@@ -80,6 +80,7 @@ from agent_service.intents.catalog import (
 from agent_service.observability.events import EventType, RunEvent
 from agent_service.observability.recorder import EventRecorder, NullEventRecorder
 from agent_service.schemas.copilot import (
+    Citation,
     CopilotRunRequest,
     CopilotRunResponse,
     ToolCallRecord,
@@ -327,6 +328,44 @@ def _serialise_tool_call(call: LLMToolCallChoice) -> dict[str, Any]:
     }
 
 
+def _extract_citations(payload: Mapping[str, Any]) -> list[Citation]:
+    """Extract structured Citation objects from a tool's result payload.
+
+    Tools return ``{"records": [...], "citations": [<Citation|dict>, ...],
+    "warnings": [...]}``. This helper coerces the citations entry into
+    a list of :class:`Citation` regardless of whether the executor
+    handed us model instances or plain dicts. The verifier reads these
+    as ``known_citation_ids`` so the model's claims can be checked
+    against citations the tools actually returned.
+    """
+    raw = payload.get("citations") if isinstance(payload, Mapping) else None
+    if not raw:
+        return []
+    citations: list[Citation] = []
+    for entry in raw:
+        if isinstance(entry, Citation):
+            citations.append(entry)
+            continue
+        if isinstance(entry, Mapping):
+            try:
+                citations.append(Citation.model_validate(dict(entry)))
+            except Exception:  # noqa: BLE001 - tool payload may be malformed
+                continue
+    return citations
+
+
+def _dedupe_citations(citations: Sequence[Citation]) -> list[Citation]:
+    """Deduplicate a list of citations by ``source_id``, preserving order."""
+    seen: set[str] = set()
+    unique: list[Citation] = []
+    for citation in citations:
+        if citation.source_id in seen:
+            continue
+        seen.add(citation.source_id)
+        unique.append(citation)
+    return unique
+
+
 def _utc_now() -> datetime:
     """Return the current time as a timezone-aware UTC ``datetime``.
 
@@ -414,6 +453,12 @@ class AgentLoop:
         started_at = self._clock()
         latency_ms_per_step: dict[str, int] = {}
         tool_sequence: list[ToolCallRecord] = []
+        # Citations accumulated from successful tool outcomes -- the
+        # verifier (M15) reads these as ``known_citation_ids`` to detect
+        # fabricated source IDs in the final assistant response. The
+        # tools are the source of truth for "which citations exist";
+        # the model only chooses which to cite.
+        tool_citations: list[Citation] = []
         cost_usd = 0.0  # M13 does not estimate cost; left as a hook for M16.
 
         # M16: emit the run.received span so downstream observability can
@@ -582,6 +627,9 @@ class AgentLoop:
                         trace_id=trace_id,
                     )
                     tool_sequence.append(record)
+                    if payload is not None:
+                        for citation in _extract_citations(payload):
+                            tool_citations.append(citation)
                     self._emit_event(
                         event_type="tool.finished",
                         trace_id=trace_id,
@@ -610,6 +658,15 @@ class AgentLoop:
                 trace_id=trace_id,
                 started_at=started_at,
             )
+            # Backfill ``response.citations`` from the tools' actual
+            # outcomes when the LLM-produced response did not include
+            # a structured citations array. The verifier reads this
+            # set as ``known_citation_ids``; without it, every claim's
+            # citation_id looks fabricated and M15 always refuses.
+            if not response.citations and tool_citations:
+                response = response.model_copy(
+                    update={"citations": _dedupe_citations(tool_citations)},
+                )
             verifier_started = self._clock()
             verification = self._verify(
                 response=response,

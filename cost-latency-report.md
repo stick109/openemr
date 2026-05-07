@@ -1,6 +1,6 @@
 # Cost / Latency Report
 
-_Generated: 2026-05-06T20:02:44.549918+00:00_
+_Generated: 2026-05-06T21:11:03.745808+00:00_
 _Records analysed: 50_
 
 ## Summary
@@ -17,8 +17,8 @@ _Records analysed: 50_
 | Percentile | Value |
 | ---------- | ----- |
 | p50 | 0.00 ms |
-| p95 | 1.00 ms |
-| p99 | 1.00 ms |
+| p95 | 0.00 ms |
+| p99 | 0.00 ms |
 
 ### Per-step latency
 
@@ -27,7 +27,7 @@ _Records analysed: 50_
 | extract | 0.00 ms | 0.00 ms | 0.00 ms |
 | finalize | 0.00 ms | 0.00 ms | 0.00 ms |
 | refuse | 0.00 ms | 0.00 ms | 0.00 ms |
-| retrieve | 0.00 ms | 1.00 ms | 0.09 ms |
+| retrieve | 0.00 ms | 0.00 ms | 0.00 ms |
 
 ## Cost
 
@@ -44,8 +44,8 @@ _Records analysed: 50_
 
 ## Bottleneck analysis
 
-- Highest mean latency: **retrieve** (0.09 ms mean)
-- Largest p95-p50 spread: **retrieve** (1.00 ms spread)
+- Highest mean latency: **extract** (0.00 ms mean)
+- Largest p95-p50 spread: **extract** (0.00 ms spread)
 
 ## Retrieval stats
 

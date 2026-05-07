@@ -1,6 +1,15 @@
 # logs
 /logs
 
+# Playwright MCP server working directory (transient page snapshots,
+# console logs, accessibility trees -- never committed).
+/.playwright-mcp/
+
+# Transient local test-runner outputs (regenerated on every run of
+# S-changes-tests.ps1 / M-changes-tests.ps1).
+/M-changes-tests.*.log
+/S-changes-tests.*.log
+
 # generated synthetic lab PDFs (output of generate-lab-pdf.ps1)
 /lab-reports/
 

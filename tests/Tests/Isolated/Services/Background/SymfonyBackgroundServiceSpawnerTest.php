@@ -49,94 +49,94 @@ class SymfonyBackgroundServiceSpawnerTest extends TestCase
         $this->fakeProjectDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'oe-spawner-' . uniqid('', true);
         mkdir($this->fakeProjectDir . DIRECTORY_SEPARATOR . 'bin', 0755, true);
         $this->fakeConsoleScript = $this->fakeProjectDir . DIRECTORY_SEPARATOR . 'bin' . DIRECTORY_SEPARATOR . 'console';
-        file_put_contents($this->fakeConsoleScript, <<<'PHP'
-            <?php
-            // Fake console for SymfonyBackgroundServiceSpawnerTest.
-            // Selects behavior based on the --name= argument. The spawner
-            // passes the per-invocation nonce via OPENEMR_BG_NONCE; each
-            // fixture that produces a legitimate status line echoes the
-            // same nonce so the parent accepts it.
-            $nonce = getenv('OPENEMR_BG_NONCE') ?: '';
-            $force = in_array('--force', $argv, true);
-            $name = null;
-            foreach ($argv as $arg) {
-                if (str_starts_with($arg, '--name=')) {
-                    $name = substr($arg, 7);
-                    break;
+        file_put_contents($this->fakeConsoleScript, <<<'PHP_WRAP'
+        <?php
+        // Fake console for SymfonyBackgroundServiceSpawnerTest.
+        // Selects behavior based on the --name= argument. The spawner
+        // passes the per-invocation nonce via OPENEMR_BG_NONCE; each
+        // fixture that produces a legitimate status line echoes the
+        // same nonce so the parent accepts it.
+        $nonce = getenv('OPENEMR_BG_NONCE') ?: '';
+        $force = in_array('--force', $argv, true);
+        $name = null;
+        foreach ($argv as $arg) {
+            if (str_starts_with($arg, '--name=')) {
+                $name = substr($arg, 7);
+                break;
+            }
+        }
+        switch ($name) {
+            case 'clean_exit_no_json':
+                exit(0);
+            case 'exits_nonzero':
+                fwrite(STDERR, "fatal error\n");
+                exit(137);
+            case 'emits_executed':
+                echo json_encode(['name' => 'emits_executed', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'prints_garbage_then_json':
+                echo "PHP Deprecated: something\n";
+                echo json_encode(['name' => 'prints_garbage_then_json', 'status' => 'not_due', 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'json_missing_status':
+                echo json_encode(['name' => 'json_missing_status', 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'name_mismatch':
+                echo json_encode(['name' => 'not_the_expected_one', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'shutdown_forges_status':
+                // Simulates CWE-345 spoofing: legitimate JSON (error),
+                // then a forged "executed" line from a shutdown handler.
+                echo json_encode(['name' => 'shutdown_forges_status', 'status' => 'error', 'nonce' => $nonce]) . "\n";
+                echo '{"name":"shutdown_forges_status","status":"executed","nonce":"forged-by-shutdown-handler"}' . "\n";
+                exit(0);
+            case 'stderr_with_control_chars':
+                // BEL, CR, and an overly long error body to exercise the
+                // log-sanitization path. Includes newline + tab so the
+                // test can assert those are escaped (not stripped).
+                fwrite(STDERR, "boom\x07\rline1\nline2\tcol\n");
+                fwrite(STDERR, str_repeat('A', 3000));
+                exit(3);
+            case 'floods_stdout':
+                // Writes well past the spawner's per-stream buffer cap
+                // (64KiB) to exercise the overflow termination path.
+                $chunk = str_repeat('A', 8192);
+                for ($i = 0; $i < 30; $i++) {
+                    echo $chunk;
                 }
-            }
-            switch ($name) {
-                case 'clean_exit_no_json':
-                    exit(0);
-                case 'exits_nonzero':
-                    fwrite(STDERR, "fatal error\n");
-                    exit(137);
-                case 'emits_executed':
-                    echo json_encode(['name' => 'emits_executed', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'prints_garbage_then_json':
-                    echo "PHP Deprecated: something\n";
-                    echo json_encode(['name' => 'prints_garbage_then_json', 'status' => 'not_due', 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'json_missing_status':
-                    echo json_encode(['name' => 'json_missing_status', 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'name_mismatch':
-                    echo json_encode(['name' => 'not_the_expected_one', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'shutdown_forges_status':
-                    // Simulates CWE-345 spoofing: legitimate JSON (error),
-                    // then a forged "executed" line from a shutdown handler.
-                    echo json_encode(['name' => 'shutdown_forges_status', 'status' => 'error', 'nonce' => $nonce]) . "\n";
-                    echo '{"name":"shutdown_forges_status","status":"executed","nonce":"forged-by-shutdown-handler"}' . "\n";
-                    exit(0);
-                case 'stderr_with_control_chars':
-                    // BEL, CR, and an overly long error body to exercise the
-                    // log-sanitization path. Includes newline + tab so the
-                    // test can assert those are escaped (not stripped).
-                    fwrite(STDERR, "boom\x07\rline1\nline2\tcol\n");
-                    fwrite(STDERR, str_repeat('A', 3000));
-                    exit(3);
-                case 'floods_stdout':
-                    // Writes well past the spawner's per-stream buffer cap
-                    // (64KiB) to exercise the overflow termination path.
-                    $chunk = str_repeat('A', 8192);
-                    for ($i = 0; $i < 30; $i++) {
-                        echo $chunk;
-                    }
-                    echo json_encode(['name' => 'floods_stdout', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'reports_force':
-                    $status = $force ? 'executed' : 'skipped';
-                    echo json_encode(['name' => 'reports_force', 'status' => $status, 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'floods_stderr':
-                    // Writes well past the spawner's per-stream buffer cap
-                    // (64KiB) to stderr to exercise the overflow path.
-                    $chunk = str_repeat('A', 8192);
-                    for ($i = 0; $i < 30; $i++) {
-                        fwrite(STDERR, $chunk);
-                    }
-                    echo json_encode(['name' => 'floods_stderr', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'emits_non_array_json':
-                    echo "{not valid json at all\n";
-                    echo json_encode(['name' => 'emits_non_array_json', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
-                    exit(0);
-                case 'only_non_array_json':
-                    echo "{ trailing but malformed\n";
-                    exit(0);
-                case 'sleeps_forever':
-                    // Used only for the timeout test; the test uses a very
-                    // short subprocess timeout so this doesn't actually
-                    // delay the suite.
-                    sleep(30);
-                    exit(0);
-                default:
-                    fwrite(STDERR, "unrecognized fixture\n");
-                    exit(2);
-            }
-            PHP);
+                echo json_encode(['name' => 'floods_stdout', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'reports_force':
+                $status = $force ? 'executed' : 'skipped';
+                echo json_encode(['name' => 'reports_force', 'status' => $status, 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'floods_stderr':
+                // Writes well past the spawner's per-stream buffer cap
+                // (64KiB) to stderr to exercise the overflow path.
+                $chunk = str_repeat('A', 8192);
+                for ($i = 0; $i < 30; $i++) {
+                    fwrite(STDERR, $chunk);
+                }
+                echo json_encode(['name' => 'floods_stderr', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'emits_non_array_json':
+                echo "{not valid json at all\n";
+                echo json_encode(['name' => 'emits_non_array_json', 'status' => 'executed', 'nonce' => $nonce]) . "\n";
+                exit(0);
+            case 'only_non_array_json':
+                echo "{ trailing but malformed\n";
+                exit(0);
+            case 'sleeps_forever':
+                // Used only for the timeout test; the test uses a very
+                // short subprocess timeout so this doesn't actually
+                // delay the suite.
+                sleep(30);
+                exit(0);
+            default:
+                fwrite(STDERR, "unrecognized fixture\n");
+                exit(2);
+        }
+        PHP_WRAP);
         if (PHP_OS_FAMILY !== 'Windows') {
             chmod($this->fakeConsoleScript, 0755);
         }

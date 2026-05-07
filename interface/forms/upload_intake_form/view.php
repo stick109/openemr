@@ -181,7 +181,7 @@ if ($procedureReportId > 0) {
 
         $citationId = null;
         if ($key !== '' && !empty($bboxByField[$key])) {
-            $citationId = (int) array_shift($bboxByField[$key]);
+            $citationId = array_shift($bboxByField[$key]);
             if (empty($bboxByField[$key])) {
                 unset($bboxByField[$key]);
             }

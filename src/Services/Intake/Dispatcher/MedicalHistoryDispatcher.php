@@ -36,16 +36,16 @@ use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-final class MedicalHistoryDispatcher
+final readonly class MedicalHistoryDispatcher
 {
     private const FORM_NAME = 'Medical History (Intake Upload)';
     private const QUESTIONNAIRE_NAME = QuestionnaireResponseBuilder::QUESTIONNAIRE_NAME;
 
-    private readonly QuestionnaireResponseBuilder $responseBuilder;
+    private QuestionnaireResponseBuilder $responseBuilder;
 
     public function __construct(
-        private readonly LoggerInterface $logger,
-        private readonly ClockInterface $clock,
+        private LoggerInterface $logger,
+        private ClockInterface $clock,
         ?QuestionnaireResponseBuilder $responseBuilder = null,
     ) {
         $this->responseBuilder = $responseBuilder ?? new QuestionnaireResponseBuilder();

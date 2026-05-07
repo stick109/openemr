@@ -34,16 +34,16 @@ use JsonException;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-final class CopilotSidecarClient
+final readonly class CopilotSidecarClient
 {
     private const ENDPOINT = '/api/copilot/run';
     private const CONNECT_TIMEOUT_SECONDS = 5;
 
-    private readonly ClientInterface $httpClient;
+    private ClientInterface $httpClient;
 
     public function __construct(
-        private readonly AgentSidecarConfig $config,
-        private readonly LoggerInterface $logger,
+        private AgentSidecarConfig $config,
+        private LoggerInterface $logger,
         ?ClientInterface $httpClient = null,
     ) {
         $this->httpClient = $httpClient ?? new Client();

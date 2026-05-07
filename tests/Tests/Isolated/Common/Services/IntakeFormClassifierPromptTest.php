@@ -53,7 +53,7 @@ class IntakeFormClassifierPromptTest extends TestCase
 
         $roles = [];
         foreach ($messages as $message) {
-            $roles[] = is_string($message['role'] ?? null) ? (string) $message['role'] : '';
+            $roles[] = is_string($message['role'] ?? null) ? $message['role'] : '';
         }
         $this->assertContains('system', $roles);
         $this->assertContains('user', $roles);

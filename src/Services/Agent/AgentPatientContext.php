@@ -12,9 +12,9 @@ declare(strict_types=1);
 
 namespace OpenEMR\Services\Agent;
 
-final class AgentPatientContext
+final readonly class AgentPatientContext
 {
-    public function __construct(private readonly int $pid)
+    public function __construct(private int $pid)
     {
     }
 

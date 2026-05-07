@@ -177,7 +177,7 @@ final readonly class CommittedProposalRepository
             return false;
         }
         $colon = strpos($key, ':');
-        if ($colon === false || $colon === 0 || $colon === strlen($key) - 1) {
+        if (in_array($colon, [false, 0, strlen($key) - 1], true)) {
             return false;
         }
         // Printable ASCII without whitespace / control chars.

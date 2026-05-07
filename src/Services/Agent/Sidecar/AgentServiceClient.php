@@ -28,15 +28,15 @@ use GuzzleHttp\Exception\GuzzleException;
 use JsonException;
 use Psr\Log\LoggerInterface;
 
-final class AgentServiceClient
+final readonly class AgentServiceClient
 {
     private const ENDPOINT = '/api/agent/run';
 
-    private readonly ClientInterface $httpClient;
+    private ClientInterface $httpClient;
 
     public function __construct(
-        private readonly AgentSidecarConfig $config,
-        private readonly LoggerInterface $logger,
+        private AgentSidecarConfig $config,
+        private LoggerInterface $logger,
         ?ClientInterface $httpClient = null,
     ) {
         $this->httpClient = $httpClient ?? new Client();

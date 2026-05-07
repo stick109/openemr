@@ -191,7 +191,7 @@ final class AgentIntentRestControllerTest extends TestCase
         $this->assertSame(['Unknown agent intent_id.'], $body['validationErrors']['intent_id']);
     }
 
-    public function testFreeTextPayloadRejectedBeforeSidecarCall(): void
+    public function testStrayFreeTextFieldRejectedBeforeSidecarCall(): void
     {
         $history = [];
         $controller = $this->buildController(
@@ -199,6 +199,9 @@ final class AgentIntentRestControllerTest extends TestCase
             sidecarHistory: $history,
         );
 
+        // Unsupported free-text aliases (e.g. ``free_text``, ``prompt``) are
+        // still rejected -- only the explicit ``user_goal`` field paired
+        // with the ``free_text`` intent is allowed.
         $response = $controller->postIntent($this->requestWithJson([
             'intent_id' => 'current_medications',
             'conversation_id' => 'session-local-id',
@@ -214,6 +217,83 @@ final class AgentIntentRestControllerTest extends TestCase
             $body['validationErrors']['free_text'],
         );
         $this->assertSame([], $history, 'Free-text rejection must short-circuit before any sidecar call');
+    }
+
+    public function testFreeTextIntentForwardsUserGoalToSidecar(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [
+                new Psr7Response(
+                    200,
+                    ['Content-Type' => 'application/json'],
+                    json_encode($this->sidecarSuccessBody(), JSON_THROW_ON_ERROR),
+                ),
+            ],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'free_text',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+            'user_goal' => 'What is the patient blood pressure trend?',
+        ]));
+
+        $this->assertSame(Response::HTTP_OK, $response->getStatusCode());
+        $this->assertCount(1, $history, 'Sidecar must be called exactly once on the free-text happy path');
+        $sidecarBody = json_decode((string) $history[0]['request']->getBody(), true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame('free_text', $sidecarBody['intent_id']);
+        $this->assertSame('What is the patient blood pressure trend?', $sidecarBody['user_goal']);
+    }
+
+    public function testUserGoalRejectedForNonFreeTextIntent(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'current_medications',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+            'user_goal' => 'arbitrary text',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
+        $this->assertSame(
+            ['user_goal is only supported with the free_text intent.'],
+            $body['validationErrors']['user_goal'],
+        );
+        $this->assertSame([], $history, 'user_goal-with-wrong-intent rejection must short-circuit before any sidecar call');
+    }
+
+    public function testFreeTextIntentRequiresUserGoal(): void
+    {
+        $history = [];
+        $controller = $this->buildController(
+            sidecarResponses: [],
+            sidecarHistory: $history,
+        );
+
+        $response = $controller->postIntent($this->requestWithJson([
+            'intent_id' => 'free_text',
+            'conversation_id' => 'session-local-id',
+            'active_patient_context' => 'server-session',
+        ]));
+
+        $body = $this->decodeJsonBody($response);
+
+        $this->assertSame(Response::HTTP_BAD_REQUEST, $response->getStatusCode());
+        $this->assertSame(
+            ['user_goal is required for the free_text intent.'],
+            $body['validationErrors']['user_goal'],
+        );
+        $this->assertSame([], $history, 'free_text-without-user_goal rejection must short-circuit before any sidecar call');
     }
 
     public function testMissingSharedSecretSurfacesAsServiceUnavailable(): void

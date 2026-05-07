@@ -98,7 +98,7 @@ class QuestionnaireResponseBuilderTest extends TestCase
         $linkIds = [];
         foreach ($items as $item) {
             $this->assertIsArray($item);
-            $linkIds[] = is_string($item['linkId'] ?? null) ? (string) $item['linkId'] : '';
+            $linkIds[] = is_string($item['linkId'] ?? null) ? $item['linkId'] : '';
         }
         // The MedicalHistory payload in self::medicalHistoryPayload() has six
         // top-level keys; we expect at least one item per key.
@@ -160,7 +160,7 @@ class QuestionnaireResponseBuilderTest extends TestCase
         $childLinkIds = [];
         foreach ($social['item'] as $child) {
             $this->assertIsArray($child);
-            $childLinkIds[] = is_string($child['linkId'] ?? null) ? (string) $child['linkId'] : '';
+            $childLinkIds[] = is_string($child['linkId'] ?? null) ? $child['linkId'] : '';
         }
         $this->assertSame(
             ['social.smoking', 'social.alcohol', 'social.drugs'],

@@ -438,6 +438,47 @@ class TestSdkRequestConstruction:
         kwargs = sdk.chat.completions.create.call_args.kwargs
         assert kwargs["tools"] == tools
 
+    def test_registry_shape_tools_translated_to_openai_function_shape(self) -> None:
+        """Tools coming from the agent-service registry use Anthropic-style
+        ``{name, description, input_schema}`` keys.  OpenAI's chat-completions
+        ``tools`` parameter requires the ``{type: "function", function: {...,
+        parameters: ...}}`` envelope -- so the client must translate.
+        Without this translation, OpenAI returns 400 Missing required
+        parameter: 'tools[0].type'."""
+        client, sdk = _make_client()
+        sdk.chat.completions.create.return_value = _completion(
+            message=_content_message(content="ok"),
+        )
+        registry_tools = [
+            {
+                "name": "get_current_medications",
+                "description": "Return the patient's active medications.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
+            },
+        ]
+
+        client.tool_call_completion(messages=[], tools=registry_tools)
+
+        kwargs = sdk.chat.completions.create.call_args.kwargs
+        assert kwargs["tools"] == [
+            {
+                "type": "function",
+                "function": {
+                    "name": "get_current_medications",
+                    "description": "Return the patient's active medications.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                    },
+                },
+            },
+        ]
+
 
 # ===================================================================
 # Dependency provider

@@ -97,8 +97,33 @@ def _coerce_messages(
 def _coerce_tools(
     tools: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Copy ``tools`` into plain ``dict`` form for the OpenAI SDK."""
-    return [dict(t) for t in tools]
+    """Translate the registry's tool schemas into the OpenAI SDK shape.
+
+    The agent-service tool registry emits Anthropic-style schemas:
+    ``{"name": ..., "description": ..., "input_schema": {...}}``. The
+    OpenAI Chat Completions ``tools`` parameter requires:
+    ``{"type": "function", "function": {"name", "description",
+    "parameters"}}``. If a caller already provides an OpenAI-shaped tool
+    (with a top-level ``"type": "function"`` key) we pass it through
+    unchanged so existing OpenAI-native tests keep working.
+    """
+    sdk_tools: list[dict[str, Any]] = []
+    for entry in tools:
+        if entry.get("type") == "function" and "function" in entry:
+            sdk_tools.append(dict(entry))
+            continue
+        function_payload: dict[str, Any] = {"name": entry["name"]}
+        description = entry.get("description")
+        if description is not None:
+            function_payload["description"] = description
+        parameters = entry.get("parameters")
+        if parameters is None:
+            # The registry uses ``input_schema`` for JSON-Schema parameters.
+            parameters = entry.get("input_schema")
+        if parameters is not None:
+            function_payload["parameters"] = dict(parameters)
+        sdk_tools.append({"type": "function", "function": function_payload})
+    return sdk_tools
 
 
 def _parse_tool_arguments(raw: str | None) -> dict[str, Any]:

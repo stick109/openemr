@@ -39,7 +39,7 @@ use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Throwable;
 
-final readonly class LabPdfDispatcher
+final class LabPdfDispatcher
 {
     private const ORDER_STATUS_COMPLETE = 'complete';
     private const REPORT_STATUS_COMPLETE = 'complete';
@@ -62,9 +62,9 @@ final readonly class LabPdfDispatcher
     ];
 
     public function __construct(
-        private SqlExecutor $sql,
-        private LoggerInterface $logger,
-        private ClockInterface $clock,
+        private readonly SqlExecutor $sql,
+        private readonly LoggerInterface $logger,
+        private readonly ClockInterface $clock,
     ) {
     }
 

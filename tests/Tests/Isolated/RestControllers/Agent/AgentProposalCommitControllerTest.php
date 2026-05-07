@@ -241,7 +241,9 @@ final class AgentProposalCommitControllerTest extends TestCase
 
     private function buildController(): AgentProposalCommitController
     {
-        $secretResolver = (static fn(string $keyVersion): ?string => $keyVersion === self::KEY_VERSION ? self::SECRET : null);
+        $secretResolver = static function (string $keyVersion): ?string {
+            return $keyVersion === self::KEY_VERSION ? self::SECRET : null;
+        };
         $verifier = new CopilotRunContextVerifier(
             secretResolver: $secretResolver,
             clock: static fn (): int => self::FROZEN_NOW,

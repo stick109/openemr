@@ -21,7 +21,7 @@ use OpenEMR\Common\Database\QueryUtils;
 use OpenEMR\Services\Intake\Exception\IngestionFailedException;
 use Psr\Log\LoggerInterface;
 
-final readonly class DemographicsDispatcher
+final class DemographicsDispatcher
 {
     /**
      * Map from JSON field path to `patient_data` column name. Nested keys
@@ -58,8 +58,8 @@ final readonly class DemographicsDispatcher
     ];
 
     public function __construct(
-        private LoggerInterface $logger,
-        private bool $fillOnlyEmpty = true,
+        private readonly LoggerInterface $logger,
+        private readonly bool $fillOnlyEmpty = true,
     ) {
     }
 

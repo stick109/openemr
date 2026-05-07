@@ -194,8 +194,17 @@ final class AgentAccessBroker
         ?callable $tokenIdFactory = null,
         private readonly LoggerInterface $logger = new SystemLogger()
     ) {
-        $this->csrfVerifier = $csrfVerifier ?? (static fn(string $token, SessionInterface $session): bool => CsrfUtils::verifyCsrfToken($token, $session, 'api'));
-        $this->aclChecker = $aclChecker ?? (static fn(string $section, string $value, string $user, string $permission): bool => AclMain::aclCheckCore($section, $value, $user, $permission) === true);
+        $this->csrfVerifier = $csrfVerifier ?? static function (string $token, SessionInterface $session): bool {
+            return CsrfUtils::verifyCsrfToken($token, $session, 'api');
+        };
+        $this->aclChecker = $aclChecker ?? static function (
+            string $section,
+            string $value,
+            string $user,
+            string $permission
+        ): bool {
+            return AclMain::aclCheckCore($section, $value, $user, $permission) === true;
+        };
         $this->auditLogger = $auditLogger ?? static function (
             string $event,
             string $user,
@@ -206,7 +215,13 @@ final class AgentAccessBroker
         ): void {
             EventAuditLogger::getInstance()->newEvent($event, $user, $groupname, $success, $comments, $patientId);
         };
-        $this->tokenIdFactory = $tokenIdFactory ?? (static fn(string $intentId, AgentPatientContext $patientContext, array $accessSet): string => bin2hex(random_bytes(16)));
+        $this->tokenIdFactory = $tokenIdFactory ?? static function (
+            string $intentId,
+            AgentPatientContext $patientContext,
+            array $accessSet
+        ): string {
+            return bin2hex(random_bytes(16));
+        };
     }
 
     /**

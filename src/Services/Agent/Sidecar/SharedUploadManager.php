@@ -18,7 +18,7 @@ namespace OpenEMR\Services\Agent\Sidecar;
 
 use Psr\Log\LoggerInterface;
 
-final readonly class SharedUploadManager
+final class SharedUploadManager
 {
     /**
      * Default mount point inside the container for the shared volume.
@@ -48,8 +48,8 @@ final readonly class SharedUploadManager
     ];
 
     public function __construct(
-        private LoggerInterface $logger,
-        private string $sharedDirectory = self::DEFAULT_SHARED_DIR,
+        private readonly LoggerInterface $logger,
+        private readonly string $sharedDirectory = self::DEFAULT_SHARED_DIR,
     ) {
     }
 

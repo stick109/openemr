@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 namespace OpenEMR\Services\Agent;
 
-final readonly class AgentAccessToken
+final class AgentAccessToken
 {
     /**
      * @param list<string> $grantedDataClasses
@@ -20,13 +20,13 @@ final readonly class AgentAccessToken
      * @param list<array{section: string, value: string, permission: string}> $grantedAclPolicies
      */
     public function __construct(
-        private string $tokenId,
-        private string $intentId,
-        private AgentPatientContext $patientContext,
-        private array $grantedDataClasses,
-        private array $grantedTools,
-        private array $grantedAclPolicies,
-        private int $issuedAt
+        private readonly string $tokenId,
+        private readonly string $intentId,
+        private readonly AgentPatientContext $patientContext,
+        private readonly array $grantedDataClasses,
+        private readonly array $grantedTools,
+        private readonly array $grantedAclPolicies,
+        private readonly int $issuedAt
     ) {
     }
 

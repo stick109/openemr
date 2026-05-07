@@ -31,7 +31,6 @@ class AgentIntentCatalogTest extends TestCase
             'recent_events',
             'changed_since_last_visit',
             'show_source',
-            'free_text',
         ], $catalog->intentIds());
     }
 

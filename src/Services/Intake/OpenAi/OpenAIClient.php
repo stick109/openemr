@@ -47,7 +47,7 @@ use Symfony\Component\HttpClient\HttpClient;
 use Symfony\Contracts\HttpClient\Exception\ExceptionInterface as HttpClientExceptionInterface;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
-final readonly class OpenAIClient
+final class OpenAIClient
 {
     private const DEFAULT_BASE_URI = 'https://api.openai.com/v1/';
     private const DEFAULT_TIMEOUT_SECONDS = 60;
@@ -57,11 +57,11 @@ final readonly class OpenAIClient
      * @param int<1, max> $timeoutSeconds
      */
     public function __construct(
-        private LoggerInterface $logger,
-        private OEEnvBag $env,
-        private ?HttpClientInterface $httpClient = null,
-        private string $baseUri = self::DEFAULT_BASE_URI,
-        private int $timeoutSeconds = self::DEFAULT_TIMEOUT_SECONDS,
+        private readonly LoggerInterface $logger,
+        private readonly OEEnvBag $env,
+        private readonly ?HttpClientInterface $httpClient = null,
+        private readonly string $baseUri = self::DEFAULT_BASE_URI,
+        private readonly int $timeoutSeconds = self::DEFAULT_TIMEOUT_SECONDS,
     ) {
     }
 

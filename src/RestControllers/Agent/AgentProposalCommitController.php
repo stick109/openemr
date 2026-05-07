@@ -86,9 +86,14 @@ final readonly class AgentProposalCommitController
         ?callable $requestIdFactory = null,
         ?callable $clock = null,
     ) {
-        $this->csrfVerifier = $csrfVerifier ?? (static fn(string $token, \Symfony\Component\HttpFoundation\Session\SessionInterface $session): bool => CsrfUtils::verifyCsrfToken($token, $session, 'api'));
+        $this->csrfVerifier = $csrfVerifier ?? static function (
+            string $token,
+            \Symfony\Component\HttpFoundation\Session\SessionInterface $session,
+        ): bool {
+            return CsrfUtils::verifyCsrfToken($token, $session, 'api');
+        };
         $this->requestIdFactory = $requestIdFactory ?? static fn (): string => bin2hex(random_bytes(16));
-        $this->clock = $clock ?? time(...);
+        $this->clock = $clock ?? static fn (): int => time();
     }
 
     public function postCommit(HttpRestRequest $request): JsonResponse
@@ -356,7 +361,7 @@ final readonly class AgentProposalCommitController
                 $row[$field] = $payload[$field];
             }
         }
-        $labName = $payload['lab_name'] ?? null;
+        $labName = isset($payload['lab_name']) ? $payload['lab_name'] : null;
 
         return [
             'lab_name' => $labName,

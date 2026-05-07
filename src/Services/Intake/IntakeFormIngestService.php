@@ -48,7 +48,7 @@ use Psr\Clock\ClockInterface;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
-final readonly class IntakeFormIngestService
+final class IntakeFormIngestService
 {
     private const MAX_PDF_BYTES = 10 * 1024 * 1024;
     private const PDF_MAGIC = '%PDF-';
@@ -57,21 +57,21 @@ final readonly class IntakeFormIngestService
     private const CONSENT_CATEGORY_NAME = 'Consents';
     private const CONSENT_CATEGORY_PARENT_ID = 1;
 
-    private IntakeFormSchemaValidator $schemaValidator;
+    private readonly IntakeFormSchemaValidator $schemaValidator;
 
     /**
      * @param non-empty-string $model
      */
     public function __construct(
-        private OpenAIClient $openAiClient,
-        private LoggerInterface $logger,
-        private ClockInterface $clock,
-        private DemographicsDispatcher $demographicsDispatcher,
-        private MedicalHistoryDispatcher $medicalHistoryDispatcher,
-        private ConsentDispatcher $consentDispatcher,
-        private ?SessionInterface $session = null,
-        private string $model = self::DEFAULT_MODEL,
-        private float $classifierThreshold = self::CLASSIFIER_THRESHOLD,
+        private readonly OpenAIClient $openAiClient,
+        private readonly LoggerInterface $logger,
+        private readonly ClockInterface $clock,
+        private readonly DemographicsDispatcher $demographicsDispatcher,
+        private readonly MedicalHistoryDispatcher $medicalHistoryDispatcher,
+        private readonly ConsentDispatcher $consentDispatcher,
+        private readonly ?SessionInterface $session = null,
+        private readonly string $model = self::DEFAULT_MODEL,
+        private readonly float $classifierThreshold = self::CLASSIFIER_THRESHOLD,
         ?IntakeFormSchemaValidator $schemaValidator = null,
     ) {
         $this->schemaValidator = $schemaValidator ?? new IntakeFormSchemaValidator();

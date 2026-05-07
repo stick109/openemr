@@ -224,7 +224,14 @@ class AgentAccessBrokerTest extends TestCase
     private function createBroker(array $aclGrants): AgentAccessBroker
     {
         return new AgentAccessBroker(
-            aclChecker: static fn(string $section, string $value, string $user, string $permission): bool => $aclGrants[$section . '/' . $value] ?? false,
+            aclChecker: static function (
+                string $section,
+                string $value,
+                string $user,
+                string $permission
+            ) use ($aclGrants): bool {
+                return $aclGrants[$section . '/' . $value] ?? false;
+            },
             auditLogger: function (
                 string $event,
                 string $user,
@@ -242,7 +249,9 @@ class AgentAccessBrokerTest extends TestCase
                     'patient_id' => $patientId,
                 ];
             },
-            tokenIdFactory: static fn(string $intentId, $patientContext, array $accessSet): string => 'test-token-' . $intentId . '-' . $patientContext->getPid(),
+            tokenIdFactory: static function (string $intentId, $patientContext, array $accessSet): string {
+                return 'test-token-' . $intentId . '-' . $patientContext->getPid();
+            },
             logger: new NullLogger()
         );
     }

@@ -20,7 +20,6 @@ final class AgentIntentCatalog
     public const RECENT_EVENTS = 'recent_events';
     public const CHANGED_SINCE_LAST_VISIT = 'changed_since_last_visit';
     public const SHOW_SOURCE = 'show_source';
-    public const FREE_TEXT = 'free_text';
 
     /**
      * @var array<string, array{
@@ -94,16 +93,6 @@ final class AgentIntentCatalog
             'max_records' => 1,
             'max_documents' => 1,
             'lookback_days' => 0,
-        ],
-        self::FREE_TEXT => [
-            'intent_id' => self::FREE_TEXT,
-            'button_label' => 'Free text',
-            'prompt_text' => '',
-            'primary_users' => ['doctor'],
-            'use_case_traces' => ['D1', 'D2'],
-            'max_records' => 30,
-            'max_documents' => 5,
-            'lookback_days' => 365,
         ],
     ];
 

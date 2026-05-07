@@ -12,13 +12,13 @@ declare(strict_types=1);
 
 namespace OpenEMR\Services\Agent;
 
-final readonly class AgentPatientResolution
+final class AgentPatientResolution
 {
     private function __construct(
-        private bool $allowed,
-        private ?AgentPatientContext $patientContext,
-        private string $reasonCode,
-        private string $publicMessage
+        private readonly bool $allowed,
+        private readonly ?AgentPatientContext $patientContext,
+        private readonly string $reasonCode,
+        private readonly string $publicMessage
     ) {
     }
 

@@ -73,15 +73,7 @@ final class AgentIntentRestController
         'conversation_id',
         'active_patient_context',
         'source_id',
-        'user_goal',
     ];
-
-    /**
-     * Maximum length (characters) accepted for the optional ``user_goal``
-     * free-text prompt. Mirrors the Python sidecar's ``USER_GOAL_MAX_CHARS``
-     * and the PHP ``CopilotRunRequestDto::USER_GOAL_MAX_CHARS`` constant.
-     */
-    private const USER_GOAL_MAX_CHARS = 4000;
 
     private const FREE_TEXT_FIELDS = [
         'free_text',
@@ -123,7 +115,7 @@ final class AgentIntentRestController
         ?callable $clock = null,
     ) {
         $this->requestIdFactory = $requestIdFactory ?? static fn (): string => bin2hex(random_bytes(16));
-        $this->clock = $clock ?? time(...);
+        $this->clock = $clock ?? static fn (): int => time();
         $this->sharedSecretProvider = $sharedSecretProvider ?? static function (): string {
             $secret = getenv('OPENEMR_AGENT_SIDECAR_SECRET');
             if (is_string($secret) && $secret !== '') {
@@ -167,10 +159,6 @@ final class AgentIntentRestController
         $intentIdInput = is_string($payload['intent_id'] ?? null) ? $payload['intent_id'] : null;
         $conversationId = is_string($payload['conversation_id'] ?? null) ? $payload['conversation_id'] : null;
         $sourceId = is_string($payload['source_id'] ?? null) ? $payload['source_id'] : null;
-        $userGoal = is_string($payload['user_goal'] ?? null) ? trim($payload['user_goal']) : null;
-        if ($userGoal === '') {
-            $userGoal = null;
-        }
         $request->attributes->set('skipResponseLogging', true);
         $request->attributes->set('agentRouteRawResponseLoggingDisabled', true);
         $this->logger->info('agent.intent.received', [
@@ -223,7 +211,7 @@ final class AgentIntentRestController
             return $this->evidenceDenied('Agent access token was not available.', $requestId);
         }
 
-        return $this->proxyIntentToSidecar($intent, $accessToken, $conversationId, $requestId, $sourceId, $userGoal);
+        return $this->proxyIntentToSidecar($intent, $accessToken, $conversationId, $requestId, $sourceId);
     }
 
     /**
@@ -243,8 +231,7 @@ final class AgentIntentRestController
         AgentAccessToken $accessToken,
         ?string $conversationId,
         string $requestId,
-        ?string $sourceId = null,
-        ?string $userGoal = null
+        ?string $sourceId = null
     ): JsonResponse {
         try {
             $patientId = $accessToken->getPatientContext()->getPid();
@@ -299,7 +286,7 @@ final class AgentIntentRestController
             $sidecarRequest = new CopilotRunRequestDto(
                 runContext: $wireToken,
                 intentId: $intentId,
-                userGoal: $userGoal,
+                userGoal: null,
                 requestId: $minterRequestId,
                 sourceId: $sourceId,
             );
@@ -529,20 +516,6 @@ final class AgentIntentRestController
             } elseif (!is_string($payload['source_id']) || !preg_match('/\A[A-Za-z0-9_]+:[A-Za-z0-9_]+:[0-9]{1,20}\z/', $payload['source_id'])) {
                 $validationErrors['source_id'] = ['source_id must identify a server-issued citation source.'];
             }
-        }
-
-        if (array_key_exists('user_goal', $payload)) {
-            if (($payload['intent_id'] ?? null) !== AgentIntentCatalog::FREE_TEXT) {
-                $validationErrors['user_goal'] = ['user_goal is only supported with the free_text intent.'];
-            } elseif (!is_string($payload['user_goal']) || trim($payload['user_goal']) === '') {
-                $validationErrors['user_goal'] = ['user_goal must be a non-empty string.'];
-            } elseif (mb_strlen($payload['user_goal']) > self::USER_GOAL_MAX_CHARS) {
-                $validationErrors['user_goal'] = [
-                    'user_goal exceeds maximum length of ' . self::USER_GOAL_MAX_CHARS . ' characters.',
-                ];
-            }
-        } elseif (($payload['intent_id'] ?? null) === AgentIntentCatalog::FREE_TEXT) {
-            $validationErrors['user_goal'] = ['user_goal is required for the free_text intent.'];
         }
 
         return $validationErrors;

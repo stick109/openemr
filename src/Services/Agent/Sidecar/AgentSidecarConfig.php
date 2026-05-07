@@ -19,17 +19,17 @@ namespace OpenEMR\Services\Agent\Sidecar;
 use OpenEMR\Core\OEEnvBag;
 use SensitiveParameter;
 
-final readonly class AgentSidecarConfig
+final class AgentSidecarConfig
 {
     private const DEFAULT_URL = 'http://agent-service:8010';
     private const DEFAULT_TIMEOUT_SECONDS = 60;
 
     public function __construct(
-        private string $url = self::DEFAULT_URL,
-        #[SensitiveParameter] private string $sharedSecret = '',
-        private int $timeoutSeconds = self::DEFAULT_TIMEOUT_SECONDS,
-        #[SensitiveParameter] private string $cohereApiKey = '',
-        #[SensitiveParameter] private string $honeycombApiKey = '',
+        private readonly string $url = self::DEFAULT_URL,
+        #[SensitiveParameter] private readonly string $sharedSecret = '',
+        private readonly int $timeoutSeconds = self::DEFAULT_TIMEOUT_SECONDS,
+        #[SensitiveParameter] private readonly string $cohereApiKey = '',
+        #[SensitiveParameter] private readonly string $honeycombApiKey = '',
     ) {
     }
 

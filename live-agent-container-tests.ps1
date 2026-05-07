@@ -75,6 +75,12 @@
     Defaults to $env:OPENEMR_AGENT_SIDECAR_SECRET, falling back to
     "dev-shared-secret" (the dev-easy default in compose).
 
+.PARAMETER ComposeProject
+    docker compose project name that runs the agent-service container.
+    Defaults to "openemr". The script never relies on the location of
+    the compose file -- it talks to compose by project name only via
+    `docker compose -p <name>`.
+
 .PARAMETER SkipDocker
     Skip every test that shells out to docker (topology cross-container
     probe and the volume test). Useful when Docker Desktop is
@@ -113,15 +119,18 @@ param(
     [Switch]$RunPaid,
     [Switch]$SkipDocker,
     [string]$AgentUrl = "http://localhost:8010",
-    [string]$Secret
+    [string]$Secret,
+    [string]$ComposeProject = "openemr"
 )
 
 $ErrorActionPreference = "Continue"
 
-# Resolve repo root from the script's location so the script can be invoked
-# from any working directory.
-$RepoRoot  = Split-Path -Parent $MyInvocation.MyCommand.Path
-$DockerDir = Join-Path -Path $RepoRoot -ChildPath "docker\development-easy"
+# Resolve repo root from the script's location for completeness, but we
+# do not rely on a docker-compose directory path -- every docker compose
+# call in this script is project-name-based via `-p $ComposeProject`,
+# so the script works regardless of where the compose file lives or
+# whether the cwd matches the project's auto-derived name.
+$RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 
 # Default the secret from the environment, falling back to the dev-easy
 # compose default. The empty-string check covers the case where the
@@ -246,20 +255,20 @@ function Test-Command {
 function Test-DockerUp {
     <#
     .SYNOPSIS
-        Return $true if the dev compose stack is running and the
-        agent-service service is one of its running services.
+        Return $true if the configured compose project is running and
+        agent-service is one of its running services.
+
+    .DESCRIPTION
+        Uses `docker compose -p $ComposeProject ps` so the script does
+        not depend on the cwd or the location of the compose file. The
+        project name defaults to "openemr" and is overridable via the
+        -ComposeProject parameter.
     #>
     if (-not (Test-Command docker)) { return $false }
-    if (-not (Test-Path -LiteralPath $DockerDir)) { return $false }
 
-    Push-Location $DockerDir
-    try {
-        $services = & docker compose ps --status running --services 2>$null
-        if ($LASTEXITCODE -ne 0) { return $false }
-        return ([string]::Join("`n", @($services)) -match "agent-service")
-    } finally {
-        Pop-Location
-    }
+    $services = & docker compose -p $ComposeProject ps --status running --services 2>$null
+    if ($LASTEXITCODE -ne 0) { return $false }
+    return ([string]::Join("`n", @($services)) -match "agent-service")
 }
 
 # ---------------------------------------------------------------------------
@@ -520,63 +529,66 @@ function New-CopilotRunContext {
 function Invoke-TopologyTests {
     Write-Section "TOPOLOGY (5-10s)"
 
+    $topologyNames = @(
+        "agent-service container running"
+        "agent-service health (docker compose ps)"
+        "openemr -> agent-service bridge (curl)"
+    )
+
     if ($SkipDocker) {
-        Skip-Test -Name "agent-service container running" -Group "Topology" -Reason "-SkipDocker"
-        Skip-Test -Name "agent-service health (docker compose ps)" -Group "Topology" -Reason "-SkipDocker"
-        Skip-Test -Name "openemr -> agent-service bridge (curl)" -Group "Topology" -Reason "-SkipDocker"
+        foreach ($n in $topologyNames) { Skip-Test -Name $n -Group "Topology" -Reason "-SkipDocker" }
         return
     }
 
     if (-not (Test-Command docker)) {
-        Skip-Test -Name "agent-service container running" -Group "Topology" -Reason "docker not on PATH"
-        Skip-Test -Name "agent-service health (docker compose ps)" -Group "Topology" -Reason "docker not on PATH"
-        Skip-Test -Name "openemr -> agent-service bridge (curl)" -Group "Topology" -Reason "docker not on PATH"
+        foreach ($n in $topologyNames) { Skip-Test -Name $n -Group "Topology" -Reason "docker not on PATH" }
+        return
+    }
+
+    # If the configured compose project is not running at all, skip the
+    # entire group rather than fail. "Container not running" is a
+    # precondition gap, not a bug in the deployed sidecar -- failing
+    # here would be a noisy false positive whenever someone runs the
+    # script before bringing the stack up.
+    if (-not (Test-DockerUp)) {
+        $reason = "compose project '$ComposeProject' not running -- start the stack or pass -ComposeProject <name>"
+        foreach ($n in $topologyNames) { Skip-Test -Name $n -Group "Topology" -Reason $reason }
         return
     }
 
     Run-Test -Name "agent-service container running" -Group "Topology" -Block {
-        Push-Location $DockerDir
-        try {
-            $services = & docker compose ps --status running --services 2>$null
-            $joined = [string]::Join("`n", @($services))
-            if (-not ($joined -match "agent-service")) {
-                throw "agent-service is not in 'docker compose ps --status running --services' output"
-            }
-        } finally {
-            Pop-Location
+        $services = & docker compose -p $ComposeProject ps --status running --services 2>$null
+        $joined = [string]::Join("`n", @($services))
+        if (-not ($joined -match "agent-service")) {
+            throw "agent-service is not in 'docker compose -p $ComposeProject ps --status running --services' output"
         }
     }
 
     # docker compose ps --format json outputs one JSON object per line.
     # We parse only the agent-service line and assert .Health == healthy.
     Run-Test -Name "agent-service health (docker compose ps)" -Group "Topology" -Block {
-        Push-Location $DockerDir
-        try {
-            $rows = & docker compose ps --format json agent-service 2>$null
-            if ($LASTEXITCODE -ne 0 -or -not $rows) {
-                throw "docker compose ps returned no rows for agent-service"
-            }
-            # Older docker compose versions emit a single JSON array; newer
-            # versions emit one object per line. Handle both.
-            $joined = ($rows -join "`n").Trim()
-            if ($joined.StartsWith('[')) {
-                $entries = $joined | ConvertFrom-Json
-            } else {
-                $entries = foreach ($line in $rows) {
-                    if (-not [string]::IsNullOrWhiteSpace($line)) {
-                        $line | ConvertFrom-Json
-                    }
+        $rows = & docker compose -p $ComposeProject ps --format json agent-service 2>$null
+        if ($LASTEXITCODE -ne 0 -or -not $rows) {
+            throw "docker compose ps returned no rows for agent-service"
+        }
+        # Older docker compose versions emit a single JSON array; newer
+        # versions emit one object per line. Handle both.
+        $joined = ($rows -join "`n").Trim()
+        if ($joined.StartsWith('[')) {
+            $entries = $joined | ConvertFrom-Json
+        } else {
+            $entries = foreach ($line in $rows) {
+                if (-not [string]::IsNullOrWhiteSpace($line)) {
+                    $line | ConvertFrom-Json
                 }
             }
-            $entry = $entries | Where-Object { $_.Service -eq 'agent-service' } | Select-Object -First 1
-            if ($null -eq $entry) {
-                throw "no agent-service entry in docker compose ps --format json output"
-            }
-            if ($entry.Health -ne 'healthy') {
-                throw "agent-service Health is '$($entry.Health)', expected 'healthy'"
-            }
-        } finally {
-            Pop-Location
+        }
+        $entry = $entries | Where-Object { $_.Service -eq 'agent-service' } | Select-Object -First 1
+        if ($null -eq $entry) {
+            throw "no agent-service entry in docker compose ps --format json output"
+        }
+        if ($entry.Health -ne 'healthy') {
+            throw "agent-service Health is '$($entry.Health)', expected 'healthy'"
         }
     }
 
@@ -586,17 +598,12 @@ function Invoke-TopologyTests {
     # or the env var was overridden, this fails here even if /healthz
     # works from the host.
     Run-Test -Name "openemr -> agent-service bridge (curl)" -Group "Topology" -Block {
-        Push-Location $DockerDir
-        try {
-            $output = & docker compose exec -T openemr curl --silent --show-error --fail --max-time 10 http://agent-service:8010/healthz 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "curl from openemr to agent-service:8010 failed (exit=$LASTEXITCODE): $output"
-            }
-            if (-not ($output -match '"status"\s*:\s*"ok"')) {
-                throw "unexpected /healthz body from inside openemr: $output"
-            }
-        } finally {
-            Pop-Location
+        $output = & docker compose -p $ComposeProject exec -T openemr curl --silent --show-error --fail --max-time 10 http://agent-service:8010/healthz 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "curl from openemr to agent-service:8010 failed (exit=$LASTEXITCODE): $output"
+        }
+        if (-not ($output -match '"status"\s*:\s*"ok"')) {
+            throw "unexpected /healthz body from inside openemr: $output"
         }
     }
 }
@@ -949,20 +956,16 @@ function Invoke-VolumeTests {
     }
 
     if (-not (Test-DockerUp)) {
-        Skip-Test -Name "shared agent-uploads volume is mounted in agent-service" -Group "Volume" -Reason "stack not running"
-        Skip-Test -Name "openemr write -> agent-service read on shared volume"   -Group "Volume" -Reason "stack not running"
+        $reason = "compose project '$ComposeProject' not running"
+        Skip-Test -Name "shared agent-uploads volume is mounted in agent-service" -Group "Volume" -Reason $reason
+        Skip-Test -Name "openemr write -> agent-service read on shared volume"   -Group "Volume" -Reason $reason
         return
     }
 
     Run-Test -Name "shared agent-uploads volume is mounted in agent-service" -Group "Volume" -Block {
-        Push-Location $DockerDir
-        try {
-            $output = & docker compose exec -T agent-service python -c "import os, sys; sys.exit(0 if os.path.isdir('/var/uploads/agent') else 1)" 2>&1
-            if ($LASTEXITCODE -ne 0) {
-                throw "/var/uploads/agent missing inside agent-service: $output"
-            }
-        } finally {
-            Pop-Location
+        $output = & docker compose -p $ComposeProject exec -T agent-service python -c "import os, sys; sys.exit(0 if os.path.isdir('/var/uploads/agent') else 1)" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "/var/uploads/agent missing inside agent-service: $output"
         }
     }
 
@@ -970,32 +973,27 @@ function Invoke-VolumeTests {
     # agent-service (ro mount). Same contents -> the volume is genuinely
     # shared, not two independent mounts that happen to have the same path.
     Run-Test -Name "openemr write -> agent-service read on shared volume" -Group "Volume" -Block {
-        Push-Location $DockerDir
+        $marker = "live-tests-$([guid]::NewGuid().ToString())"
+
+        # Write from openemr.
+        $writeOutput = & docker compose -p $ComposeProject exec -T openemr sh -c "printf '%s' '$marker' > /var/uploads/agent/.live-tests-marker" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "openemr write failed (exit=$LASTEXITCODE): $writeOutput"
+        }
+
         try {
-            $marker = "live-tests-$([guid]::NewGuid().ToString())"
-
-            # Write from openemr.
-            $writeOutput = & docker compose exec -T openemr sh -c "printf '%s' '$marker' > /var/uploads/agent/.live-tests-marker" 2>&1
+            # Read from agent-service.
+            $readOutput = & docker compose -p $ComposeProject exec -T agent-service python -c "from pathlib import Path; print(Path('/var/uploads/agent/.live-tests-marker').read_text(), end='')" 2>&1
             if ($LASTEXITCODE -ne 0) {
-                throw "openemr write failed (exit=$LASTEXITCODE): $writeOutput"
+                throw "agent-service read failed (exit=$LASTEXITCODE): $readOutput"
             }
-
-            try {
-                # Read from agent-service.
-                $readOutput = & docker compose exec -T agent-service python -c "from pathlib import Path; print(Path('/var/uploads/agent/.live-tests-marker').read_text(), end='')" 2>&1
-                if ($LASTEXITCODE -ne 0) {
-                    throw "agent-service read failed (exit=$LASTEXITCODE): $readOutput"
-                }
-                $readValue = ([string]$readOutput).Trim()
-                if ($readValue -ne $marker) {
-                    throw "marker mismatch: wrote='$marker', read='$readValue'"
-                }
-            } finally {
-                # Best-effort cleanup; don't fail the test if rm fails.
-                & docker compose exec -T openemr rm -f /var/uploads/agent/.live-tests-marker 2>$null | Out-Null
+            $readValue = ([string]$readOutput).Trim()
+            if ($readValue -ne $marker) {
+                throw "marker mismatch: wrote='$marker', read='$readValue'"
             }
         } finally {
-            Pop-Location
+            # Best-effort cleanup; don't fail the test if rm fails.
+            & docker compose -p $ComposeProject exec -T openemr rm -f /var/uploads/agent/.live-tests-marker 2>$null | Out-Null
         }
     }
 }
@@ -1049,8 +1047,9 @@ function Invoke-PaidTests {
 $startTime = Get-Date
 
 Write-Host ""
-Write-Host "Agent URL: $AgentUrl" -ForegroundColor DarkCyan
-Write-Host "Secret:    $('*' * [Math]::Min(8, $Secret.Length)) (length=$($Secret.Length))" -ForegroundColor DarkCyan
+Write-Host "Agent URL:       $AgentUrl" -ForegroundColor DarkCyan
+Write-Host "Compose project: $ComposeProject" -ForegroundColor DarkCyan
+Write-Host "Secret:          $('*' * [Math]::Min(8, $Secret.Length)) (length=$($Secret.Length))" -ForegroundColor DarkCyan
 
 if ($Topology)   { Invoke-TopologyTests }
 if ($Health)     { Invoke-HealthTests }

@@ -52,16 +52,22 @@ readonly class FallbackRouter
         'ttf',
     ];
 
+    /** The absolute path to the installation root, normalized to forward slashes. */
+    private string $installRoot;
+
     /**
      * @param string $installRoot The absolute path to the root of the
      * installation (e.g. where composer.json and .git exist)
      */
     public function __construct(
-        private string $installRoot,
+        string $installRoot,
         private LoggerInterface $logger,
     ) {
         // Sidenote: $_SERVER['DOCUMENT_ROOT'] seems to be pretty reliably the
         // same as intended $installRoot, but better to avoid relying on it.
+
+        // Normalize to forward slashes so path checks work on Windows too.
+        $this->installRoot = self::normalizeSeparators($installRoot);
     }
 
     /**
@@ -87,6 +93,7 @@ readonly class FallbackRouter
             if ($file === false) {
                 throw new OutOfRangeException('Rewrote to a non-existent file');
             }
+            $file = self::normalizeSeparators($file);
             $this->logger->debug('Resolved to rewriter {file}', ['file' => $file]);
             $this->prepareRuntime($file);
             return $file;
@@ -97,6 +104,7 @@ readonly class FallbackRouter
         if ($file === false) {
             throw new NotFoundHttpException();
         }
+        $file = self::normalizeSeparators($file);
 
         if (is_dir($file)) {
             $file = $this->handleDirectory($uri, $file);
@@ -250,5 +258,14 @@ readonly class FallbackRouter
     {
         $ext = pathinfo($path, PATHINFO_EXTENSION);
         return in_array($ext, self::STATIC_ASSET_EXTENSIONS, strict: true);
+    }
+
+    /**
+     * Normalize a filesystem path to forward slashes so that all string
+     * comparisons work identically on Windows and Unix.
+     */
+    private static function normalizeSeparators(string $path): string
+    {
+        return strtr($path, '\\', '/');
     }
 }

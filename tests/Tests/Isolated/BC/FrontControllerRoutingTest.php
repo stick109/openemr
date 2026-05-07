@@ -39,11 +39,17 @@ class FrontControllerRoutingTest extends TestCase
         $host = '127.0.0.1';
         $port = 8765;
 
-        self::$process = new Process([
-            'php',
-            '-S', sprintf('%s:%d', $host, $port),
-            $router,
-        ]);
+        self::$process = new Process(
+            command: [
+                'php',
+                '-S', sprintf('%s:%d', $host, $port),
+                $router,
+            ],
+            cwd: $docRoot,
+        );
+        // The container autodetect requires an ENVIRONMENT envvar.
+        // setEnv merges with the inherited parent environment.
+        self::$process->setEnv(['ENVIRONMENT' => 'dev']);
         self::$process->start();
 
         // Give the server time to start

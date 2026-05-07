@@ -27,7 +27,7 @@ class FallbackRouterTest extends TestCase
 {
     private static function getInstallRoot(): string
     {
-        return dirname(__DIR__, 4);
+        return strtr(dirname(__DIR__, 4), '\\', '/');
     }
 
     private function createRequest(string $path, string $query = ''): ServerRequestInterface

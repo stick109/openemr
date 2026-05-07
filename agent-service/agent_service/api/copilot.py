@@ -30,9 +30,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from agent_service.answer.builder import ResponseBuilder
 from agent_service.api.dependencies import require_copilot_run_context
 from agent_service.auth import CopilotRunContext
-from agent_service.clients.tool_choice import (
-    LLMToolChoiceClient,
-    LLMToolChoiceTurn,
+from agent_service.clients.tool_choice import LLMToolChoiceClient
+from agent_service.clients.tool_choice_openai import (
+    OpenAIToolChoiceClient,
+    _MissingOpenAIKeyClient,
 )
 from agent_service.config import Settings, get_settings
 from agent_service.intents import IntentCatalog, default_catalog
@@ -83,37 +84,30 @@ def get_agent_loop_config() -> AgentLoopConfig:
     return AgentLoopConfig()
 
 
-class _UnconfiguredLLMToolChoiceClient:
-    """Sentinel client that raises only when the loop actually invokes it.
-
-    Used as the default for :func:`get_llm_tool_choice_client` so missing
-    production wiring does not short-circuit FastAPI's body / auth
-    validation chain. The 500 is only emitted when the agent loop
-    proceeds to call the model -- by which point the verified context
-    has been confirmed and the request is internally well-formed.
-    """
-
-    def tool_call_completion(
-        self,
-        *,
-        messages: object,
-        tools: object,
-    ) -> LLMToolChoiceTurn:
-        raise RuntimeError(
-            "LLM tool-choice client is not configured for this deployment.",
-        )
-
-
 def get_llm_tool_choice_client() -> LLMToolChoiceClient:
     """Return the production LLM tool-choice client.
 
-    M13 does not ship a production OpenAI adapter; tests must override
-    this dependency with a fake. The un-overridden default returns a
-    sentinel that raises ``RuntimeError`` only when the loop actually
-    invokes it -- this preserves FastAPI's body / auth validation
-    ordering so 422 / 401 responses are returned for bad inputs.
+    Reads ``OPENAI_API_KEY`` from settings. When the key is present, a
+    real :class:`OpenAIToolChoiceClient` is composed; missing keys yield
+    a :class:`_MissingOpenAIKeyClient` whose
+    ``tool_call_completion`` raises :class:`LLMNotConfiguredError` only
+    when the agent loop actually invokes it. This deferral preserves
+    FastAPI's body / auth validation ordering so 422 / 401 responses are
+    returned for bad inputs even on a misconfigured deployment. Tests
+    override this dependency with :class:`FakeLLMToolChoiceClient` to
+    keep the loop deterministic.
     """
-    return _UnconfiguredLLMToolChoiceClient()
+    try:
+        settings: Settings = get_settings()
+    except RuntimeError:
+        # ``get_settings`` raises when ``AGENT_SHARED_SECRET`` is unset
+        # in test environments. Fall through to the missing-key sentinel
+        # so misconfigured deployments still produce a typed refusal
+        # rather than a generic crash.
+        return _MissingOpenAIKeyClient()
+    if not settings.openai_api_key:
+        return _MissingOpenAIKeyClient()
+    return OpenAIToolChoiceClient(api_key=settings.openai_api_key)
 
 
 def get_registry_builder() -> RegistryBuilder:

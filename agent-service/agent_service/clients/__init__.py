@@ -26,15 +26,21 @@ from agent_service.clients.tool_choice import (
     LLMToolChoiceTurn,
     ScriptedTurn,
 )
+from agent_service.clients.tool_choice_openai import (
+    LLMNotConfiguredError,
+    OpenAIToolChoiceClient,
+)
 
 __all__ = [
     "FakeLLMClient",
     "FakeLLMToolChoiceClient",
     "LLMClient",
     "LLMFinalMessage",
+    "LLMNotConfiguredError",
     "LLMToolCallChoice",
     "LLMToolChoiceClient",
     "LLMToolChoiceTurn",
     "OpenAIClient",
+    "OpenAIToolChoiceClient",
     "ScriptedTurn",
 ]

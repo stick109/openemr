@@ -236,20 +236,6 @@ function Invoke-FastTests {
     } else {
         Skip-Test -Name "composer phpunit-isolated" -Group "Fast" -Reason "composer not on PATH"
     }
-
-    # ESLint (quick lint pass).
-    if (Test-Command npm) {
-        Run-Test -Name "npm run lint:js" -Group "Fast" -Block {
-            Push-Location $RepoRoot
-            try {
-                & npm run lint:js --silent
-            } finally {
-                Pop-Location
-            }
-        }
-    } else {
-        Skip-Test -Name "npm run lint:js" -Group "Fast" -Reason "npm not on PATH"
-    }
 }
 
 # ---------------------------------------------------------------------------

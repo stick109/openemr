@@ -439,13 +439,16 @@ assignment forbids logging raw PHI to SaaS, and the OpenEMR audit trail
 also benefits from sanitized attributes). The redactor's `Sanitized` view
 is the load-bearing contract; the backend is interchangeable.
 
-### 11.5 Railway deployment
+### 11.5 Railway + Render split deployment
 
-The submitted deployed link is Railway. OpenEMR, `agent-service`, and the
-existing MariaDB/MySQL service live in the same Railway project so the
-grader has one managed deployment surface. The repo can be submitted
-through GitLab because this fork has both GitLab and GitHub remotes;
-GitHub remains useful for the Actions mirror.
+The submitted deployed link is Railway. OpenEMR and the existing
+MariaDB/MySQL service live in the same Railway project so the grader has
+one public surface. The Python `agent-service` runs as a separate Render
+web service. See §12 for the full topology rationale; the short version is
+that PHP gets the public TLS URL, the sidecar stays private and only
+OpenEMR talks to it. The repo can be submitted through GitLab because this
+fork has both GitLab and GitHub remotes; GitHub remains useful for the
+Actions mirror.
 
 ### 11.6 Single-PDF-per-call (vs. batch)
 
@@ -459,7 +462,131 @@ Week 2 ships single-PDF and gets it right.
 
 ---
 
-## 12. Clinical Co-Pilot Migration: Ownership Contract
+## 12. Sidecar deployment topology
+
+This section records the deployment surface as architecture: the boxes,
+the arrows, and the boundary properties they enforce. Step-by-step deploy
+commands, env-var setup procedures, and operator runbooks live in
+`SETUP.md`, not here.
+
+### 12.1 Service inventory
+
+The Week 2 deliverable adds exactly one service to the existing OpenEMR
+development stack. Everything else is inherited.
+
+| Service         | Image / source                   | Purpose                                                     |
+|-----------------|----------------------------------|-------------------------------------------------------------|
+| `openemr`       | `Dockerfile.railway` (this repo) | OpenEMR PHP application; CSRF/ACL gate, FHIR, encounter UI  |
+| `agent-service` | `agent-service/Dockerfile`       | Python FastAPI sidecar; LangGraph supervisor + RAG pipeline |
+| `mysql`         | `mariadb:11.8.6`                 | OpenEMR database; also the durable observability + eval store |
+| `phpmyadmin`    | `phpmyadmin:latest`              | DB admin UI for local development                           |
+| (other)         | `couchdb`, `openldap`, `mailpit`, `selenium` | Existing OpenEMR development support services |
+
+Only `openemr` and `agent-service` are required for the Week 2
+deliverable; the others are inherited from the standard OpenEMR
+development Compose stack. The MariaDB instance is reused — no new
+database service is introduced.
+
+### 12.2 Local topology
+
+In a developer Compose stack the two Week-2 services run side by side and
+share a named volume for uploaded PDFs:
+
+```
++--------------------------+         HTTP (X-Agent-Secret)        +--------------------------+
+|         openemr          |  --------------------------------->  |      agent-service       |
+|  PHP / Apache, port 80   |     POST /api/agent/run              |  Python FastAPI, 8010    |
+|  Host: http://localhost: |                                      |  Host: http://127.0.0.1: |
+|  8300 (HTTP) / 9300 (TLS)|                                      |  8010                    |
+|                          |  <----  GET /healthz (no auth)  --   |                          |
++-----------+--------------+                                      +-----------+--------------+
+            |                                                                 |
+            | rw                                                              | ro
+            v                                                                 v
+            +-----------------------------------------------------------------+
+            |       Docker named volume:  agent-uploads                       |
+            |       Mount path inside both containers: /var/uploads/agent     |
+            +-----------------------------------------------------------------+
+
+            All services share the default Compose network of project "openemr",
+            so the PHP container resolves the sidecar by service name:
+                http://agent-service:8010
+```
+
+Key boundary properties:
+
+- **One direction of authority.** PHP calls the sidecar over HTTP with a
+  shared-secret header. The sidecar never calls PHP back. Health probes
+  (`GET /healthz`) are the only auth-free route; every other route
+  rejects requests without a valid `X-Agent-Secret` header.
+- **Asymmetric volume mount.** PHP mounts `agent-uploads` read-write
+  (it owns the upload), the sidecar mounts it read-only. The sidecar
+  cannot mutate files OpenEMR uploaded — a file written by the user
+  cannot be rewritten by the agent.
+- **Sidecar bound to localhost.** In local Compose the sidecar publishes
+  `127.0.0.1:8010` for inspection; nothing else on the host network can
+  reach it. Inside the Compose network the PHP container resolves it by
+  service name (`http://agent-service:8010`).
+
+### 12.3 Deployed topology
+
+In production the same logical topology is split across two managed
+platforms:
+
+```
+                               public internet
+                                      |
+                                      v
+                  +---------------------------------------+
+                  |   Railway: openemr (public, TLS)      |
+                  |   https://<openemr-host>              |
+                  +-------------------+-------------------+
+                                      |
+                          HTTPS, X-Agent-Secret header
+                                      |
+                                      v
+                  +---------------------------------------+
+                  |   Render: agent-service (private)     |
+                  |   https://<agent-service-host>        |
+                  |   Reachable ONLY from OpenEMR         |
+                  +---------------------------------------+
+```
+
+| Component       | Platform | Why this platform                                                        |
+|-----------------|----------|--------------------------------------------------------------------------|
+| `openemr`       | Railway  | Existing deployment via `Dockerfile.railway`; the public URL is the grader entry point. |
+| `mysql`         | Railway  | Lives in the same Railway project as `openemr`; reused for durable token, cost, latency, and eval records. |
+| `agent-service` | Render   | Single Python web service built from `agent-service/Dockerfile`; isolated from the public surface. |
+
+The boundary properties are identical to local; only the substrate
+changes. Specifically:
+
+- **Public surface is PHP only.** The grader sees one URL — the Railway
+  OpenEMR host. The Render `agent-service` is not the demo URL and is
+  not intended for grader traffic.
+- **Sidecar privacy.** The Render service has no public ingress beyond
+  what OpenEMR needs. If Render exposes a public URL by default, the
+  shared secret (`AGENT_SHARED_SECRET`) and an allow-list keep
+  unauthenticated traffic out. Every non-`/healthz` route rejects
+  requests without a valid `X-Agent-Secret` header.
+- **Secret distribution.** The shared secret is delivered into both
+  containers via the platform dashboards (Railway → OpenEMR, Render →
+  sidecar). The two values must match byte-for-byte. Long-lived
+  third-party secrets (`OPENAI_API_KEY`, `COHERE_API_KEY`,
+  `HONEYCOMB_API_KEY`) live only on the sidecar; the PHP host never
+  sees them.
+- **Single-tenant database boundary.** `mysql` is reused as both
+  OpenEMR's operational store and the durable observability/eval sink
+  (§8). Honeycomb receives only sanitized demo traces; durable records
+  do not leave the Railway project.
+
+The deployment-topology diagram referenced from §11
+([`diagrams/08-deployment-topology.svg`](diagrams/08-deployment-topology.svg))
+is the visual companion to this section.
+
+---
+
+## 13. Clinical Co-Pilot Migration: Ownership Contract
 
 This section records the post-migration PHP/Python ownership contract for the
 Clinical Co-Pilot work tracked in
@@ -467,7 +594,7 @@ Clinical Co-Pilot work tracked in
 It is the architectural authority for what runs where after the cutover and the
 boundary the rest of the migration plan implements against.
 
-### 12.1 Python ownership
+### 13.1 Python ownership
 
 The Python sidecar (`agent-service/`) owns the entire clinical reasoning loop:
 
@@ -483,7 +610,7 @@ After cutover, PHP performs none of these. The migration plan's M13–M16 land
 the agent loop, response shaping, verifier, and observability in Python; M24
 removes the PHP equivalents.
 
-### 12.2 PHP ownership
+### 13.2 PHP ownership
 
 PHP (OpenEMR) owns only the boundary concerns it is best at:
 
@@ -498,7 +625,7 @@ PHP becomes a thin proxy: it authenticates the request, resolves scope from
 the session, mints a signed run context, and forwards to the sidecar. It does
 not assemble prompts, choose tools, call models, or shape clinical answers.
 
-### 12.3 LLM tool choice within a runtime-allowed registry
+### 13.3 LLM tool choice within a runtime-allowed registry
 
 Inside the sidecar, the LLM chooses tools — that is the point of the
 migration. But tool choice is not unbounded. Every tool the model can name
@@ -510,7 +637,7 @@ runtime-allowed set is rejected by the executor before any side effect.
 This preserves the "LLM chooses tools" property without giving the model
 authority over what tools exist.
 
-### 12.4 The model never supplies authority
+### 13.4 The model never supplies authority
 
 The model produces tool *arguments*, but it never supplies authoritative
 identifiers, queries, or destinations. Specifically, the model does not

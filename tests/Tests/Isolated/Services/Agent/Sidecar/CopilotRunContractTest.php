@@ -63,6 +63,7 @@ class CopilotRunContractTest extends TestCase
             'user_goal' => null,
             'request_id' => self::REQUEST_ID,
             'conversation_state' => ['page' => 2],
+            'source_id' => null,
         ];
 
         $this->assertSame($expected, $dto->toArray());

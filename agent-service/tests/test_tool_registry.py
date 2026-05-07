@@ -2,7 +2,8 @@
 
 Covers:
 
-- :func:`default_registry` lists every stub tool.
+- :func:`default_registry` lists every default tool (M5 stubs + M12
+  document tools).
 - Each stub's ``input_schema`` is a structurally valid JSON Schema with
   no PHI / unsafe surfaces as model-supplied properties.
 - :meth:`ToolRegistry.model_facing_schemas` exposes only the model-safe
@@ -31,6 +32,9 @@ from agent_service.tools import (
 )
 
 
+# The M5 stub tools, used by parametrized tests that only assert
+# properties of the original stub surface (input schema validity, no
+# forbidden keys, inert/read-only metadata).
 EXPECTED_STUB_NAMES: list[str] = [
     "get_active_allergies",
     "get_basic_patient_data",
@@ -38,6 +42,25 @@ EXPECTED_STUB_NAMES: list[str] = [
     "get_current_medications",
     "get_recent_events",
     "get_source_detail",
+]
+
+
+# The full default registry surface: M5 stubs plus the four M12 document
+# tools registered by ``default_registry()`` so the M21
+# ``lab_pdf_extract_and_propose`` intent's ``allowed_tools`` cross-
+# validate at boot.  Sorted alphabetically to match ``list_names()`` and
+# ``model_facing_schemas()`` output.
+EXPECTED_DEFAULT_TOOL_NAMES: list[str] = [
+    "extract_uploaded_document",
+    "get_active_allergies",
+    "get_basic_patient_data",
+    "get_changes_since_last_visit",
+    "get_current_medications",
+    "get_document_citation_region",
+    "get_recent_events",
+    "get_source_detail",
+    "persist_lab_observation_proposal",
+    "retrieve_guidelines",
 ]
 
 
@@ -126,10 +149,10 @@ def _make_def(**overrides: Any) -> ToolDefinition:
 # ---------------------------------------------------------------------------
 
 
-def test_default_registry_lists_all_stub_tools() -> None:
+def test_default_registry_lists_all_default_tools() -> None:
     registry = default_registry()
-    assert registry.list_names() == EXPECTED_STUB_NAMES
-    assert len(registry) == len(EXPECTED_STUB_NAMES)
+    assert registry.list_names() == EXPECTED_DEFAULT_TOOL_NAMES
+    assert len(registry) == len(EXPECTED_DEFAULT_TOOL_NAMES)
 
 
 def test_default_registry_returns_independent_instances() -> None:
@@ -183,7 +206,7 @@ def test_stub_metadata_is_inert_and_read_only(name: str) -> None:
 def test_model_facing_schemas_excludes_internal_fields() -> None:
     registry = default_registry()
     schemas = registry.model_facing_schemas()
-    assert len(schemas) == len(EXPECTED_STUB_NAMES)
+    assert len(schemas) == len(EXPECTED_DEFAULT_TOOL_NAMES)
     for entry in schemas:
         assert set(entry.keys()) == {"name", "description", "input_schema"}, (
             f"unexpected keys in model-facing schema: {sorted(entry.keys())!r}"
@@ -204,7 +227,7 @@ def test_model_facing_schemas_is_sorted_by_name() -> None:
     registry = default_registry()
     schemas = registry.model_facing_schemas()
     names = [entry["name"] for entry in schemas]
-    assert names == sorted(names) == EXPECTED_STUB_NAMES
+    assert names == sorted(names) == EXPECTED_DEFAULT_TOOL_NAMES
 
 
 def test_model_facing_schemas_filters_by_allowed_subset() -> None:

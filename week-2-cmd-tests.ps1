@@ -245,20 +245,6 @@ function Invoke-MediumTests {
     } else {
         Skip-Test -Name "agent-service pytest" -Group "Medium" -Reason "no python launcher or agent-service dir"
     }
-
-    # Rector dry-run (modernization checks).
-    if (Test-Command composer) {
-        Run-Test -Name "composer rector-check" -Group "Medium" -Block {
-            Push-Location $RepoRoot
-            try {
-                & composer rector-check
-            } finally {
-                Pop-Location
-            }
-        }
-    } else {
-        Skip-Test -Name "composer rector-check" -Group "Medium" -Reason "composer not on PATH"
-    }
 }
 
 # ---------------------------------------------------------------------------

@@ -30,6 +30,13 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile.railway
+    # Dev-easy shim: the agent-uploads named volume is created root:root 0755
+    # on first up, but PHP (uid 1000) and the agent sidecar (uid 10001) both
+    # need access to it. PID 1 here is root (entrypoint then drops privileges
+    # to apache), so we chmod the mount to 1777 (sticky world-writable, like
+    # /tmp) before exec'ing the upstream entrypoint. Production deployments
+    # should bind a real volume with proper ownership instead.
+    entrypoint: ["sh", "-c", "mkdir -p '/var/uploads/agent' && chmod 1777 '/var/uploads/agent' && exec ./openemr.sh"]
     ports:
     - "${WT_HTTP_PORT:-8300}:80"
     - "${WT_HTTPS_PORT:-9300}:443"

@@ -89,6 +89,11 @@ services:
       OPENEMR_SETTING_Patient_Reminder_Sender_Name: 'OpenEMR Reminders'
       OPENEMR_AGENT_SIDECAR_URL: 'http://agent-service:8010'
       OPENEMR_AGENT_SIDECAR_SECRET: '${OPENEMR_AGENT_SIDECAR_SECRET:-dev-shared-secret}'
+      # Shared with the agent-service container; the legacy intake-form
+      # ingest at interface/forms/upload_intake_form/services/OpenAIClient.php
+      # still calls OpenAI directly and throws OpenAIMissingKeyException
+      # when this is empty.
+      OPENAI_API_KEY: '${OPENAI_API_KEY:-}'
     depends_on:
       mysql:
         condition: service_healthy

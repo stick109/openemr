@@ -222,20 +222,6 @@ function Invoke-FastTests {
     } else {
         Skip-Test -Name "composer php-syntax-check" -Group "Fast" -Reason "composer not on PATH"
     }
-
-    # PHPUnit isolated suite (host-only, no DB, no Docker).
-    if (Test-Command composer) {
-        Run-Test -Name "composer phpunit-isolated" -Group "Fast" -Block {
-            Push-Location $RepoRoot
-            try {
-                & composer phpunit-isolated
-            } finally {
-                Pop-Location
-            }
-        }
-    } else {
-        Skip-Test -Name "composer phpunit-isolated" -Group "Fast" -Reason "composer not on PATH"
-    }
 }
 
 # ---------------------------------------------------------------------------

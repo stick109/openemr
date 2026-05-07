@@ -38,6 +38,7 @@ EXPECTED_INTENT_IDS: list[str] = [
     "basic_patient_data",
     "changed_since_last_visit",
     "current_medications",
+    "lab_pdf_extract_and_propose",
     "recent_events",
     "show_source",
 ]
@@ -95,6 +96,22 @@ EXPECTED_INTENT_FIELDS: dict[str, dict[str, object]] = {
         "lookback_days": 0,
         "allowed_tools": ("get_source_detail",),
         "is_source_drilldown": True,
+    },
+    "lab_pdf_extract_and_propose": {
+        "label": "Extract lab PDF and draft observation proposal",
+        "goal_template": (
+            "Extract observations from the uploaded lab PDF and draft a "
+            "lab_observation write proposal for the host to commit."
+        ),
+        "max_rows": 30,
+        "lookback_days": 180,
+        "allowed_tools": (
+            "extract_uploaded_document",
+            "get_document_citation_region",
+            "get_source_detail",
+            "persist_lab_observation_proposal",
+        ),
+        "is_source_drilldown": False,
     },
 }
 
@@ -180,7 +197,13 @@ def test_allowed_tools_are_real_tools(intent_id: str) -> None:
 
 
 def test_allowed_tools_are_minimal_set() -> None:
-    """Each non-drilldown intent should reference at most its primary tool plus get_source_detail."""
+    """Each non-drilldown intent should reference at most its primary tool plus get_source_detail.
+
+    The lab-PDF write-proposal intent (``lab_pdf_extract_and_propose``) is
+    the documented exception: it composes M12's extractor + citation-region
+    tools alongside the M21 proposal emitter so the upload flow can chain
+    extract -> cite -> propose on a single sidecar run.
+    """
     catalog = default_catalog()
     for intent in catalog.all():
         if intent.is_source_drilldown:
@@ -189,6 +212,16 @@ def test_allowed_tools_are_minimal_set() -> None:
             assert "get_source_detail" in intent.allowed_tools, (
                 f"{intent.intent_id}: every evidence intent must allow source drilldown"
             )
+            if intent.intent_id == "lab_pdf_extract_and_propose":
+                # Document-driven write-proposal intent: extractor +
+                # citation region + drilldown + proposal emitter.
+                assert set(intent.allowed_tools) == {
+                    "extract_uploaded_document",
+                    "get_document_citation_region",
+                    "get_source_detail",
+                    "persist_lab_observation_proposal",
+                }
+                continue
             # Smallest necessary set: at most one primary tool + drilldown.
             assert len(intent.allowed_tools) <= 2, (
                 f"{intent.intent_id}: allowed_tools is wider than necessary: "

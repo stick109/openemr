@@ -45,4 +45,42 @@ class AgentIntentRouteTest extends TestCase
         $this->assertStringContainsString('RestConfig::request_authorization_check($request, "patients", "demo")', $this->routeContent);
         $this->assertStringContainsString('(new AgentIntentRestController())->postIntent($request)', $this->routeContent);
     }
+
+    public function testAgentProposalsCommitRouteIsRegisteredThroughStandardApi(): void
+    {
+        $this->assertStringContainsString(
+            'use OpenEMR\RestControllers\Agent\AgentProposalCommitControllerFactory;',
+            $this->routeContent,
+        );
+        $this->assertStringContainsString('"POST /api/agent/proposals/commit"', $this->routeContent);
+        $this->assertStringContainsString(
+            'AgentProposalCommitControllerFactory::create()->postCommit($request)',
+            $this->routeContent,
+        );
+        // Mirrors the /api/agent/intent route ACL + logging hardening.
+        $proposalsBlock = $this->extractRouteBlock('"POST /api/agent/proposals/commit"');
+        $this->assertStringContainsString(
+            "\$request->attributes->set('skipResponseLogging', true);",
+            $proposalsBlock,
+        );
+        $this->assertStringContainsString(
+            "\$request->attributes->set('agentRouteRawResponseLoggingDisabled', true);",
+            $proposalsBlock,
+        );
+        $this->assertStringContainsString(
+            'RestConfig::request_authorization_check($request, "patients", "demo")',
+            $proposalsBlock,
+        );
+    }
+
+    private function extractRouteBlock(string $needle): string
+    {
+        $start = strpos($this->routeContent, $needle);
+        $this->assertNotFalse($start, 'Route ' . $needle . ' not found');
+        $brace = strpos($this->routeContent, '{', $start);
+        $this->assertNotFalse($brace, 'Opening brace for ' . $needle . ' not found');
+        $end = strpos($this->routeContent, '},', $brace);
+        $this->assertNotFalse($end, 'Closing brace for ' . $needle . ' not found');
+        return substr($this->routeContent, $start, $end - $start + 2);
+    }
 }

@@ -25,6 +25,11 @@ from typing import Any
 from agent_service.tools.definition import ToolDefinition
 from agent_service.tools.stubs import build_stub_tools
 
+# ``build_document_tools`` is imported lazily inside ``default_registry``
+# to keep the module-level import graph free of cycles -- ``document_tools``
+# itself depends on the M5 ``ToolRegistry`` for the ``document_tool_registry``
+# helper.
+
 __all__ = [
     "ToolNotFoundError",
     "ToolRegistry",
@@ -169,8 +174,22 @@ def default_registry() -> ToolRegistry:
     in turn covers every PHP intent data class in the current chart
     copilot (basic patient data, current medications, active allergies,
     recent events, changes since last visit, source detail).
+
+    Document tools (M12: ``extract_uploaded_document``,
+    ``get_document_citation_region``, ``persist_lab_observation_proposal``,
+    ``retrieve_guidelines``) are also seeded so the M21
+    ``lab_pdf_extract_and_propose`` intent's ``allowed_tools`` cross-
+    validate at boot.  Production wiring still uses
+    :func:`agent_service.tools.composed_registry.compose_production_registry`
+    for real executors -- this default surface only provides
+    name-resolution for the catalog's pre-flight check.
     """
+    # Lazy import to avoid a circular import at module load.
+    from agent_service.tools.document_tools import build_document_tools  # noqa: PLC0415
+
     registry = ToolRegistry()
     for tool in build_stub_tools():
+        registry.register(tool)
+    for tool in build_document_tools():
         registry.register(tool)
     return registry

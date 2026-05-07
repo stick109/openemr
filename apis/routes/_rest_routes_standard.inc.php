@@ -21,6 +21,7 @@
 use OpenEMR\Common\Http\HttpRestRequest;
 use OpenEMR\Common\Uuid\UuidRegistry;
 use OpenEMR\RestControllers\Agent\AgentIntentRestController;
+use OpenEMR\RestControllers\Agent\AgentProposalCommitControllerFactory;
 use OpenEMR\RestControllers\AllergyIntoleranceRestController;
 use OpenEMR\RestControllers\AppointmentRestController;
 use OpenEMR\RestControllers\BackgroundServiceRestController;
@@ -54,6 +55,12 @@ return [
         $request->attributes->set('agentRouteRawResponseLoggingDisabled', true);
         RestConfig::request_authorization_check($request, "patients", "demo");
         return (new AgentIntentRestController())->postIntent($request);
+    },
+    "POST /api/agent/proposals/commit" => function (HttpRestRequest $request) {
+        $request->attributes->set('skipResponseLogging', true);
+        $request->attributes->set('agentRouteRawResponseLoggingDisabled', true);
+        RestConfig::request_authorization_check($request, "patients", "demo");
+        return AgentProposalCommitControllerFactory::create()->postCommit($request);
     },
     "GET /api/facility" => function (HttpRestRequest $request) {
         RestConfig::request_authorization_check($request, "admin", "users");

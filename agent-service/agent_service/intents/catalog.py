@@ -420,11 +420,48 @@ _SHOW_SOURCE: Final[IntentDefinition] = IntentDefinition(
 )
 
 
+# M21 / S16: lab-PDF intake authorises the sidecar to extract structured
+# observations from an uploaded document and emit a deferred
+# ``lab_observation`` write proposal.  The proposal is materialised by the
+# PHP commit controller (``POST /api/agent/proposals/commit``); the sidecar
+# itself never writes to OpenEMR.
+#
+# Trigger surface: the file-upload form
+# (``interface/forms/upload_intake_form/save.php``); the chat UI never
+# emits this intent.  ``extract_uploaded_document`` is the M12 extractor
+# the PDF flow calls before drafting the proposal;
+# ``get_document_citation_region`` lets the proposal cite a precise
+# (page, bbox) region in the source PDF.
+_LAB_PDF_EXTRACT_AND_PROPOSE: Final[IntentDefinition] = IntentDefinition(
+    intent_id="lab_pdf_extract_and_propose",
+    label="Extract lab PDF and draft observation proposal",
+    goal_template=(
+        "Extract observations from the uploaded lab PDF and draft a "
+        "lab_observation write proposal for the host to commit."
+    ),
+    allowed_tools=(
+        "extract_uploaded_document",
+        "get_document_citation_region",
+        "get_source_detail",
+        "persist_lab_observation_proposal",
+    ),
+    # A single lab panel rarely exceeds 30 distinct results; M12's
+    # extractor is itself capped at the same row budget.
+    max_rows=30,
+    # The upload payload is point-in-time so a date window has no effect,
+    # but the executor requires ``lookback_days`` > 0; mirror the
+    # ``recent_events`` cap as a conservative default.
+    lookback_days=180,
+    allowed_source_types=("documents", "labs"),
+)
+
+
 _DEFAULT_INTENTS: Final[tuple[IntentDefinition, ...]] = (
     _ALLERGIES_TO_CONFIRM,
     _BASIC_PATIENT_DATA,
     _CHANGED_SINCE_LAST_VISIT,
     _CURRENT_MEDICATIONS,
+    _LAB_PDF_EXTRACT_AND_PROPOSE,
     _RECENT_EVENTS,
     _SHOW_SOURCE,
 )

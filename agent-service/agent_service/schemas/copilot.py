@@ -237,6 +237,15 @@ class CopilotRunRequest(BaseModel):
         default=None,
         description="Opaque round-trip state echoed unchanged by the sidecar.",
     )
+    source_id: str | None = Field(
+        default=None,
+        max_length=256,
+        description=(
+            "Citation source identifier supplied by the chart UI when drilling into "
+            "a previously-surfaced citation. Only meaningful for the ``show_source`` "
+            "intent; ignored otherwise."
+        ),
+    )
 
     @model_validator(mode="after")
     def _require_intent_or_goal(self) -> CopilotRunRequest:

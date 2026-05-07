@@ -34,6 +34,9 @@ final readonly class CopilotRunRequestDto
      * @param string|null               $userGoal           Free-form clinician goal; required if $intentId is null.
      * @param string                    $requestId          Caller-supplied UUID for idempotency/correlation.
      * @param array<string, mixed>|null $conversationState  Opaque round-trip state echoed by the sidecar.
+     * @param string|null               $sourceId           Citation source identifier supplied by the chart UI when
+     *                                                      drilling into a previously-surfaced citation. Only
+     *                                                      meaningful for the ``show_source`` intent.
      */
     public function __construct(
         public string $runContext,
@@ -41,6 +44,7 @@ final readonly class CopilotRunRequestDto
         public ?string $userGoal,
         public string $requestId,
         public ?array $conversationState = null,
+        public ?string $sourceId = null,
     ) {
         if ($runContext === '') {
             throw new InvalidArgumentException('runContext must not be empty.');
@@ -82,6 +86,7 @@ final readonly class CopilotRunRequestDto
             'user_goal' => $this->userGoal,
             'request_id' => $this->requestId,
             'conversation_state' => $this->conversationState,
+            'source_id' => $this->sourceId,
         ];
     }
 }

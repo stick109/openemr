@@ -80,11 +80,14 @@ from agent_service.intents.catalog import (
 from agent_service.observability.events import EventType, RunEvent
 from agent_service.observability.recorder import EventRecorder, NullEventRecorder
 from agent_service.schemas.copilot import (
+    AnswerBlock,
     Citation,
+    Claim,
     CopilotRunRequest,
     CopilotRunResponse,
     ToolCallRecord,
 )
+from agent_service.tools.source_drilldown import SOURCE_DETAIL_TOOL_NAME
 from agent_service.tools.executor import (
     ToolCallOutcome,
     ToolExecutionError,
@@ -487,6 +490,30 @@ class AgentLoop:
             registry=registry,
         )
         tool_schemas = registry.model_facing_schemas(allowed=allowed_tools)
+
+        # 2a. Source-drilldown short-circuit.
+        #
+        # ``show_source`` is a constrained drilldown that lands on a
+        # specific citation the UI already has in hand -- there is no
+        # open-ended question for the model to answer. The chart UI
+        # supplies the citation's ``source_id`` directly on the request,
+        # so we resolve the bounded source detail deterministically and
+        # skip the LLM round-trip entirely. This saves a model call,
+        # makes the response shape predictable, and avoids "the model
+        # had no context and gave up" empty-answer states.
+        if (
+            intent is not None
+            and intent.is_source_drilldown
+            and request.source_id
+        ):
+            return self._run_source_drilldown(
+                request=request,
+                context=context,
+                intent=intent,
+                registry=registry,
+                trace_id=trace_id,
+                started_at=started_at,
+            )
 
         # 3. Prepare messages and per-step latency bookkeeping.
         messages: list[Mapping[str, Any]] = self._initial_messages(
@@ -923,6 +950,215 @@ class AgentLoop:
                 },
                 "trace_id": trace_id,
             },
+        )
+
+    # -- show_source drilldown short-circuit --------------------------------
+
+    def _run_source_drilldown(
+        self,
+        *,
+        request: CopilotRunRequest,
+        context: CopilotRunContext,
+        intent: IntentDefinition,
+        registry: ToolRegistry,
+        trace_id: str,
+        started_at: float,
+    ) -> AgentLoopResult:
+        """Resolve a ``show_source`` request without invoking the LLM.
+
+        The chart UI clicks a citation chip and posts the citation's
+        opaque ``source_id`` to the controller; PHP forwards it on the
+        :class:`CopilotRunRequest`. There is no open-ended question for
+        the model -- the user just wants to see the bounded detail of
+        one specific row. We invoke ``get_source_detail`` directly via
+        the M6 executor (which still enforces every authority/scoping
+        rule) and shape the response from its return bag.
+        """
+        tool_started = self._clock()
+        latency_ms_per_step: dict[str, int] = {}
+        cost_usd = 0.0
+        tool_sequence: list[ToolCallRecord] = []
+
+        source_id = request.source_id or ""
+        call = LLMToolCallChoice(
+            call_id="show_source_internal",
+            tool_name=SOURCE_DETAIL_TOOL_NAME,
+            arguments={"source_id": source_id},
+        )
+
+        self._emit_event(
+            event_type="tool.started",
+            trace_id=trace_id,
+            tool_name=SOURCE_DETAIL_TOOL_NAME,
+        )
+        record, payload = self._execute_one(
+            call=call,
+            context=context,
+            registry=registry,
+            trace_id=trace_id,
+        )
+        tool_sequence.append(record)
+        self._emit_event(
+            event_type="tool.finished",
+            trace_id=trace_id,
+            tool_name=record.tool_name,
+            result_count=record.result_count,
+            latency_ms=record.latency_ms,
+            error_class=record.error_class,
+        )
+        latency_ms_per_step["show_source_tool_ms"] = self._delta_ms(tool_started)
+
+        records = []
+        if isinstance(payload, Mapping):
+            raw_records = payload.get("records")
+            if isinstance(raw_records, list):
+                records = list(raw_records)
+
+        # Tool failure or no records -- emit a deterministic "not found"
+        # answer so the UI panel renders something explanatory rather
+        # than collapsing back to an empty envelope.
+        if record.error_class is not None or not records:
+            response = self._build_drilldown_missing_response(
+                tool_sequence=tool_sequence,
+                cost_usd=cost_usd,
+                latency_ms_per_step=latency_ms_per_step,
+                trace_id=trace_id,
+                started_at=started_at,
+            )
+            latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+            self._emit_event(
+                event_type="response.returned",
+                trace_id=trace_id,
+                latency_ms=latency_ms_per_step["loop_total_ms"],
+                cost_usd_delta=cost_usd,
+            )
+            return AgentLoopResult(
+                response=response,
+                tool_sequence=tuple(tool_sequence),
+                cost_usd=cost_usd,
+                latency_ms_per_step=dict(latency_ms_per_step),
+                halt_reason="completed",
+            )
+
+        detail = records[0]
+        citations = list(_extract_citations(payload))
+
+        response = self._build_drilldown_response(
+            detail=detail,
+            citations=citations,
+            tool_sequence=tool_sequence,
+            cost_usd=cost_usd,
+            latency_ms_per_step=latency_ms_per_step,
+            trace_id=trace_id,
+            started_at=started_at,
+        )
+        latency_ms_per_step["loop_total_ms"] = self._elapsed_ms(started_at)
+        self._emit_event(
+            event_type="response.returned",
+            trace_id=trace_id,
+            latency_ms=latency_ms_per_step["loop_total_ms"],
+            cost_usd_delta=cost_usd,
+        )
+        return AgentLoopResult(
+            response=response,
+            tool_sequence=tuple(tool_sequence),
+            cost_usd=cost_usd,
+            latency_ms_per_step=dict(latency_ms_per_step),
+            halt_reason="completed",
+        )
+
+    def _build_drilldown_response(
+        self,
+        *,
+        detail: Mapping[str, Any],
+        citations: Sequence[Citation],
+        tool_sequence: Sequence[ToolCallRecord],
+        cost_usd: float,
+        latency_ms_per_step: Mapping[str, int],
+        trace_id: str,
+        started_at: float,
+    ) -> CopilotRunResponse:
+        """Shape a :class:`CopilotRunResponse` from a source-detail row."""
+        label = str(detail.get("label") or "Source record")
+        body = str(detail.get("body") or "")
+        source_id = str(detail.get("source_id") or "")
+        occurred_at = detail.get("occurred_at")
+
+        claim_parts: list[str] = []
+        if body:
+            claim_parts.append(body)
+        if isinstance(occurred_at, str) and occurred_at:
+            claim_parts.append(f"Recorded: {occurred_at[:10]}")
+        claim_text = label
+        if claim_parts:
+            claim_text = f"{label}: {' | '.join(claim_parts)}"
+
+        citation_ids = [source_id] if source_id else []
+        claim = Claim(
+            text=claim_text,
+            citation_ids=citation_ids,
+            certainty="source_record",
+        )
+        block = AnswerBlock(
+            heading="Source",
+            claims=[claim],
+            body_markdown=None,
+        )
+
+        merged_latency = dict(latency_ms_per_step)
+        merged_latency["loop_total_ms"] = self._elapsed_ms(started_at)
+
+        return CopilotRunResponse(
+            answer_blocks=[block],
+            claims=[claim],
+            citation_ids=citation_ids,
+            certainty="high" if citations else "unknown",
+            missing_or_uncertain=[],
+            citations=list(citations),
+            tool_sequence=list(tool_sequence),
+            verification_status="passed",
+            cost_usd=cost_usd,
+            latency_ms_per_step=merged_latency,
+            trace_id=trace_id,
+        )
+
+    def _build_drilldown_missing_response(
+        self,
+        *,
+        tool_sequence: Sequence[ToolCallRecord],
+        cost_usd: float,
+        latency_ms_per_step: Mapping[str, int],
+        trace_id: str,
+        started_at: float,
+    ) -> CopilotRunResponse:
+        """Build a clear "source not available" answer when drilldown fails."""
+        merged_latency = dict(latency_ms_per_step)
+        merged_latency["loop_total_ms"] = self._elapsed_ms(started_at)
+        claim = Claim(
+            text=(
+                "Source record could not be retrieved -- it may belong to "
+                "a different patient or be outside the allowed evidence scope."
+            ),
+            citation_ids=[],
+            certainty="not_found",
+        )
+        block = AnswerBlock(
+            heading="Source",
+            claims=[claim],
+            body_markdown=None,
+        )
+        return CopilotRunResponse(
+            answer_blocks=[block],
+            claims=[claim],
+            citation_ids=[],
+            certainty="unknown",
+            missing_or_uncertain=[],
+            citations=[],
+            tool_sequence=list(tool_sequence),
+            verification_status="passed",
+            cost_usd=cost_usd,
+            latency_ms_per_step=merged_latency,
+            trace_id=trace_id,
         )
 
     def _refusal(

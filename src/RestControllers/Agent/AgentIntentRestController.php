@@ -158,6 +158,7 @@ final class AgentIntentRestController
         $requestId = $this->ensureRequestId($request);
         $intentIdInput = is_string($payload['intent_id'] ?? null) ? $payload['intent_id'] : null;
         $conversationId = is_string($payload['conversation_id'] ?? null) ? $payload['conversation_id'] : null;
+        $sourceId = is_string($payload['source_id'] ?? null) ? $payload['source_id'] : null;
         $request->attributes->set('skipResponseLogging', true);
         $request->attributes->set('agentRouteRawResponseLoggingDisabled', true);
         $this->logger->info('agent.intent.received', [
@@ -210,7 +211,7 @@ final class AgentIntentRestController
             return $this->evidenceDenied('Agent access token was not available.', $requestId);
         }
 
-        return $this->proxyIntentToSidecar($intent, $accessToken, $conversationId, $requestId);
+        return $this->proxyIntentToSidecar($intent, $accessToken, $conversationId, $requestId, $sourceId);
     }
 
     /**
@@ -229,7 +230,8 @@ final class AgentIntentRestController
         array $intent,
         AgentAccessToken $accessToken,
         ?string $conversationId,
-        string $requestId
+        string $requestId,
+        ?string $sourceId = null
     ): JsonResponse {
         try {
             $patientId = $accessToken->getPatientContext()->getPid();
@@ -286,6 +288,7 @@ final class AgentIntentRestController
                 intentId: $intentId,
                 userGoal: null,
                 requestId: $minterRequestId,
+                sourceId: $sourceId,
             );
         } catch (\DomainException | \InvalidArgumentException | RandomException $e) {
             $this->logger->error('agent.copilot.sidecar.context_mint_failed', [

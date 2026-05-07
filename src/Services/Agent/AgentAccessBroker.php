@@ -76,6 +76,36 @@ final class AgentAccessBroker
                 // get_recent_events, get_changes_since_last_visit, and
                 // get_source_detail (everything the sidecar tools
                 // wired below can return citations for).
+                //
+                // Two vocabularies coexist here, both required:
+                //
+                //   - **Plural** forms (``medications``, ``allergies``,
+                //     ``encounters``, ``problems``, ``labs``,
+                //     ``vitals``, ``procedures``, ``patient_record``):
+                //     emitted by each evidence tool's ``source_types``
+                //     tuple. The executor's
+                //     ``_has_required_source_types`` guard refuses any
+                //     tool whose declared types don't intersect the
+                //     run context's allow-list.
+                //
+                //   - **Singular** forms (``medication``, ``allergy``,
+                //     ``problem``, ``encounter``, ``result``,
+                //     ``demographics``, ``document``,
+                //     ``medication_review``, ``allergy_review``):
+                //     used as the leading segment of every citation ID
+                //     emitted by the repository (e.g.
+                //     ``medication:lists:42``). The
+                //     ``get_source_detail`` tool parses the supplied
+                //     ``source_id``, takes the leading segment, and
+                //     checks it against ``context.allowed_source_types``;
+                //     without the singular forms here every drilldown
+                //     would short-circuit with a "not allowed" warning
+                //     and the model would return an empty answer.
+                //
+                // Both vocabularies must stay in lockstep with
+                // :class:`agent_service.schemas.evidence.EvidenceSourceType`
+                // and the per-tool ``source_types`` tuples in
+                // ``agent_service.tools``.
                 'patient_record',
                 'encounters',
                 'labs',
@@ -85,6 +115,15 @@ final class AgentAccessBroker
                 'allergies',
                 'problems',
                 'document',
+                // Citation-ID prefixes used by ``get_source_detail``.
+                'demographics',
+                'medication',
+                'medication_review',
+                'allergy',
+                'allergy_review',
+                'problem',
+                'result',
+                'encounter',
             ],
             'tools' => [
                 'get_basic_patient_data',
@@ -97,7 +136,16 @@ final class AgentAccessBroker
             'section' => 'patients',
             'value' => 'med',
             'permission' => '',
-            'data_classes' => ['medications', 'allergies'],
+            'data_classes' => [
+                'medications',
+                'allergies',
+                // Citation-ID prefixes for source drilldown on
+                // medication / allergy citations.
+                'medication',
+                'medication_review',
+                'allergy',
+                'allergy_review',
+            ],
             'tools' => [
                 'get_current_medications',
                 'get_active_allergies',

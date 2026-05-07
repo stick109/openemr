@@ -309,11 +309,21 @@ def _trace_id_for(context: CopilotRunContext) -> str:
 
 
 def _serialise_tool_call(call: LLMToolCallChoice) -> dict[str, Any]:
-    """Render a tool call into a dict suitable for the next-turn message."""
+    """Render a tool call into a dict suitable for the next-turn message.
+
+    The model needs to round-trip its OWN tool-call arguments verbatim
+    on the next turn -- OpenAI's chat-completions API requires the
+    assistant message's ``tool_calls[i].function.arguments`` to be the
+    same JSON the model emitted, so the conversation history stays
+    consistent. ``arguments_keys`` was a safer view for the wire-side
+    ``ToolCallRecord``, but messages back to the model carry the actual
+    arguments (model-supplied input only -- runtime authority fields
+    are injected by the executor and never reach the model).
+    """
     return {
         "id": call.call_id,
         "tool_name": call.tool_name,
-        "arguments_keys": sorted(call.arguments.keys()),
+        "arguments": dict(call.arguments),
     }
 
 
@@ -565,7 +575,7 @@ class AgentLoop:
                         trace_id=trace_id,
                         tool_name=call.tool_name,
                     )
-                    record = self._execute_one(
+                    record, payload = self._execute_one(
                         call=call,
                         context=context,
                         registry=registry,
@@ -584,6 +594,7 @@ class AgentLoop:
                         self._tool_result_message(
                             call=call,
                             record=record,
+                            payload=payload,
                         ),
                     )
                 continue  # next iteration
@@ -716,7 +727,15 @@ class AgentLoop:
         context: CopilotRunContext,
         registry: ToolRegistry,
         trace_id: str,
-    ) -> ToolCallRecord:
+    ) -> tuple[ToolCallRecord, Mapping[str, Any] | None]:
+        """Execute a single tool call.
+
+        Returns ``(record, payload)``. ``payload`` is the executor's
+        structured result (records, citations, warnings) on success, or
+        ``None`` when the tool was rejected before reaching its
+        executor. The payload is folded into the next-turn ``role:tool``
+        message so the LLM can quote records and cite source IDs.
+        """
         try:
             outcome = execute_tool(
                 context,
@@ -735,20 +754,36 @@ class AgentLoop:
                     "reason": error_class,
                 },
             )
-            return _record_from_error(
-                tool_name=call.tool_name,
-                arguments_keys=tuple(sorted(call.arguments.keys())),
-                error_class=error_class,
-                latency_ms=0,
+            return (
+                _record_from_error(
+                    tool_name=call.tool_name,
+                    arguments_keys=tuple(sorted(call.arguments.keys())),
+                    error_class=error_class,
+                    latency_ms=0,
+                ),
+                None,
             )
-        return _record_from_outcome(outcome)
+        payload: Mapping[str, Any] | None = None
+        if isinstance(outcome.payload, Mapping):
+            payload = dict(outcome.payload)
+        return _record_from_outcome(outcome), payload
 
     def _tool_result_message(
         self,
         *,
         call: LLMToolCallChoice,
         record: ToolCallRecord,
+        payload: Mapping[str, Any] | None = None,
     ) -> Mapping[str, Any]:
+        """Build the loop's internal tool-result message.
+
+        The model needs the actual tool output so it can quote records
+        and cite source IDs in its claims. ``payload`` carries the raw
+        tool-side response (records, citations, warnings) that the
+        OpenAI adapter folds into the ``content`` field. ``payload`` is
+        ``None`` for error rows -- the error class alone is enough for
+        the model to decide whether to retry or refuse.
+        """
         if record.error_class is not None:
             return {
                 "role": "tool",
@@ -757,13 +792,16 @@ class AgentLoop:
                 "status": "error",
                 "error_class": record.error_class,
             }
-        return {
+        message: dict[str, Any] = {
             "role": "tool",
             "tool_call_id": call.call_id,
             "tool_name": record.tool_name,
             "status": "ok",
             "result_count": record.result_count,
         }
+        if payload is not None:
+            message["payload"] = payload
+        return message
 
     def _verify(
         self,

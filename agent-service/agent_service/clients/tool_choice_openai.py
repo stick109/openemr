@@ -84,14 +84,131 @@ def _resolve_model_name() -> str:
 def _coerce_messages(
     messages: Sequence[Mapping[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Copy ``messages`` into plain ``dict`` form for the OpenAI SDK.
+    """Translate the loop's internal messages into the OpenAI SDK shape.
 
-    The agent loop hands us an arbitrary :class:`Mapping`; the SDK
-    expects mutable dict-like records. Copying defensively means we do
-    not mutate the loop's state when the SDK normalises payloads
-    in-place.
+    The agent loop produces three message shapes:
+
+    1. ``role: system`` / ``role: user`` -- pass-through, just copy.
+    2. ``role: assistant`` with ``tool_calls`` -- the loop emits each
+       call as ``{"id", "tool_name", "arguments"}``. OpenAI requires
+       ``{"id", "type": "function", "function": {"name", "arguments":
+       <JSON-string>}}``; ``arguments`` MUST be a JSON-encoded string
+       (not a dict) so the model's structured tool arguments survive
+       round-trip exactly.
+    3. ``role: tool`` -- the loop emits ``{"tool_call_id", "tool_name",
+       "status", "result_count", "payload"}``. OpenAI requires
+       ``{"role": "tool", "tool_call_id", "content": <string>}``. We
+       fold the loop's status/result/payload into a compact JSON string
+       on ``content`` so the model sees the actual tool output and can
+       cite source IDs from it.
+
+    Copying defensively keeps the loop's state untouched when the SDK
+    normalises payloads in-place.
     """
-    return [dict(m) for m in messages]
+    sdk_messages: list[dict[str, Any]] = []
+    for message in messages:
+        role = message.get("role")
+        if role == "assistant" and message.get("tool_calls") is not None:
+            sdk_messages.append(_translate_assistant_tool_calls(message))
+            continue
+        if role == "tool":
+            sdk_messages.append(_translate_tool_result(message))
+            continue
+        # Plain user / system / pre-shaped assistant messages: copy.
+        sdk_messages.append(dict(message))
+    return sdk_messages
+
+
+def _translate_assistant_tool_calls(
+    message: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Translate an assistant-with-tool-calls message to OpenAI's shape."""
+    raw_calls = message.get("tool_calls") or ()
+    sdk_calls: list[dict[str, Any]] = []
+    for call in raw_calls:
+        if not isinstance(call, Mapping):
+            sdk_calls.append(dict(call))  # let SDK validate
+            continue
+        if call.get("type") == "function" and "function" in call:
+            sdk_calls.append(dict(call))
+            continue
+        # Loop-internal shape: {id, tool_name, arguments(dict)}.
+        arguments = call.get("arguments")
+        if isinstance(arguments, Mapping):
+            arguments_str = json.dumps(dict(arguments), separators=(",", ":"))
+        elif isinstance(arguments, str):
+            arguments_str = arguments
+        else:
+            arguments_str = "{}"
+        sdk_calls.append(
+            {
+                "id": call.get("id") or call.get("call_id") or "",
+                "type": "function",
+                "function": {
+                    "name": call.get("tool_name") or call.get("name"),
+                    "arguments": arguments_str,
+                },
+            },
+        )
+    sdk_message: dict[str, Any] = {
+        "role": "assistant",
+        "tool_calls": sdk_calls,
+    }
+    content = message.get("content")
+    # OpenAI accepts assistant content alongside tool_calls; only
+    # forward when explicitly set so we do not introduce empty strings.
+    if content is not None:
+        sdk_message["content"] = content
+    return sdk_message
+
+
+def _translate_tool_result(
+    message: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Translate a tool-result message to OpenAI's ``role: tool`` shape."""
+    if "content" in message and isinstance(message["content"], str):
+        # Pre-shaped: pass through.
+        return {
+            "role": "tool",
+            "tool_call_id": message.get("tool_call_id", ""),
+            "content": message["content"],
+        }
+    # Loop-internal shape: build a compact JSON content body that
+    # carries status + result_count + (sanitised) payload. The payload
+    # is whatever the executor returned -- the M16 PHI scanner runs
+    # earlier on observability events, not on tool payloads, so we
+    # rely on the M5/M6 input-schema rejection of authority keys plus
+    # the verifier (M15) to keep the final response PHI-safe.
+    body: dict[str, Any] = {
+        "status": message.get("status"),
+    }
+    if "result_count" in message:
+        body["result_count"] = message["result_count"]
+    if "error_class" in message:
+        body["error_class"] = message["error_class"]
+    if "payload" in message and message["payload"] is not None:
+        body["payload"] = _jsonable(message["payload"])
+    return {
+        "role": "tool",
+        "tool_call_id": message.get("tool_call_id", ""),
+        "content": json.dumps(body, separators=(",", ":"), default=str),
+    }
+
+
+def _jsonable(value: Any) -> Any:
+    """Best-effort coercion of arbitrary tool payloads into JSON types.
+
+    Pydantic models expose ``model_dump``; dataclasses can be coerced
+    via ``__dict__``. Tuples become lists. Everything else falls
+    through to ``json.dumps(default=str)``.
+    """
+    if hasattr(value, "model_dump"):
+        return value.model_dump()
+    if isinstance(value, Mapping):
+        return {k: _jsonable(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_jsonable(v) for v in value]
+    return value
 
 
 def _coerce_tools(

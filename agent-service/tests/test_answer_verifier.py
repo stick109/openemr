@@ -300,6 +300,143 @@ class TestOutOfScopeAdvice:
         assert _has_fail(result, RuleId.OUT_OF_SCOPE_ADVICE)
 
 
+class TestGuidelineGroundedExemption:
+    """Out-of-scope regex skips claims grounded in guideline citations.
+
+    Guideline text is recommendation-shaped by nature ("patients with
+    X should..."), so refusing every cited guideline answer would make
+    ``retrieve_guidelines`` unusable. The exemption only applies when
+    every citation on the claim resolves to a guideline source --
+    chart-cited claims still pass through the regex unchanged.
+    """
+
+    GUIDELINE_ID = "uspstf-diabetes-screening-001"
+    GUIDELINE_IDS: frozenset[str] = frozenset({GUIDELINE_ID})
+
+    def test_recommendation_with_only_guideline_citation_passes(self) -> None:
+        verifier = AnswerVerifier()
+        response = _supported_response(
+            claims=[
+                _claim(
+                    # "should" hits the out-of-scope regex; with the
+                    # exemption, a guideline-cited claim using that
+                    # phrasing must still pass.
+                    text=(
+                        "Per USPSTF, adults 35 to 70 years with overweight or "
+                        "obesity should be screened for type 2 diabetes."
+                    ),
+                    citation_ids=(self.GUIDELINE_ID,),
+                    certainty="supported",
+                ),
+            ],
+        )
+
+        result = verifier.verify(
+            response=response,
+            known_citation_ids=self.GUIDELINE_IDS,
+            tool_call_succeeded=True,
+            guideline_citation_ids=self.GUIDELINE_IDS,
+        )
+
+        assert result.status == "passed"
+        assert not _has_fail(result, RuleId.OUT_OF_SCOPE_ADVICE)
+
+    def test_recommendation_with_chart_citation_still_refused(self) -> None:
+        """A claim citing a patient-chart source is not exempt."""
+        verifier = AnswerVerifier()
+        response = _supported_response(
+            claims=[
+                _claim(
+                    text="The clinician should increase Metformin today.",
+                    citation_ids=(KNOWN_CITATION_ID,),
+                    certainty="supported",
+                ),
+            ],
+        )
+
+        result = verifier.verify(
+            response=response,
+            known_citation_ids=KNOWN_CITATION_IDS,
+            tool_call_succeeded=True,
+            guideline_citation_ids=self.GUIDELINE_IDS,
+        )
+
+        assert result.status == "refused"
+        assert result.refusal_reason == "out_of_scope"
+        assert _has_fail(result, RuleId.OUT_OF_SCOPE_ADVICE)
+
+    def test_recommendation_mixing_guideline_and_chart_still_refused(self) -> None:
+        """If any citation is non-guideline, the exemption does not apply."""
+        verifier = AnswerVerifier()
+        response = _supported_response(
+            claims=[
+                _claim(
+                    text=(
+                        "Given the patient's BP, the clinician should start "
+                        "antihypertensive therapy."
+                    ),
+                    citation_ids=(self.GUIDELINE_ID, KNOWN_CITATION_ID),
+                    certainty="supported",
+                ),
+            ],
+        )
+
+        result = verifier.verify(
+            response=response,
+            known_citation_ids=self.GUIDELINE_IDS | KNOWN_CITATION_IDS,
+            tool_call_succeeded=True,
+            guideline_citation_ids=self.GUIDELINE_IDS,
+        )
+
+        assert result.status == "refused"
+        assert _has_fail(result, RuleId.OUT_OF_SCOPE_ADVICE)
+
+    def test_recommendation_without_citations_still_refused(self) -> None:
+        """The exemption does not apply when the claim cites nothing."""
+        verifier = AnswerVerifier()
+        response = _supported_response(
+            claims=[
+                _claim(
+                    text="I recommend taking aspirin daily.",
+                    citation_ids=(),
+                    certainty="supported",
+                ),
+            ],
+        )
+
+        result = verifier.verify(
+            response=response,
+            known_citation_ids=self.GUIDELINE_IDS,
+            tool_call_succeeded=True,
+            guideline_citation_ids=self.GUIDELINE_IDS,
+        )
+
+        assert result.status == "refused"
+        assert _has_fail(result, RuleId.OUT_OF_SCOPE_ADVICE)
+
+    def test_default_no_exemption_preserves_strict_behaviour(self) -> None:
+        """When callers omit ``guideline_citation_ids``, the regex still fires."""
+        verifier = AnswerVerifier()
+        response = _supported_response(
+            claims=[
+                _claim(
+                    text="Per USPSTF, this group should be screened for diabetes.",
+                    citation_ids=(self.GUIDELINE_ID,),
+                    certainty="supported",
+                ),
+            ],
+        )
+
+        result = verifier.verify(
+            response=response,
+            known_citation_ids=self.GUIDELINE_IDS,
+            tool_call_succeeded=True,
+        )
+
+        assert result.status == "refused"
+        assert _has_fail(result, RuleId.OUT_OF_SCOPE_ADVICE)
+
+
 class TestToolErrorHidden:
     def test_passed_status_with_failed_tool_and_no_acknowledgement_fails(self) -> None:
         verifier = AnswerVerifier()

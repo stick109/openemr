@@ -897,11 +897,19 @@ class AgentLoop:
         # tools actually returned -- the verifier rejects any cited ID
         # the model invented.
         known_ids: set[str] = {c.source_id for c in response.citations}
+        # Subset of citations whose source is a published clinical
+        # guideline (e.g. emitted by ``retrieve_guidelines``). Claims
+        # grounded entirely in these are exempt from the verifier's
+        # out-of-scope regex; see ``AnswerVerifier.verify``.
+        guideline_ids: set[str] = {
+            c.source_id for c in response.citations if c.source_type == "guideline"
+        }
         all_succeeded = all(r.error_class is None for r in tool_sequence)
         return self._verifier.verify(
             response=response,
             known_citation_ids=known_ids,
             tool_call_succeeded=all_succeeded,
+            guideline_citation_ids=guideline_ids,
         )
 
     def _build_final_response(

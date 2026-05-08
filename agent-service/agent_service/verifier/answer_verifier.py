@@ -235,6 +235,23 @@ _PHI_DETECTORS: Final[dict[str, tuple[re.Pattern[str], ...]]] = {
 }
 
 
+def _is_guideline_grounded(
+    citation_ids: Sequence[str],
+    guideline_citation_ids: AbstractSet[str],
+) -> bool:
+    """Return True when *every* cited ID resolves to a guideline source.
+
+    Claims with no citations never qualify -- the exemption is for
+    grounded claims only. The "every" requirement is deliberate: a
+    claim mixing guideline and chart citations must still pass the
+    out-of-scope regex, otherwise a stray guideline citation could
+    cover advice language about the patient's chart.
+    """
+    if not citation_ids:
+        return False
+    return all(cid in guideline_citation_ids for cid in citation_ids)
+
+
 # ---------------------------------------------------------------------------
 # Verifier
 # ---------------------------------------------------------------------------
@@ -295,6 +312,7 @@ class AnswerVerifier:
         response: CopilotRunResponse,
         known_citation_ids: AbstractSet[str],
         tool_call_succeeded: bool,
+        guideline_citation_ids: AbstractSet[str] | None = None,
     ) -> VerificationResult:
         """Run all verifier rules and return a :class:`VerificationResult`.
 
@@ -305,12 +323,25 @@ class AnswerVerifier:
         ``tool_call_succeeded`` is False if any tool errored without
         recovery; the verifier then requires the response to acknowledge
         the failure.
+
+        ``guideline_citation_ids`` is a subset of ``known_citation_ids``
+        whose citations resolve to a published clinical-guideline source
+        (i.e. ``Citation.source_type == "guideline"``). Claims whose
+        ``citation_ids`` are non-empty and entirely contained in this
+        set are exempt from the out-of-scope advice regex, because
+        guideline text is recommendation-shaped by nature and the
+        regex would otherwise refuse every cited answer drawn from
+        ``retrieve_guidelines``. Default empty -- callers that don't
+        opt in get the unchanged strict behaviour.
         """
+        guideline_ids: AbstractSet[str] = guideline_citation_ids or frozenset()
         findings: list[VerificationFinding] = []
 
         # Per-block scan: claim citations + advice + PHI.
         for block_idx, block in enumerate(response.answer_blocks):
-            self._verify_block(block, block_idx, known_citation_ids, findings)
+            self._verify_block(
+                block, block_idx, known_citation_ids, guideline_ids, findings,
+            )
 
         # Top-level claims (M14 surfaces these for verifier-side scanning).
         # We rely on the answer_blocks scan above for path-pinned messages
@@ -324,6 +355,7 @@ class AnswerVerifier:
                 claim,
                 path=f"claims[{top_idx}]",
                 known_citation_ids=known_citation_ids,
+                guideline_citation_ids=guideline_ids,
                 findings=findings,
             )
 
@@ -363,11 +395,18 @@ class AnswerVerifier:
         block: AnswerBlock,
         block_idx: int,
         known_citation_ids: AbstractSet[str],
+        guideline_citation_ids: AbstractSet[str],
         findings: list[VerificationFinding],
     ) -> None:
         for claim_idx, claim in enumerate(block.claims):
             path = f"answer_blocks[{block_idx}].claims[{claim_idx}]"
-            self._verify_claim(claim, path, known_citation_ids, findings)
+            self._verify_claim(
+                claim,
+                path,
+                known_citation_ids=known_citation_ids,
+                guideline_citation_ids=guideline_citation_ids,
+                findings=findings,
+            )
 
         if block.body_markdown:
             self._verify_phi(
@@ -380,7 +419,9 @@ class AnswerVerifier:
         self,
         claim: Claim,
         path: str,
+        *,
         known_citation_ids: AbstractSet[str],
+        guideline_citation_ids: AbstractSet[str],
         findings: list[VerificationFinding],
     ) -> None:
         text = claim.text.strip()
@@ -396,7 +437,15 @@ class AnswerVerifier:
             return
 
         # Out-of-scope advice (regex match -- text content not echoed).
-        if _OUT_OF_SCOPE_PATTERN.search(text):
+        # Exempt claims whose citations all resolve to guideline sources:
+        # guideline text is recommendation-shaped by nature, so the regex
+        # would otherwise refuse every cited answer from
+        # ``retrieve_guidelines``. The "all" requirement is deliberate --
+        # a claim mixing guideline and chart citations cannot use the
+        # exemption to slip advice past the regex.
+        if _OUT_OF_SCOPE_PATTERN.search(text) and not _is_guideline_grounded(
+            claim.citation_ids, guideline_citation_ids,
+        ):
             findings.append(
                 VerificationFinding(
                     severity="fail",

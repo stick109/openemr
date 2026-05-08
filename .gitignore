@@ -1,5 +1,6 @@
 # logs
 /logs
+*.log
 
 # Playwright MCP server working directory (transient page snapshots,
 # console logs, accessibility trees -- never committed).

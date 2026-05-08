@@ -149,7 +149,7 @@ public sealed class RefreshTokenMiddleware : IMiddleware
         {
             this.logger.LogWarning(
                 "OIDC refresh returned non-success status {Status}.",
-                (int) response.StatusCode);
+                (int)response.StatusCode);
             return null;
         }
 

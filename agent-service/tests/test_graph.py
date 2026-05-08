@@ -527,17 +527,97 @@ class TestFinalResponseFields:
         assert isinstance(result["citations"], list)
 
     def test_citations_have_guideline_fields(self, rag_pipeline: RAGPipeline) -> None:
-        """Each citation has source_type, chunk_id, source_url, snippet."""
+        """Each guideline citation has source_type, chunk_id, source_url, snippet."""
         client = _make_fake_client(extract_response=_valid_lab_pdf_dict())
         graph = build_graph(llm_client=client, rag_pipeline=rag_pipeline)
 
         result = graph.invoke(_make_initial_state())
 
-        for citation in result["citations"]:
-            assert citation["source_type"] == "guideline"
+        guideline_citations = [
+            c for c in result["citations"] if c.get("source_type") == "guideline"
+        ]
+        assert guideline_citations, "expected at least one guideline citation"
+        for citation in guideline_citations:
             assert "chunk_id" in citation
             assert "source_url" in citation
             assert "snippet" in citation
+
+    def test_citations_include_pdf_bbox_for_each_lab_result(
+        self,
+        rag_pipeline: RAGPipeline,
+    ) -> None:
+        """Each LabResult.source_citation becomes a pdf_bbox citation.
+
+        The PHP host joins these against persisted procedure_result rows
+        on case-insensitive ``field_name`` to wire UI bbox overlays --
+        see interface/forms/upload_intake_form/view.php.  Without them
+        no hover/click interaction is possible on the rendered PDF.
+        """
+        # Two distinct lab rows, each with its own source citation.
+        extract_response = _valid_lab_pdf_dict(
+            results=[
+                _valid_lab_result(
+                    test_name="Hemoglobin",
+                    source_citation=_valid_citation(
+                        field_name="hemoglobin",
+                        page=1,
+                        bbox=[72.0, 200.0, 540.0, 230.0],
+                    ),
+                ),
+                _valid_lab_result(
+                    test_name="WBC",
+                    source_citation=_valid_citation(
+                        field_name="wbc",
+                        page=2,
+                        bbox=[72.0, 300.0, 540.0, 330.0],
+                    ),
+                ),
+            ],
+        )
+        client = _make_fake_client(extract_response=extract_response)
+        graph = build_graph(llm_client=client, rag_pipeline=rag_pipeline)
+
+        result = graph.invoke(_make_initial_state(doc_type="lab_pdf"))
+
+        bbox_citations = [
+            c for c in result["citations"] if c.get("source_type") == "pdf_bbox"
+        ]
+        assert len(bbox_citations) == 2, (
+            f"expected 2 pdf_bbox citations (one per lab result), got "
+            f"{len(bbox_citations)}: {bbox_citations!r}"
+        )
+
+        field_names = {c["field_name"] for c in bbox_citations}
+        assert field_names == {"hemoglobin", "wbc"}, field_names
+
+        for citation in bbox_citations:
+            assert citation["source_type"] == "pdf_bbox"
+            assert isinstance(citation["page"], int) and citation["page"] >= 1
+            assert isinstance(citation["bbox"], list) and len(citation["bbox"]) == 4
+            assert isinstance(citation["field_name"], str)
+            assert citation["field_name"] != ""
+
+    def test_citations_include_pdf_bbox_for_intake_form(
+        self,
+        rag_pipeline: RAGPipeline,
+    ) -> None:
+        """Intake forms emit pdf_bbox citations from ``source_citations``."""
+        extract_response = _valid_intake_form_dict(
+            source_citations=[
+                _valid_citation(field_name="demographics", page=1),
+                _valid_citation(field_name="chief_concern", page=1),
+            ],
+        )
+        client = _make_fake_client(extract_response=extract_response)
+        graph = build_graph(llm_client=client, rag_pipeline=rag_pipeline)
+
+        result = graph.invoke(_make_initial_state(doc_type="intake_form"))
+
+        bbox_citations = [
+            c for c in result["citations"] if c.get("source_type") == "pdf_bbox"
+        ]
+        field_names = {c["field_name"] for c in bbox_citations}
+        assert field_names == {"demographics", "chief_concern"}, field_names
 
     def test_cost_usd_present(self, rag_pipeline: RAGPipeline) -> None:
         client = _make_fake_client(extract_response=_valid_lab_pdf_dict())

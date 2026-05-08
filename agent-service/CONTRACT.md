@@ -120,7 +120,8 @@ generation.
     {
       "source_type": "pdf_bbox",
       "page": 1,
-      "bbox": [72, 200, 540, 230]
+      "bbox": [72, 200, 540, 230],
+      "field_name": "hemoglobin"
     },
     {
       "source_type": "guideline",
@@ -161,6 +162,7 @@ Points to a bounding box in the uploaded PDF.
 | `source_type` | `string` | Yes      | Literal `"pdf_bbox"`                                         |
 | `page`        | `int`    | Yes      | 1-based page number in the source PDF                        |
 | `bbox`        | `array`  | Yes      | Bounding box as `[x0, y0, x1, y1]` in PDF points (72 dpi)   |
+| `field_name`  | `string` | Yes      | Name of the extracted field this bbox covers. The PHP host joins this case-insensitively against persisted result rows to wire UI hover/click overlays. |
 
 #### Variant: `guideline`
 

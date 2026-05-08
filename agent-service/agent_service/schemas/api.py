@@ -69,6 +69,18 @@ class PdfBboxCitation(BaseModel):
         list[float],
         Field(min_length=4, max_length=4, description="Bounding box [x0, y0, x1, y1] in PDF points"),
     ]
+    field_name: Annotated[
+        str,
+        Field(
+            min_length=1,
+            description=(
+                "Name of the extracted field this bbox covers. The PHP host "
+                "joins this against persisted result rows (case-insensitive) "
+                "to wire UI hover/click overlays — see "
+                "interface/forms/upload_intake_form/view.php."
+            ),
+        ),
+    ]
 
 
 class GuidelineCitation(BaseModel):

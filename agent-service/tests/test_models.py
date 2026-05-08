@@ -134,18 +134,39 @@ class TestCitation:
             source_type="pdf_bbox",
             page=1,
             bbox=[72.0, 200.0, 540.0, 230.0],
+            field_name="hemoglobin",
         )
         assert cit.source_type == "pdf_bbox"
         assert cit.page == 1
         assert cit.bbox == [72.0, 200.0, 540.0, 230.0]
+        assert cit.field_name == "hemoglobin"
 
     def test_pdf_bbox_requires_four_floats(self) -> None:
         with pytest.raises(ValidationError, match="bbox"):
-            PdfBboxCitation(source_type="pdf_bbox", page=1, bbox=[72.0, 200.0])
+            PdfBboxCitation(
+                source_type="pdf_bbox",
+                page=1,
+                bbox=[72.0, 200.0],
+                field_name="hemoglobin",
+            )
 
     def test_pdf_bbox_page_must_be_positive(self) -> None:
         with pytest.raises(ValidationError, match="page"):
-            PdfBboxCitation(source_type="pdf_bbox", page=0, bbox=[72.0, 200.0, 540.0, 230.0])
+            PdfBboxCitation(
+                source_type="pdf_bbox",
+                page=0,
+                bbox=[72.0, 200.0, 540.0, 230.0],
+                field_name="hemoglobin",
+            )
+
+    def test_pdf_bbox_requires_field_name(self) -> None:
+        with pytest.raises(ValidationError, match="field_name"):
+            PdfBboxCitation(
+                source_type="pdf_bbox",
+                page=1,
+                bbox=[72.0, 200.0, 540.0, 230.0],
+                field_name="",
+            )
 
     def test_guideline_citation_valid(self) -> None:
         cit = GuidelineCitation(
@@ -208,7 +229,12 @@ class TestAgentRunResponse:
 
     def test_response_with_citations(self) -> None:
         citations = [
-            {"source_type": "pdf_bbox", "page": 1, "bbox": [72, 200, 540, 230]},
+            {
+                "source_type": "pdf_bbox",
+                "page": 1,
+                "bbox": [72, 200, 540, 230],
+                "field_name": "hemoglobin",
+            },
             {
                 "source_type": "guideline",
                 "chunk_id": "ama-lab-ref-2025-cbc-003",

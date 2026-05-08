@@ -116,6 +116,58 @@ def _make_retrieve_node(
     return retrieve
 
 
+def _extract_pdf_bbox_citations(
+    extracted: dict[str, Any],
+    doc_type: str,
+) -> list[dict[str, Any]]:
+    """Pull ``source_citation`` rows out of *extracted* into pdf_bbox dicts.
+
+    Each citation dict matches the wire shape of
+    ``agent_service.schemas.api.PdfBboxCitation``: ``source_type``,
+    ``page``, ``bbox`` (list of 4 floats), and ``field_name``.  Rows
+    missing any required component are skipped silently rather than
+    raising -- the loop never produces partial PdfBboxCitations on the
+    wire because the PHP persistence layer would reject them.
+    """
+    out: list[dict[str, Any]] = []
+
+    if doc_type == "lab_pdf":
+        rows = extracted.get("results", [])
+        sources = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            sc = row.get("source_citation")
+            if isinstance(sc, dict):
+                sources.append(sc)
+    elif doc_type == "intake_form":
+        per_field = extracted.get("source_citations", [])
+        sources = [sc for sc in per_field if isinstance(sc, dict)]
+    else:
+        sources = []
+
+    for sc in sources:
+        page = sc.get("page")
+        bbox = sc.get("bbox")
+        field_name = sc.get("field_name")
+        if not isinstance(page, int) or page < 1:
+            continue
+        if not isinstance(bbox, list) or len(bbox) != 4:
+            continue
+        if not all(isinstance(c, (int, float)) for c in bbox):
+            continue
+        if not isinstance(field_name, str) or field_name == "":
+            continue
+        out.append({
+            "source_type": "pdf_bbox",
+            "page": page,
+            "bbox": [float(c) for c in bbox],
+            "field_name": field_name,
+        })
+
+    return out
+
+
 def _finalize_node(state: dict[str, Any]) -> dict[str, Any]:
     """Assemble the final answer from extracted data and evidence."""
     start = time.perf_counter()
@@ -154,8 +206,22 @@ def _finalize_node(state: dict[str, Any]) -> dict[str, Any]:
             f"Retrieved {len(evidence)} guideline snippet(s)."
         )
 
-    # Build citations from evidence items (guideline citations).
+    # Build citations.
+    #
+    # Two kinds land in the same list (a discriminated union on
+    # ``source_type`` -- see agent-service/CONTRACT.md and the
+    # PdfBboxCitation / GuidelineCitation models in
+    # agent_service/schemas/api.py):
+    #
+    # 1. ``pdf_bbox`` rows derived from each extracted field's
+    #    ``source_citation`` (page + bbox + field_name).  These are the
+    #    join key the PHP host uses to wire UI hover/click overlays
+    #    against persisted result rows -- without them the form view
+    #    cannot link rendered values back to their PDF locations.
+    #
+    # 2. ``guideline`` rows for each retrieved evidence snippet.
     citations: list[dict[str, Any]] = []
+    citations.extend(_extract_pdf_bbox_citations(extracted, doc_type))
     for ev in evidence:
         citations.append({
             "source_type": "guideline",

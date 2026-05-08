@@ -432,6 +432,44 @@ _SHOW_SOURCE: Final[IntentDefinition] = IntentDefinition(
 # the PDF flow calls before drafting the proposal;
 # ``get_document_citation_region`` lets the proposal cite a precise
 # (page, bbox) region in the source PDF.
+_FREE_TEXT: Final[IntentDefinition] = IntentDefinition(
+    intent_id="free_text",
+    label="Free text",
+    # ``goal_template`` is only used as a fallback when ``user_goal`` is
+    # absent. For free_text, the chart UI always supplies ``user_goal``
+    # (the clinician's typed question) which takes precedence in
+    # ``_build_user_prompt``, so this template is effectively dead code.
+    # Kept non-empty to satisfy the catalog validator.
+    goal_template="Answer the clinician's free-form question.",
+    # Free-text questions are open-ended -- the model needs the union of
+    # the read-only chart tools so it can pick the right one(s) based on
+    # what the clinician actually asked.
+    allowed_tools=(
+        "get_basic_patient_data",
+        "get_current_medications",
+        "get_active_allergies",
+        "get_recent_events",
+        "get_changes_since_last_visit",
+        "get_source_detail",
+    ),
+    # Mirrors PHP AgentIntentCatalog::FREE_TEXT max_records=30.
+    max_rows=30,
+    # Mirrors PHP AgentIntentCatalog::FREE_TEXT lookback_days=365.
+    lookback_days=365,
+    # Union of source types the read tools above can surface.
+    allowed_source_types=(
+        "patient_record",
+        "medications",
+        "allergies",
+        "problems",
+        "vitals",
+        "labs",
+        "encounters",
+        "procedures",
+    ),
+)
+
+
 _LAB_PDF_EXTRACT_AND_PROPOSE: Final[IntentDefinition] = IntentDefinition(
     intent_id="lab_pdf_extract_and_propose",
     label="Extract lab PDF and draft observation proposal",
@@ -461,6 +499,7 @@ _DEFAULT_INTENTS: Final[tuple[IntentDefinition, ...]] = (
     _BASIC_PATIENT_DATA,
     _CHANGED_SINCE_LAST_VISIT,
     _CURRENT_MEDICATIONS,
+    _FREE_TEXT,
     _LAB_PDF_EXTRACT_AND_PROPOSE,
     _RECENT_EVENTS,
     _SHOW_SOURCE,

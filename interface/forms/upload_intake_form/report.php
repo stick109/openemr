@@ -50,6 +50,22 @@ function upload_intake_form_report($pid, $encounter, $cols, $id): void
         ? $row['date']
         : '';
 
+    // lab_pdf uploads have document_id=0 but stream from pdf.php via the
+    // sidecar trace_id stashed in diff_preview — mirror view.php's fallback.
+    $diffPreviewRaw = isset($row['diff_preview']) && is_string($row['diff_preview'])
+        ? $row['diff_preview']
+        : '';
+    $diffPreviewDecoded = [];
+    if ($diffPreviewRaw !== '') {
+        $maybe = json_decode($diffPreviewRaw, true);
+        if (is_array($maybe)) {
+            $diffPreviewDecoded = $maybe;
+        }
+    }
+    $traceId = isset($diffPreviewDecoded['sidecar_trace_id']) && is_string($diffPreviewDecoded['sidecar_trace_id'])
+        ? $diffPreviewDecoded['sidecar_trace_id']
+        : '';
+
     echo '<table class="table table-sm border-0 mb-0"><tbody><tr>';
     echo '<td class="border-0"><span class="bold">'
         . xlt('Form type')
@@ -68,6 +84,13 @@ function upload_intake_form_report($pid, $encounter, $cols, $id): void
             . '/controller.php?document&retrieve&patient_id=' . attr_url((string) $patientId)
             . '&document_id=' . attr_url((string) $documentId)
             . '&as_file=true';
+        echo '<td class="border-0"><a href="' . attr($href) . '" target="_blank" rel="noopener">'
+            . xlt('View uploaded PDF')
+            . '</a></td>';
+    } elseif ($traceId !== '') {
+        $webRoot = OEGlobalsBag::getInstance()->getKernel()->getWebRoot();
+        $href = $webRoot
+            . '/interface/forms/upload_intake_form/pdf.php?id=' . attr_url((string) $rowId);
         echo '<td class="border-0"><a href="' . attr($href) . '" target="_blank" rel="noopener">'
             . xlt('View uploaded PDF')
             . '</a></td>';

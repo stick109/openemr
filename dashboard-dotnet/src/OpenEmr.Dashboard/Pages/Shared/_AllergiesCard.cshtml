@@ -20,7 +20,7 @@
     };
 }
 <div class="card h-100">
-    <div class="card-header">Allergies</div>
+    <div class="card-header"><h2 class="h6 mb-0">Allergies</h2></div>
     @if (Model.HasError)
     {
         <div class="card-body">
@@ -29,7 +29,7 @@
     }
     else if (Model.Data.Count == 0)
     {
-        <div class="card-body text-muted">No active allergies recorded.</div>
+        <div class="card-body text-muted" role="status">No active allergies recorded.</div>
     }
     else
     {

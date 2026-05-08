@@ -21,7 +21,7 @@
     }
 }
 <div class="card h-100">
-    <div class="card-header">Problem List</div>
+    <div class="card-header"><h2 class="h6 mb-0">Problem List</h2></div>
     @if (Model.HasError)
     {
         <div class="card-body">
@@ -30,7 +30,7 @@
     }
     else if (Model.Data.Count == 0)
     {
-        <div class="card-body text-muted">No problems recorded.</div>
+        <div class="card-body text-muted" role="status">No problems recorded.</div>
     }
     else
     {
@@ -56,7 +56,7 @@
                     var verified = c.VerificationStatusCode();
                     var link = IssueLink(c.Id);
                     <tr>
-                        <td>@display</td>
+                        <th scope="row" class="fw-normal">@display</th>
                         <td class="font-monospace small">@code</td>
                         <td class="small">@onset</td>
                         <td class="small">

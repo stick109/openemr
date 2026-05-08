@@ -163,7 +163,7 @@ Single developer running with subagents → up to ~3 cards in flight at a time (
   - Deps: T21, T16b, T11, T12, T13, T14, T15
 - [ ] **T22** ★ Write `PATIENT_DASHBOARD_MIGRATION.md` from §10 outline. *(75m)*
   - Deps: T17, T21 (need to know what we shipped in both environments)
-- [ ] **T24** Accessibility pass (keyboard nav, focus rings, ARIA labels on Active/Inactive/Deceased badges, `<th>` scope attrs, semantic landmarks). *(60m)*
+- [x] **T24** Accessibility pass (keyboard nav, focus rings, ARIA labels on Active/Inactive/Deceased badges, `<th>` scope attrs, semantic landmarks). *(60m)*
   - Deps: T11, T12, T13, T14, T15, T17
 - [ ] **T25** Final review of `PATIENT_DASHBOARD_MIGRATION.md`; final `dotnet test` (all green) + `dotnet format` (no diff). *(45m)*
   - Deps: T19a, T19b, T22

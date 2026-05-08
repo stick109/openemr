@@ -10,12 +10,14 @@
           crossorigin="anonymous" />
 </head>
 <body>
+    <a class="visually-hidden-focusable position-absolute top-0 start-0 m-2 btn btn-sm btn-primary"
+       href="#main-content">Skip to main content</a>
     <header class="navbar navbar-expand-lg bg-light border-bottom mb-3">
         <div class="container">
             <a class="navbar-brand" asp-area="" asp-page="/Index">OpenEMR Dashboard</a>
         </div>
     </header>
-    <main role="main" class="container">
+    <main id="main-content" class="container" tabindex="-1">
         @RenderBody()
     </main>
     <footer class="container border-top mt-4 pt-3 text-muted small">

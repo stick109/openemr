@@ -10,7 +10,7 @@
         : null;
 }
 <div class="card h-100">
-    <div class="card-header">Prescriptions (history)</div>
+    <div class="card-header"><h2 class="h6 mb-0">Prescriptions (history)</h2></div>
     @if (Model.HasError)
     {
         <div class="card-body">
@@ -19,7 +19,7 @@
     }
     else if (Model.Data.Count == 0)
     {
-        <div class="card-body text-muted">No prescription history recorded.</div>
+        <div class="card-body text-muted" role="status">No prescription history recorded.</div>
     }
     else
     {
@@ -41,7 +41,7 @@
                     var dose = med.FirstDosageText() ?? string.Empty;
                     var link = RowLink();
                     <tr>
-                        <td>@name</td>
+                        <th scope="row" class="fw-normal">@name</th>
                         <td class="small">@dose</td>
                         <td class="small">
                             @if (!string.IsNullOrWhiteSpace(med.Status))

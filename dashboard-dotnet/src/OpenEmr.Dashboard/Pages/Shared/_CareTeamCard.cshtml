@@ -10,7 +10,7 @@
         : null;
 }
 <div class="card h-100">
-    <div class="card-header">Care Team</div>
+    <div class="card-header"><h2 class="h6 mb-0">Care Team</h2></div>
     @if (Model.HasError)
     {
         <div class="card-body">
@@ -19,7 +19,7 @@
     }
     else if (Model.Data.Count == 0)
     {
-        <div class="card-body text-muted">No care team members recorded.</div>
+        <div class="card-body text-muted" role="status">No care team members recorded.</div>
     }
     else
     {

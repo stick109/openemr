@@ -124,36 +124,34 @@
 <header class="bg-light border-bottom sticky-top py-2" aria-label="Patient header">
     <div class="container-fluid">
         <div class="d-flex flex-wrap align-items-center gap-3">
-            <h1 class="h4 mb-0 me-3" aria-label="Patient name">@name</h1>
-            <div class="text-muted small" aria-label="Date of birth and age">
+            <h1 class="h4 mb-0 me-3">@name</h1>
+            <div class="text-muted small">
                 <span class="fw-semibold text-body">DOB</span>
                 <span>@dobDisplay</span>
-                <span class="mx-1">·</span>
+                <span class="mx-1" aria-hidden="true">·</span>
+                <span class="visually-hidden">Age</span>
                 <span>@ageDisplay</span>
             </div>
-            <span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle"
-                  aria-label="Gender @gender">@gender</span>
-            <div class="text-muted small ms-md-2" aria-label="Medical record number">
+            <span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle">
+                <span class="visually-hidden">Gender</span>@gender
+            </span>
+            <div class="text-muted small ms-md-2">
                 <span class="fw-semibold text-body">MRN</span>
                 <span class="font-monospace">@mrn</span>
             </div>
-            <span class="badge @status.CssClass" aria-label="Patient status: @status.Label">
-                @status.Label
+            <span class="badge @status.CssClass">
+                <span class="visually-hidden">Patient status:</span>@status.Label
             </span>
             @if (hasOe)
             {
-                <div class="ms-auto d-flex flex-wrap gap-2" aria-label="OpenEMR navigation">
-                    <a class="btn btn-sm btn-outline-secondary"
-                       href="@mainTabsLink"
-                       aria-label="Back to OpenEMR">
-                        &larr; Back to OpenEMR
+                <nav class="ms-auto d-flex flex-wrap gap-2" aria-label="OpenEMR navigation">
+                    <a class="btn btn-sm btn-outline-secondary" href="@mainTabsLink">
+                        <span aria-hidden="true">&larr;</span> Back to OpenEMR
                     </a>
-                    <a class="btn btn-sm btn-outline-primary"
-                       href="@demographicsLink"
-                       aria-label="Open patient in OpenEMR">
+                    <a class="btn btn-sm btn-outline-primary" href="@demographicsLink">
                         Open in OpenEMR
                     </a>
-                </div>
+                </nav>
             }
         </div>
     </div>

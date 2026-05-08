@@ -614,7 +614,11 @@ function Invoke-RailwayAgentServiceDeploy {
         throw "Agent-service path '$AgentServicePath' does not exist. Run from the repo root or pass -AgentServicePath."
     }
 
-    $arguments = @("up", $AgentServicePath)
+    # `--path-as-root` makes <path> the upload root.  Without it the CLI
+    # treats <path> as a prefix filter against the project directory and
+    # exits with "prefix not found" because the agent-service directory
+    # is one level deep from the repo root.
+    $arguments = @("up", $AgentServicePath, "--path-as-root")
     if (-not [string]::IsNullOrWhiteSpace($Project)) {
         $arguments += @("--project", $Project)
     }

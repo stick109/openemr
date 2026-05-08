@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.HttpOverrides;
 using OpenEmr.Dashboard.Auth;
 using OpenEmr.Dashboard.Fhir;
 
@@ -104,7 +105,25 @@ builder.Services.AddRazorPages()
 
 builder.Services.AddHealthChecks();
 
+// Railway (and most PaaS platforms) terminate TLS at the edge proxy and
+// forward plain HTTP to the container. Without this, the cookie-and-redirect
+// stack generates http:// callback URIs that don't match the https:// URI
+// registered in OpenEMR's OAuth client table.
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Railway's edge IPs are not enumerable; trust all proxies behind the
+    // container network (loopback + RFC-1918 range). For a stricter config,
+    // enumerate Railway's egress CIDRs here.
+    o.KnownNetworks.Clear();
+    o.KnownProxies.Clear();
+});
+
 var app = builder.Build();
+
+// Must be registered before any middleware that reads HttpContext.Request.Scheme
+// (authentication, HSTS, cookie options) so they see https:// not http://.
+app.UseForwardedHeaders();
 
 if (!app.Environment.IsDevelopment())
 {

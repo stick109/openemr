@@ -33,7 +33,21 @@ class AgentServiceClientTest extends TestCase
 {
     private const TRACE_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d';
 
-    public function testRunSendsExpectedRequestAndParsesSuccessResponse(): void
+    /** @var list<string> */
+    private array $tempFiles = [];
+
+    protected function tearDown(): void
+    {
+        foreach ($this->tempFiles as $path) {
+            if (is_file($path)) {
+                @unlink($path);
+            }
+        }
+        $this->tempFiles = [];
+        parent::tearDown();
+    }
+
+    public function testRunSendsExpectedMultipartRequestAndParsesSuccessResponse(): void
     {
         $history = [];
         $mock = new MockHandler([
@@ -53,9 +67,11 @@ class AgentServiceClientTest extends TestCase
             $httpClient,
         );
 
+        $tempPath = $this->makeTempFile('lab-report-fixture.pdf', "%PDF-1.4 fake bytes");
+
         $result = $client->run(
             patientId: 42,
-            filePath: '/var/uploads/agent/abc.pdf',
+            filePath: $tempPath,
             docType: 'lab_pdf',
             encounterId: 7,
             traceId: self::TRACE_ID,
@@ -67,15 +83,28 @@ class AgentServiceClientTest extends TestCase
         $this->assertSame('http://sidecar:8010/api/agent/run', (string) $request->getUri());
         $this->assertSame('test-secret', $request->getHeaderLine('X-Agent-Secret'));
         $this->assertSame('application/json', $request->getHeaderLine('Accept'));
+        $this->assertStringStartsWith(
+            'multipart/form-data',
+            $request->getHeaderLine('Content-Type'),
+        );
 
-        $body = json_decode((string) $request->getBody(), true, flags: JSON_THROW_ON_ERROR);
-        $this->assertSame([
-            'patient_id' => 42,
-            'file_path' => '/var/uploads/agent/abc.pdf',
-            'doc_type' => 'lab_pdf',
-            'encounter_id' => 7,
-            'trace_id' => self::TRACE_ID,
-        ], $body);
+        // The multipart body is boundary-delimited; assert each metadata
+        // field name + the file part appear in the encoded body.  Together
+        // they are unique enough to verify the request shape without
+        // parsing the multipart envelope by hand.
+        $body = (string) $request->getBody();
+        $this->assertStringContainsString('name="patient_id"', $body);
+        $this->assertStringContainsString('name="doc_type"', $body);
+        $this->assertStringContainsString('lab_pdf', $body);
+        $this->assertStringContainsString('name="encounter_id"', $body);
+        $this->assertStringContainsString('name="trace_id"', $body);
+        $this->assertStringContainsString(self::TRACE_ID, $body);
+        $this->assertStringContainsString('name="file"', $body);
+        // The makeTempFile() helper prepends a random-hex prefix; assert
+        // the trailing portion of the upload name appears in the multipart
+        // body's filename parameter.
+        $this->assertStringContainsString('lab-report-fixture.pdf', $body);
+        $this->assertStringContainsString('%PDF-1.4 fake bytes', $body);
 
         $this->assertInstanceOf(AgentRunResult::class, $result);
         $this->assertSame(['hemoglobin' => 13.5], $result->extracted);
@@ -107,7 +136,7 @@ class AgentServiceClientTest extends TestCase
             new Client(['handler' => $handlerStack]),
         );
 
-        $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+        $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
 
         $this->assertSame(
             'http://sidecar:8010/api/agent/run',
@@ -132,7 +161,7 @@ class AgentServiceClientTest extends TestCase
         );
 
         try {
-            $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+            $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
             $this->fail('Expected AgentServiceException');
         } catch (AgentServiceException $e) {
             $this->assertSame('extraction_failed', $e->errorCode);
@@ -160,7 +189,7 @@ class AgentServiceClientTest extends TestCase
 
         $this->expectException(AgentServiceException::class);
         try {
-            $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+            $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
         } catch (AgentServiceException $e) {
             $this->assertSame('unauthorized', $e->errorCode);
             $this->assertSame(401, $e->httpStatus);
@@ -180,7 +209,7 @@ class AgentServiceClientTest extends TestCase
         );
 
         try {
-            $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+            $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
             $this->fail('Expected AgentServiceException');
         } catch (AgentServiceException $e) {
             $this->assertSame('invalid_response', $e->errorCode);
@@ -203,7 +232,7 @@ class AgentServiceClientTest extends TestCase
         );
 
         try {
-            $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+            $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
             $this->fail('Expected AgentServiceException');
         } catch (AgentServiceException $e) {
             $this->assertSame('connection_failed', $e->errorCode);
@@ -221,7 +250,7 @@ class AgentServiceClientTest extends TestCase
         );
 
         try {
-            $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+            $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
             $this->fail('Expected AgentServiceException');
         } catch (AgentServiceException $e) {
             $this->assertSame('not_configured', $e->errorCode);
@@ -241,7 +270,7 @@ class AgentServiceClientTest extends TestCase
         );
 
         try {
-            $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+            $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
             $this->fail('Expected AgentServiceException');
         } catch (AgentServiceException $e) {
             $this->assertSame('invalid_response', $e->errorCode);
@@ -267,9 +296,32 @@ class AgentServiceClientTest extends TestCase
             new Client(['handler' => $handlerStack]),
         );
 
-        $client->run(1, '/tmp/x.pdf', 'lab_pdf', 1, self::TRACE_ID);
+        $client->run(1, $this->makeTempFile('x.pdf'), 'lab_pdf', 1, self::TRACE_ID);
 
         $this->assertSame(90, $history[0]['options']['timeout']);
+    }
+
+    public function testRunThrowsWhenUploadFileMissing(): void
+    {
+        $client = new AgentServiceClient(
+            $this->config(),
+            new NullLogger(),
+            new Client(['handler' => HandlerStack::create(new MockHandler())]),
+        );
+
+        try {
+            $client->run(
+                1,
+                '/nonexistent/path/that/should/not/exist-' . bin2hex(random_bytes(8)) . '.pdf',
+                'lab_pdf',
+                1,
+                self::TRACE_ID,
+            );
+            $this->fail('Expected AgentServiceException');
+        } catch (AgentServiceException $e) {
+            $this->assertSame('upload_unreadable', $e->errorCode);
+            $this->assertSame(self::TRACE_ID, $e->traceId);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -283,6 +335,15 @@ class AgentServiceClientTest extends TestCase
             sharedSecret: 'test-secret',
             timeoutSeconds: 30,
         );
+    }
+
+    private function makeTempFile(string $name = 'fixture.pdf', string $contents = 'fixture-content'): string
+    {
+        $path = sys_get_temp_dir() . DIRECTORY_SEPARATOR
+            . 'agent-client-test-' . bin2hex(random_bytes(8)) . '-' . $name;
+        file_put_contents($path, $contents);
+        $this->tempFiles[] = $path;
+        return $path;
     }
 
     /**

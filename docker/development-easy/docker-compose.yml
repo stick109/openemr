@@ -224,8 +224,10 @@ services:
       openemr:
         condition: service_healthy
   # Agent sidecar service — Python FastAPI app in ../../agent-service.
-  # Reads documents written to the shared agent-uploads volume by OpenEMR
-  # and exposes the agent pipeline at http://agent-service:8010.
+  # Stateless: OpenEMR uploads documents over HTTP (multipart) on the same
+  # request that triggers the agent run, so the sidecar does not share a
+  # volume with OpenEMR.  Exposes the agent pipeline at
+  # http://agent-service:8010.
   agent-service:
     restart: always
     container_name: agent-service
@@ -235,10 +237,6 @@ services:
       dockerfile: Dockerfile
     ports:
     - "${WT_AGENT_PORT:-8010}:8010"
-    volumes:
-    # Read-only: the sidecar consumes what OpenEMR writes; it must never
-    # mutate files in the shared volume.
-    - agent-uploads:/var/uploads/agent:ro
     environment:
       # Shared secret used by both OpenEMR and the sidecar.  The sidecar
       # reads it from AGENT_SHARED_SECRET (see agent_service/config.py);

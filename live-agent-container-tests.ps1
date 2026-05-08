@@ -944,56 +944,44 @@ function Invoke-VolumeTests {
     Write-Section "VOLUME (5s)"
 
     if ($SkipDocker) {
-        Skip-Test -Name "shared agent-uploads volume is mounted in agent-service" -Group "Volume" -Reason "-SkipDocker"
-        Skip-Test -Name "openemr write -> agent-service read on shared volume"   -Group "Volume" -Reason "-SkipDocker"
+        Skip-Test -Name "agent-service has no /var/uploads/agent mount" -Group "Volume" -Reason "-SkipDocker"
         return
     }
 
     if (-not (Test-Command docker)) {
-        Skip-Test -Name "shared agent-uploads volume is mounted in agent-service" -Group "Volume" -Reason "docker not on PATH"
-        Skip-Test -Name "openemr write -> agent-service read on shared volume"   -Group "Volume" -Reason "docker not on PATH"
+        Skip-Test -Name "agent-service has no /var/uploads/agent mount" -Group "Volume" -Reason "docker not on PATH"
         return
     }
 
     if (-not (Test-DockerUp)) {
         $reason = "compose project '$ComposeProject' not running"
-        Skip-Test -Name "shared agent-uploads volume is mounted in agent-service" -Group "Volume" -Reason $reason
-        Skip-Test -Name "openemr write -> agent-service read on shared volume"   -Group "Volume" -Reason $reason
+        Skip-Test -Name "agent-service has no /var/uploads/agent mount" -Group "Volume" -Reason $reason
         return
     }
 
-    Run-Test -Name "shared agent-uploads volume is mounted in agent-service" -Group "Volume" -Block {
-        $output = & docker compose -p $ComposeProject exec -T agent-service python -c "import os, sys; sys.exit(0 if os.path.isdir('/var/uploads/agent') else 1)" 2>&1
+    # Regression guard: after the multipart-upload refactor, agent-service
+    # is stateless and must NOT mount the agent-uploads volume.  PHP keeps
+    # the file on its own disk for later display; the sidecar only sees
+    # request bodies over HTTP.  If this assertion ever fails, somebody
+    # re-introduced the cross-service volume mount in docker-compose.yml.
+    Run-Test -Name "agent-service has no /var/uploads/agent mount" -Group "Volume" -Block {
+        $mountsJson = & docker compose -p $ComposeProject ps agent-service --format json 2>&1
         if ($LASTEXITCODE -ne 0) {
-            throw "/var/uploads/agent missing inside agent-service: $output"
+            throw "docker compose ps agent-service failed (exit=$LASTEXITCODE): $mountsJson"
         }
-    }
-
-    # Write a marker file from openemr (rw mount), then read it back from
-    # agent-service (ro mount). Same contents -> the volume is genuinely
-    # shared, not two independent mounts that happen to have the same path.
-    Run-Test -Name "openemr write -> agent-service read on shared volume" -Group "Volume" -Block {
-        $marker = "live-tests-$([guid]::NewGuid().ToString())"
-
-        # Write from openemr.
-        $writeOutput = & docker compose -p $ComposeProject exec -T openemr sh -c "printf '%s' '$marker' > /var/uploads/agent/.live-tests-marker" 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            throw "openemr write failed (exit=$LASTEXITCODE): $writeOutput"
-        }
-
-        try {
-            # Read from agent-service.
-            $readOutput = & docker compose -p $ComposeProject exec -T agent-service python -c "from pathlib import Path; print(Path('/var/uploads/agent/.live-tests-marker').read_text(), end='')" 2>&1
+        # `docker compose ps --format json` emits one JSON object per line.
+        foreach ($line in @($mountsJson)) {
+            if ([string]::IsNullOrWhiteSpace($line)) { continue }
+            $info = $line | ConvertFrom-Json
+            $containerId = $info.ID
+            if ([string]::IsNullOrWhiteSpace($containerId)) { continue }
+            $mounts = & docker inspect --format '{{range .Mounts}}{{.Destination}}|{{end}}' $containerId 2>&1
             if ($LASTEXITCODE -ne 0) {
-                throw "agent-service read failed (exit=$LASTEXITCODE): $readOutput"
+                throw "docker inspect failed for $containerId : $mounts"
             }
-            $readValue = ([string]$readOutput).Trim()
-            if ($readValue -ne $marker) {
-                throw "marker mismatch: wrote='$marker', read='$readValue'"
+            if ($mounts -match '/var/uploads/agent') {
+                throw "agent-service still mounts /var/uploads/agent (mounts: $mounts). The multipart refactor expects this to be unmounted."
             }
-        } finally {
-            # Best-effort cleanup; don't fail the test if rm fails.
-            & docker compose -p $ComposeProject exec -T openemr rm -f /var/uploads/agent/.live-tests-marker 2>$null | Out-Null
         }
     }
 }

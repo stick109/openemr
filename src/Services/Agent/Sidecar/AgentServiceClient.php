@@ -45,14 +45,22 @@ final class AgentServiceClient
     /**
      * Submit a document for extraction via the sidecar.
      *
+     * The file bytes are streamed in the HTTP request body as a multipart
+     * "file" part; the sidecar writes them to a temporary file on its own
+     * filesystem and processes them there. PHP and the sidecar therefore no
+     * longer share a Docker volume — the only handoff is over HTTP. PHP must
+     * still keep the file on its own local disk if other code (e.g.
+     * upload_intake_form/pdf.php) needs to read it back later.
+     *
      * @param int    $patientId   OpenEMR patient pid (positive).
-     * @param string $filePath    Absolute path on the shared volume.
+     * @param string $filePath    Absolute path to a readable file on the
+     *                            PHP host's local disk.
      * @param string $docType     One of: lab_pdf, intake_form, auto.
      * @param int    $encounterId OpenEMR encounter ID (positive).
      * @param string $traceId     UUID v4 correlation ID.
      *
-     * @throws AgentServiceException On sidecar error, auth failure, or
-     *                               network timeout.
+     * @throws AgentServiceException On sidecar error, auth failure, network
+     *                               timeout, or unreadable upload file.
      */
     public function run(
         int $patientId,
@@ -63,13 +71,36 @@ final class AgentServiceClient
     ): AgentRunResult {
         $this->guardConfigured();
 
+        if (!is_file($filePath) || !is_readable($filePath)) {
+            throw new AgentServiceException(
+                'Upload file is missing or not readable.',
+                errorCode: 'upload_unreadable',
+                detail: $filePath,
+                traceId: $traceId,
+            );
+        }
+
+        $fileStream = @fopen($filePath, 'r');
+        if ($fileStream === false) {
+            throw new AgentServiceException(
+                'Failed to open upload file for streaming.',
+                errorCode: 'upload_unreadable',
+                detail: $filePath,
+                traceId: $traceId,
+            );
+        }
+
         $url = $this->config->getUrl() . self::ENDPOINT;
-        $payload = [
-            'patient_id' => $patientId,
-            'file_path' => $filePath,
-            'doc_type' => $docType,
-            'encounter_id' => $encounterId,
-            'trace_id' => $traceId,
+        $multipart = [
+            ['name' => 'patient_id', 'contents' => (string) $patientId],
+            ['name' => 'doc_type', 'contents' => $docType],
+            ['name' => 'encounter_id', 'contents' => (string) $encounterId],
+            ['name' => 'trace_id', 'contents' => $traceId],
+            [
+                'name' => 'file',
+                'contents' => $fileStream,
+                'filename' => basename($filePath),
+            ],
         ];
 
         $this->logger->info('Calling agent sidecar', [
@@ -80,7 +111,7 @@ final class AgentServiceClient
 
         try {
             $response = $this->httpClient->request('POST', $url, [
-                'json' => $payload,
+                'multipart' => $multipart,
                 'headers' => [
                     'X-Agent-Secret' => $this->config->getSharedSecret(),
                     'Accept' => 'application/json',

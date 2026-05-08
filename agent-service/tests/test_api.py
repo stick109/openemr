@@ -63,28 +63,46 @@ class TestHealthz:
 # Auth: missing / wrong / correct secret
 # ---------------------------------------------------------------------------
 
-_VALID_BODY = {
-    "patient_id": 1,
-    "file_path": "/tmp/test.pdf",
+_VALID_FORM = {
+    "patient_id": "1",
     "doc_type": "lab_pdf",
-    "encounter_id": 1,
+    "encounter_id": "1",
     "trace_id": "aaaaaaaa-bbbb-4ccc-dddd-eeeeeeeeeeee",
 }
 
 
+def _post_run(
+    client: TestClient,
+    *,
+    secret: str | None = SHARED_SECRET,
+    form: dict[str, str] | None = None,
+    file_bytes: bytes = b"%PDF-1.4 fake",
+    filename: str = "test.pdf",
+):
+    """POST /api/agent/run as a multipart upload.
+
+    Default-sends a tiny PDF blob alongside the metadata form so the
+    server has something to write to its temp file.
+    """
+    headers = {"X-Agent-Secret": secret} if secret is not None else {}
+    files = {"file": (filename, file_bytes, "application/pdf")}
+    return client.post(
+        "/api/agent/run",
+        data=form or _VALID_FORM,
+        files=files,
+        headers=headers,
+    )
+
+
 class TestAuth:
     def test_missing_secret_returns_401(self, client: TestClient) -> None:
-        resp = client.post("/api/agent/run", json=_VALID_BODY)
+        resp = _post_run(client, secret=None)
         assert resp.status_code == 401
         body = resp.json()
         assert body["error"] == "unauthorized"
 
     def test_wrong_secret_returns_403(self, client: TestClient) -> None:
-        resp = client.post(
-            "/api/agent/run",
-            json=_VALID_BODY,
-            headers={"X-Agent-Secret": "wrong-secret"},
-        )
+        resp = _post_run(client, secret="wrong-secret")
         assert resp.status_code == 403
         body = resp.json()
         assert body["error"] == "forbidden"
@@ -100,7 +118,7 @@ class TestAuth:
             "tool_sequence": ["extract", "retrieve", "finalize"],
             "extraction_confidence": 0.9,
             "status": "completed",
-            "trace_id": _VALID_BODY["trace_id"],
+            "trace_id": _VALID_FORM["trace_id"],
         }
 
         class _FakeGraph:
@@ -114,15 +132,36 @@ class TestAuth:
             "agent_service.graph.build_graph",
             return_value=_FakeGraph(),
         ):
-            resp = client.post(
-                "/api/agent/run",
-                json=_VALID_BODY,
-                headers={"X-Agent-Secret": SHARED_SECRET},
-            )
+            resp = _post_run(client)
         assert resp.status_code == 200
         body = resp.json()
         assert "answer" in body
         assert body["tool_sequence"] == ["extract", "retrieve", "finalize"]
+
+
+class TestRequestValidation:
+    """Form-field validation enforced by the multipart handler."""
+
+    def test_missing_file_returns_422(self, client: TestClient) -> None:
+        resp = client.post(
+            "/api/agent/run",
+            data=_VALID_FORM,
+            headers={"X-Agent-Secret": SHARED_SECRET},
+        )
+        assert resp.status_code == 422
+
+    def test_invalid_trace_id_returns_422(self, client: TestClient) -> None:
+        bad_form = {**_VALID_FORM, "trace_id": "not-a-uuid"}
+        resp = _post_run(client, form=bad_form)
+        assert resp.status_code == 422
+        body = resp.json()
+        assert body["error"] == "invalid_request"
+        assert "trace_id" in body["detail"]
+
+    def test_negative_patient_id_returns_422(self, client: TestClient) -> None:
+        bad_form = {**_VALID_FORM, "patient_id": "0"}
+        resp = _post_run(client, form=bad_form)
+        assert resp.status_code == 422
 
 
 # ---------------------------------------------------------------------------

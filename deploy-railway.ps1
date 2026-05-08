@@ -38,7 +38,33 @@ param(
 
     [switch]$AllowEmptyEnvValues,
 
-    [switch]$SkipDeploy
+    [switch]$SkipDeploy,
+
+    # ── Agent-service sidecar deployment ────────────────────────────────
+    # Railway production matches the local `development-easy` compose stack:
+    # the OpenEMR web container is paired with the Python agent-service
+    # sidecar.  Set to $false to opt out of the second pass (legacy
+    # single-service deploy).
+    [bool]$DeployAgentService = $true,
+
+    # Railway service name for the sidecar.  Must already exist in the
+    # Railway project (create once via the dashboard or
+    # `railway service create agent-service`).
+    [string]$AgentServiceName = "agent-service",
+
+    # Filesystem path to the sidecar source root (relative to repo root).
+    # `railway up <path>` uploads this directory as the build context, so
+    # the agent-service Dockerfile sees its own files at the working dir.
+    [string]$AgentServicePath = "agent-service",
+
+    # When set, also stages baseline agent-service variables (DB refs,
+    # AGENT_SHARED_SECRET, PORT, OBSERVABILITY_EVENTS_STDOUT, etc.).
+    [switch]$ConfigureAgentServiceVariables,
+
+    # Shared secret used by both openemr-web (OPENEMR_AGENT_SIDECAR_SECRET)
+    # and agent-service (AGENT_SHARED_SECRET).  Falls back to the local
+    # dev default when omitted -- override for any non-demo deploy.
+    [string]$AgentSharedSecret
 )
 
 $ErrorActionPreference = "Stop"
@@ -497,7 +523,114 @@ function Set-OpenEmrVariables {
     Set-RailwayVariable -Name "OE_USER" -Value $OpenEmrAdminUser
     Set-RailwaySecretVariable -Name "OE_PASS" -Secret $openEmrAdminPass
 
+    # When the agent-service sidecar is part of the deploy, point openemr-web
+    # at it via Railway's private-network DNS.  The shared secret is staged
+    # on both services so PHP and Python agree on signed-token verification.
+    if ($DeployAgentService) {
+        $sidecarUrl = 'http://${{' + "$AgentServiceName.RAILWAY_PRIVATE_DOMAIN" + '}}:8010'
+        Set-RailwayVariable -Name "OPENEMR_AGENT_SIDECAR_URL" -Value $sidecarUrl
+        $resolvedSecret = Get-AgentSharedSecret
+        Set-RailwaySecretVariable -Name "OPENEMR_AGENT_SIDECAR_SECRET" -Secret $resolvedSecret
+    }
+
     Write-Host "Variables staged. Railway may require you to review/deploy staged variable changes in the dashboard."
+}
+
+function Get-AgentSharedSecret {
+    <#
+        Resolve the agent shared secret used by both services.  Priority:
+        explicit -AgentSharedSecret param > OPENEMR_AGENT_SIDECAR_SECRET in
+        the .env file > "dev-shared-secret" (the docker-compose default).
+        Returns a SecureString.
+    #>
+    if (-not [string]::IsNullOrWhiteSpace($AgentSharedSecret)) {
+        return ConvertTo-SecureString -String $AgentSharedSecret -AsPlainText -Force
+    }
+
+    if (Test-Path -LiteralPath $EnvFile) {
+        $resolvedPath = (Resolve-Path -LiteralPath $EnvFile).Path
+        $lineNumber = 0
+        foreach ($line in [System.IO.File]::ReadLines($resolvedPath)) {
+            $lineNumber++
+            $entry = ConvertFrom-DotEnvLine -Line $line -Path $resolvedPath -LineNumber $lineNumber
+            if ($null -eq $entry) { continue }
+            if ($entry.Name -eq "OPENEMR_AGENT_SIDECAR_SECRET" -and -not [string]::IsNullOrEmpty($entry.Value)) {
+                return ConvertTo-SecureString -String $entry.Value -AsPlainText -Force
+            }
+        }
+    }
+
+    Write-Host "Falling back to docker-compose default 'dev-shared-secret' for agent shared secret. Override via -AgentSharedSecret or .env for production deploys."
+    return ConvertTo-SecureString -String "dev-shared-secret" -AsPlainText -Force
+}
+
+function Set-AgentServiceVariables {
+    <#
+        Stage the baseline env vars that the Python sidecar needs.  Called
+        in the agent-service deployment pass, where $script:Service has
+        been temporarily reassigned so the existing Set-RailwayVariable /
+        Set-RailwaySecretVariable helpers scope to the sidecar.
+    #>
+    Write-Host "Configuring $AgentServiceName Railway variables."
+
+    $resolvedHost = $MysqlHost
+    if ([string]::IsNullOrWhiteSpace($resolvedHost)) {
+        $resolvedHost = '${{' + "$MysqlServiceName.MYSQLHOST" + '}}'
+    }
+    $resolvedPort = $MysqlPort
+    if ([string]::IsNullOrWhiteSpace($resolvedPort)) {
+        $resolvedPort = '${{' + "$MysqlServiceName.MYSQLPORT" + '}}'
+    }
+    $resolvedPassword = $MysqlPassword
+    if ([string]::IsNullOrWhiteSpace($resolvedPassword)) {
+        $resolvedPassword = '${{' + "$MysqlServiceName.MYSQLPASSWORD" + '}}'
+    }
+
+    # The sidecar's CMD hardcodes uvicorn --port 8010, so Railway's
+    # public proxy must forward to that port.  Set PORT=8010 to match.
+    Set-RailwayVariable -Name "PORT" -Value "8010"
+
+    Set-RailwaySecretVariable -Name "AGENT_SHARED_SECRET" -Secret (Get-AgentSharedSecret)
+
+    # Read-only OpenEMR DB connection used by the M9 read repository.
+    Set-RailwayVariable -Name "OPENEMR_DB_HOST" -Value $resolvedHost
+    Set-RailwayVariable -Name "OPENEMR_DB_PORT" -Value $resolvedPort
+    Set-RailwayVariable -Name "OPENEMR_DB_NAME" -Value $MysqlDatabase
+    Set-RailwayVariable -Name "OPENEMR_DB_USER_RO" -Value $MysqlUser
+    Set-RailwaySecretVariable -Name "OPENEMR_DB_PASS_RO" -Secret (ConvertTo-SecureString -String $resolvedPassword -AsPlainText -Force)
+    Set-RailwayVariable -Name "OPENEMR_DB_TIMEOUT_S" -Value "5"
+
+    # Demo observability: emit each agent-loop event as JSON on stdout
+    # so `railway logs` shows the run.received -> tool.* -> response.returned
+    # sequence.  Mirrors the docker-compose default.
+    Set-RailwayVariable -Name "OBSERVABILITY_EVENTS_STDOUT" -Value "1"
+    Set-RailwayVariable -Name "AGENT_LOG_LEVEL" -Value "INFO"
+
+    Write-Host "$AgentServiceName variables staged."
+}
+
+function Invoke-RailwayAgentServiceDeploy {
+    if (-not (Test-Path -LiteralPath $AgentServicePath)) {
+        throw "Agent-service path '$AgentServicePath' does not exist. Run from the repo root or pass -AgentServicePath."
+    }
+
+    $arguments = @("up", $AgentServicePath)
+    if (-not [string]::IsNullOrWhiteSpace($Project)) {
+        $arguments += @("--project", $Project)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($AgentServiceName)) {
+        $arguments += @("--service", $AgentServiceName)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Environment)) {
+        $arguments += @("--environment", $Environment)
+    }
+    $arguments += "--message"
+    $arguments += "Deploy agent-service sidecar overlay"
+
+    if ($Detach) { $arguments += "--detach" }
+    if ($Ci) { $arguments += "--ci" }
+
+    Invoke-Railway -Arguments $arguments
 }
 
 function New-OpenEmrSitesVolume {
@@ -580,15 +713,68 @@ if ($CreateSitesVolume) {
 
 if ($SkipDeploy) {
     Write-Host "Skipping deployment because -SkipDeploy was supplied."
-    exit 0
+}
+else {
+    Invoke-RailwayDeploy
+
+    if ($script:SyncedDotEnvVariableCount -gt 0) {
+        $latestDeployment = Get-LatestRailwayDeployment
+        if ($null -ne $latestDeployment -and $latestDeployment.status -eq "SKIPPED") {
+            Write-Host "Railway skipped the source upload. Redeploying the latest image so synced variables take effect."
+            Invoke-RailwayRedeploy
+        }
+    }
 }
 
-Invoke-RailwayDeploy
+# ── Second pass: agent-service sidecar ─────────────────────────────────
+# Mirrors the local development-easy compose stack, where openemr depends
+# on a running agent-service peer.  Railway can't share a volume between
+# services, so the legacy /var/uploads/agent shared-volume topology is
+# NOT replicated here; production upload-flow needs an object-store-backed
+# replacement (see CONTRACT.md in agent-service/ for the M-tasks).
+if ($DeployAgentService) {
+    Write-Host ""
+    Write-Host "=== Deploying $AgentServiceName ==="
 
-if ($script:SyncedDotEnvVariableCount -gt 0) {
-    $latestDeployment = Get-LatestRailwayDeployment
-    if ($null -ne $latestDeployment -and $latestDeployment.status -eq "SKIPPED") {
-        Write-Host "Railway skipped the source upload. Redeploying the latest image so synced variables take effect."
-        Invoke-RailwayRedeploy
+    $previousService = $script:Service
+    $previousSyncedCount = $script:SyncedDotEnvVariableCount
+    $script:Service = $AgentServiceName
+    $script:SyncedDotEnvVariableCount = 0
+    try {
+        if ($ConfigureAgentServiceVariables) {
+            Set-AgentServiceVariables
+        }
+        else {
+            Write-Host "Skipping $AgentServiceName variable setup. Use -ConfigureAgentServiceVariables to stage DB refs and AGENT_SHARED_SECRET."
+        }
+
+        if ($SkipEnvSync) {
+            Write-Host "Skipping .env variable sync to $AgentServiceName because -SkipEnvSync was supplied."
+        }
+        elseif (Test-Path -LiteralPath $EnvFile) {
+            Set-RailwayDotEnvVariables -Path $EnvFile
+        }
+        else {
+            Write-Host "No $EnvFile file found. Skipping .env variable sync to $AgentServiceName."
+        }
+
+        if ($SkipDeploy) {
+            Write-Host "Skipping $AgentServiceName deployment because -SkipDeploy was supplied."
+        }
+        else {
+            Invoke-RailwayAgentServiceDeploy
+
+            if ($script:SyncedDotEnvVariableCount -gt 0) {
+                $latestAgentDeployment = Get-LatestRailwayDeployment
+                if ($null -ne $latestAgentDeployment -and $latestAgentDeployment.status -eq "SKIPPED") {
+                    Write-Host "Railway skipped the $AgentServiceName source upload. Redeploying so synced variables take effect."
+                    Invoke-RailwayRedeploy
+                }
+            }
+        }
+    }
+    finally {
+        $script:Service = $previousService
+        $script:SyncedDotEnvVariableCount = $previousSyncedCount
     }
 }

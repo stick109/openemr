@@ -66,6 +66,7 @@ class AgentAccessBrokerTest extends TestCase
             'allergies',
             'problems',
             'document',
+            'guidelines',
             'demographics',
             'medication',
             'medication_review',
@@ -74,6 +75,7 @@ class AgentAccessBrokerTest extends TestCase
             'problem',
             'result',
             'encounter',
+            'guideline',
             'appointments',
         ], $decision->getAccessToken()?->getGrantedDataClasses());
         $this->assertSame([
@@ -81,6 +83,7 @@ class AgentAccessBrokerTest extends TestCase
             'get_recent_events',
             'get_changes_since_last_visit',
             'get_source_detail',
+            'retrieve_guidelines',
             'get_current_medications',
             'get_active_allergies',
         ], $decision->getAccessToken()?->getGrantedTools());
@@ -120,6 +123,7 @@ class AgentAccessBrokerTest extends TestCase
             'allergies',
             'problems',
             'document',
+            'guidelines',
             'demographics',
             'medication',
             'medication_review',
@@ -128,6 +132,7 @@ class AgentAccessBrokerTest extends TestCase
             'problem',
             'result',
             'encounter',
+            'guideline',
         ], $decision->getAccessToken()?->getGrantedDataClasses());
         $this->assertNotContains(AgentIntentCatalog::CURRENT_MEDICATIONS, $decision->getAccessToken()?->getGrantedTools());
         $this->assertSame(1, $this->auditEvents[0]['success']);

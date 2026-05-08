@@ -64,7 +64,24 @@ param(
     # Shared secret used by both openemr-web (OPENEMR_AGENT_SIDECAR_SECRET)
     # and agent-service (AGENT_SHARED_SECRET).  Falls back to the local
     # dev default when omitted -- override for any non-demo deploy.
-    [string]$AgentSharedSecret
+    [string]$AgentSharedSecret,
+
+    # ── Dashboard-dotnet sidecar deployment ─────────────────────────────
+    # The ASP.NET patient dashboard, deployed as a third Railway service
+    # alongside openemr-web and agent-service.  Set to $true to enable the
+    # third deployment pass (T21).  Service must already exist in the
+    # Railway project (created once in T20 via `railway add --service
+    # dashboard-dotnet`).
+    [switch]$DeployDashboardDotnet,
+
+    # Railway service name for the dashboard.  Must match the name used
+    # when the service was created.
+    [string]$DashboardDotnetServiceName = "dashboard-dotnet",
+
+    # Filesystem path to the dashboard source root (relative to repo root).
+    # `railway up <path> --path-as-root` uploads this directory as the build
+    # context, so the Dockerfile sees its own files at the working dir.
+    [string]$DashboardDotnetPath = "dashboard-dotnet"
 )
 
 $ErrorActionPreference = "Stop"
@@ -637,6 +654,33 @@ function Invoke-RailwayAgentServiceDeploy {
     Invoke-Railway -Arguments $arguments
 }
 
+function Invoke-RailwayDashboardDotnetDeploy {
+    if (-not (Test-Path -LiteralPath $DashboardDotnetPath)) {
+        throw "Dashboard-dotnet path '$DashboardDotnetPath' does not exist. Run from the repo root or pass -DashboardDotnetPath."
+    }
+
+    # `--path-as-root` makes <path> the upload root.  Mirrors the pattern
+    # used by Invoke-RailwayAgentServiceDeploy — without it the CLI treats
+    # the path as a prefix filter and exits with "prefix not found".
+    $arguments = @("up", $DashboardDotnetPath, "--path-as-root")
+    if (-not [string]::IsNullOrWhiteSpace($Project)) {
+        $arguments += @("--project", $Project)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($DashboardDotnetServiceName)) {
+        $arguments += @("--service", $DashboardDotnetServiceName)
+    }
+    if (-not [string]::IsNullOrWhiteSpace($Environment)) {
+        $arguments += @("--environment", $Environment)
+    }
+    $arguments += "--message"
+    $arguments += "Deploy dashboard-dotnet ASP.NET overlay"
+
+    if ($Detach) { $arguments += "--detach" }
+    if ($Ci) { $arguments += "--ci" }
+
+    Invoke-Railway -Arguments $arguments
+}
+
 function New-OpenEmrSitesVolume {
     Write-Host "Creating Railway volume at $SitesVolumeMountPath."
     Invoke-Railway -Arguments @("volume", "add", "--mount-path", $SitesVolumeMountPath)
@@ -730,7 +774,7 @@ else {
     }
 }
 
-# ── Second pass: agent-service sidecar ─────────────────────────────────
+# ── Second pass: agent-service sidecar ──────────────────────────────────
 # Mirrors the local development-easy compose stack, where openemr depends
 # on a running agent-service peer.  Railway can't share a volume between
 # services, so the legacy /var/uploads/agent shared-volume topology is
@@ -772,6 +816,51 @@ if ($DeployAgentService) {
                 $latestAgentDeployment = Get-LatestRailwayDeployment
                 if ($null -ne $latestAgentDeployment -and $latestAgentDeployment.status -eq "SKIPPED") {
                     Write-Host "Railway skipped the $AgentServiceName source upload. Redeploying so synced variables take effect."
+                    Invoke-RailwayRedeploy
+                }
+            }
+        }
+    }
+    finally {
+        $script:Service = $previousService
+        $script:SyncedDotEnvVariableCount = $previousSyncedCount
+    }
+}
+
+# ── Third pass: dashboard-dotnet ASP.NET patient dashboard ──────────────
+# Mirrors the agent-service second pass.  Variables are managed separately
+# (set once during T20 provisioning via `railway variable set`); this pass
+# is deploy-only.  Gated behind -DeployDashboardDotnet so existing callers
+# that don't supply the flag are unaffected.
+if ($DeployDashboardDotnet) {
+    Write-Host ""
+    Write-Host "=== Deploying $DashboardDotnetServiceName ==="
+
+    $previousService = $script:Service
+    $previousSyncedCount = $script:SyncedDotEnvVariableCount
+    $script:Service = $DashboardDotnetServiceName
+    $script:SyncedDotEnvVariableCount = 0
+    try {
+        if ($SkipEnvSync) {
+            Write-Host "Skipping .env variable sync to $DashboardDotnetServiceName because -SkipEnvSync was supplied."
+        }
+        elseif (Test-Path -LiteralPath $EnvFile) {
+            Set-RailwayDotEnvVariables -Path $EnvFile
+        }
+        else {
+            Write-Host "No $EnvFile file found. Skipping .env variable sync to $DashboardDotnetServiceName."
+        }
+
+        if ($SkipDeploy) {
+            Write-Host "Skipping $DashboardDotnetServiceName deployment because -SkipDeploy was supplied."
+        }
+        else {
+            Invoke-RailwayDashboardDotnetDeploy
+
+            if ($script:SyncedDotEnvVariableCount -gt 0) {
+                $latestDashboardDeployment = Get-LatestRailwayDeployment
+                if ($null -ne $latestDashboardDeployment -and $latestDashboardDeployment.status -eq "SKIPPED") {
+                    Write-Host "Railway skipped the $DashboardDotnetServiceName source upload. Redeploying so synced variables take effect."
                     Invoke-RailwayRedeploy
                 }
             }

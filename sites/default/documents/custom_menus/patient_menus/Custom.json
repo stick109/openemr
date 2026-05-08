@@ -8,6 +8,16 @@
         "children": [],
         "requirement": 0
     },
+    {
+        "label": "Modern Dashboard{{patient file}}",
+        "menu_id": "modern_dashboard",
+        "target": "main",
+        "on_click": "top.restoreSession()",
+        "url": "http://localhost:8400/Patient/{{pid}}",
+        "pid": "true",
+        "children": [],
+        "requirement": 0
+    },
 	{
         "label": "History",
         "menu_id": "history",

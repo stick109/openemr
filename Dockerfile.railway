@@ -11,3 +11,16 @@ COPY --chown=apache:apache . /var/www/localhost/htdocs/openemr/
 # stale dependency versions and stale Composer classmaps from the pinned image.
 RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --optimize-autoloader \
     && chown -R apache:apache /var/www/localhost/htdocs/openemr/vendor
+
+# SharedUploadManager writes incoming uploads to /var/uploads/agent for later
+# retrieval by the embedded PDF viewer (interface/forms/upload_intake_form/pdf.php).
+# Locally the docker-compose entrypoint shim creates this directory with sticky
+# 1777 perms, but that shim does NOT run on Railway — the base image's own
+# entrypoint takes over. Bake the directory into the image with apache
+# ownership so PHP (uid 100) can write to it. Note: this directory is NOT on a
+# persistent volume; files survive a single container lifetime, which is fine
+# for the agent run itself but means re-viewing old uploads after a restart
+# will 404. Migrating uploads to sites/default/documents/ is a follow-up.
+RUN mkdir -p /var/uploads/agent \
+    && chown apache:apache /var/uploads/agent \
+    && chmod 0755 /var/uploads/agent

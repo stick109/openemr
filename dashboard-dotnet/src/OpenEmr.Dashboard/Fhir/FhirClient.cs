@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using OpenEmr.Dashboard.Fhir.Records;
 
 namespace OpenEmr.Dashboard.Fhir;
@@ -18,31 +19,33 @@ public sealed class FhirClient
     };
 
     private readonly HttpClient httpClient;
+    private readonly ILogger<FhirClient> logger;
 
-    public FhirClient(HttpClient httpClient)
+    public FhirClient(HttpClient httpClient, ILogger<FhirClient> logger)
     {
         this.httpClient = httpClient;
+        this.logger = logger;
     }
 
     /// <summary>
-    /// Searches the FHIR Patient resource for a record whose <c>PT</c>
-    /// identifier matches the supplied OpenEMR local pid. OpenEMR's
-    /// FhirPatientService maps <c>identifier=PT|{value}</c> to the
-    /// <c>pubpid</c> column. Returns <c>null</c> when the bundle is empty.
+    /// Searches the FHIR Patient resource for a record whose identifier matches
+    /// the supplied OpenEMR local pid. OpenEMR's FhirPatientService maps the
+    /// FHIR identifier search across <c>ss</c>, <c>pubpid</c>, and <c>pid</c>
+    /// columns, so a bare value (no system prefix) finds the patient by local
+    /// pid even when pubpid differs. Returns <c>null</c> when the bundle is empty.
     /// </summary>
     public async Task<FhirPatient?> GetPatientByIdentifierAsync(string ptid, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrEmpty(ptid);
 
         var encoded = Uri.EscapeDataString(ptid);
-        var url = $"Patient?identifier=PT|{encoded}&_format=json";
+        var url = $"Patient?identifier={encoded}";
 
         using var response = await this.httpClient.GetAsync(url, cancellationToken);
         response.EnsureSuccessStatusCode();
 
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        var bundle = await JsonSerializer.DeserializeAsync<FhirBundle<FhirPatient>>(
-            stream, JsonOptions, cancellationToken);
+        var rawBody = await response.Content.ReadAsStringAsync(cancellationToken);
+        var bundle = JsonSerializer.Deserialize<FhirBundle<FhirPatient>>(rawBody, JsonOptions);
 
         if (bundle?.Entry is null || bundle.Entry.Count == 0)
         {

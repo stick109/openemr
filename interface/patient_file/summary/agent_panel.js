@@ -71,30 +71,49 @@
             parent.appendChild(claimText);
         }
 
-        function appendCitationLinks(parent, citationIds, citationLabels) {
+        function appendCitationLinks(parent, citationIds, citationInfo) {
             if (!Array.isArray(citationIds) || citationIds.length === 0) {
                 return;
             }
 
-            var labelMap = citationLabels instanceof Map ? citationLabels : null;
+            var infoMap = citationInfo instanceof Map ? citationInfo : null;
             var sourceContainer = document.createElement('span');
             sourceContainer.className = 'agent-panel__source-list text-muted';
             sourceContainer.appendChild(document.createTextNode(' ('));
             citationIds.forEach(function (citationId, index) {
-                var sourceLink = document.createElement('button');
-                sourceLink.type = 'button';
+                var info = infoMap ? infoMap.get(citationId) : null;
+                var citationLabel = info && info.label ? info.label : '';
+                var hoverLabel = citationLabel ? citationLabel : citationId;
+                var isExternal = isExternalGuidelineCitation(info);
+
+                var sourceLink;
+                if (isExternal) {
+                    // Guideline citations resolve to a published URL.
+                    // get_source_detail only knows how to look up OpenEMR
+                    // row IDs (the colon-segmented format), so for these
+                    // we render a real anchor that opens the guideline
+                    // source in a new tab. Falling through to
+                    // show_source would just trigger the
+                    // "server-issued citation source" validator.
+                    sourceLink = document.createElement('a');
+                    sourceLink.href = info.url;
+                    sourceLink.target = '_blank';
+                    sourceLink.rel = 'noopener noreferrer';
+                } else {
+                    sourceLink = document.createElement('button');
+                    sourceLink.type = 'button';
+                    sourceLink.addEventListener('click', function () {
+                        requestIntent('show_source', citationId);
+                    });
+                }
                 sourceLink.className = 'agent-panel__source-link btn btn-link p-0 align-baseline';
                 sourceLink.dataset.sourceId = citationId;
                 sourceLink.textContent = citationIds.length === 1
                     ? messages.source
                     : messages.source + ' ' + (index + 1);
-                var citationLabel = labelMap ? labelMap.get(citationId) : '';
-                var hoverLabel = citationLabel ? citationLabel : citationId;
                 sourceLink.setAttribute('title', hoverLabel);
                 sourceLink.setAttribute('aria-label', messages.sourceAria + ': ' + hoverLabel);
-                sourceLink.addEventListener('click', function () {
-                    requestIntent('show_source', citationId);
-                });
+
                 if (index > 0) {
                     sourceContainer.appendChild(document.createTextNode(', '));
                 }
@@ -104,32 +123,49 @@
             parent.appendChild(sourceContainer);
         }
 
-        function buildCitationLabelMap(citations) {
-            var labelMap = new Map();
+        function buildCitationInfoMap(citations) {
+            var infoMap = new Map();
             if (!Array.isArray(citations)) {
-                return labelMap;
+                return infoMap;
             }
             citations.forEach(function (citation) {
                 if (!citation || typeof citation !== 'object') {
                     return;
                 }
                 var sourceId = typeof citation.source_id === 'string' ? citation.source_id : '';
-                var label = typeof citation.label === 'string' ? citation.label : '';
-                if (sourceId !== '' && label !== '') {
-                    labelMap.set(sourceId, label);
+                if (sourceId === '') {
+                    return;
                 }
+                infoMap.set(sourceId, {
+                    label: typeof citation.label === 'string' ? citation.label : '',
+                    url: typeof citation.url === 'string' ? citation.url : '',
+                    sourceType: typeof citation.source_type === 'string' ? citation.source_type : ''
+                });
             });
-            return labelMap;
+            return infoMap;
         }
 
-        function appendCitationText(parent, citationIds, citationLabels) {
+        function isExternalGuidelineCitation(info) {
+            // External-link routing is restricted to guideline citations
+            // with an http(s) URL. Other source types resolve through
+            // get_source_detail; rejecting non-http(s) schemes here
+            // blocks ``javascript:``/``data:`` URLs from sneaking in
+            // through a malformed citation payload.
+            return !!info
+                && info.sourceType === 'guideline'
+                && typeof info.url === 'string'
+                && /^https?:\/\//i.test(info.url);
+        }
+
+        function appendCitationText(parent, citationIds, citationInfo) {
             if (!Array.isArray(citationIds) || citationIds.length === 0) {
                 return;
             }
 
-            var labelMap = citationLabels instanceof Map ? citationLabels : null;
+            var infoMap = citationInfo instanceof Map ? citationInfo : null;
             var rendered = citationIds.map(function (citationId) {
-                var label = labelMap ? labelMap.get(citationId) : '';
+                var info = infoMap ? infoMap.get(citationId) : null;
+                var label = info && info.label ? info.label : '';
                 return label ? label : citationId;
             });
             var citationContainer = document.createElement('span');
@@ -222,7 +258,7 @@
             }
 
             var citationRenderer = data.intent_id === 'show_source' ? appendCitationText : appendCitationLinks;
-            var citationLabels = buildCitationLabelMap(data.citations);
+            var citationInfo = buildCitationInfoMap(data.citations);
 
             (data.answer.answer_blocks || []).forEach(function (block) {
                 if (shouldShowBlockHeading(block, data)) {
@@ -245,7 +281,7 @@
                         || claimCitationKey === ''
                         || claimCitationKey !== previousCitationKey
                     ) {
-                        citationRenderer(item, claimCitationIds, citationLabels);
+                        citationRenderer(item, claimCitationIds, citationInfo);
                     }
                     previousCitationKey = claimCitationKey;
                     list.appendChild(item);
@@ -260,7 +296,7 @@
                 data.answer.missing_or_uncertain.forEach(function (item) {
                     var missingItem = document.createElement('li');
                     appendClaimText(missingItem, item.text || '');
-                    citationRenderer(missingItem, item.citation_ids, citationLabels);
+                    citationRenderer(missingItem, item.citation_ids, citationInfo);
                     missingList.appendChild(missingItem);
                 });
                 outputNode.appendChild(missingList);

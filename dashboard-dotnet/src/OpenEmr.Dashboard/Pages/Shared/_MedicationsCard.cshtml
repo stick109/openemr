@@ -1,0 +1,58 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@inject IConfiguration Cfg
+@model OpenEmr.Dashboard.Fhir.Records.CardResult<FhirMedicationRequest>
+@{
+    var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
+    var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
+    var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
+    // No clean per-row legacy editor for active meds; route to demographics.
+    string? RowLink() => hasOe
+        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+        : null;
+}
+<div class="card h-100">
+    <div class="card-header">Medications (active)</div>
+    @if (Model.HasError)
+    {
+        <div class="card-body">
+            <div class="alert alert-danger mb-0" role="alert">@Model.Error</div>
+        </div>
+    }
+    else if (Model.Data.Count == 0)
+    {
+        <div class="card-body text-muted">No active medications recorded.</div>
+    }
+    else
+    {
+        <ul class="list-group list-group-flush">
+            @foreach (var med in Model.Data)
+            {
+                var name = med.MedicationCodeableConcept?.Text ?? "(unspecified)";
+                var dose = med.FirstDosageText();
+                var authored = med.AuthoredOn;
+                var link = RowLink();
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                            <div class="fw-semibold">@name</div>
+                            @if (!string.IsNullOrWhiteSpace(dose))
+                            {
+                                <div class="small">@dose</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(authored))
+                            {
+                                <div class="text-muted small">authored @authored</div>
+                            }
+                        </div>
+                        @if (link is not null)
+                        {
+                            <a class="btn btn-sm btn-outline-primary text-nowrap"
+                               href="@link"
+                               aria-label="Open medication in OpenEMR">Open</a>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</div>

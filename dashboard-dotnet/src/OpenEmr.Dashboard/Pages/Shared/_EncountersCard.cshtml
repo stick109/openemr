@@ -1,0 +1,86 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@inject IConfiguration Cfg
+@model OpenEmr.Dashboard.Fhir.Records.CardResult<FhirEncounter>
+@{
+    var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
+    var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
+    var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
+    string? RowLink() => hasOe
+        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+        : null;
+
+    static string FormatRange(FhirPeriod? p)
+    {
+        if (p is null)
+        {
+            return string.Empty;
+        }
+        var start = p.Start ?? string.Empty;
+        var end = p.End ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(start) && string.IsNullOrWhiteSpace(end))
+        {
+            return string.Empty;
+        }
+        if (string.IsNullOrWhiteSpace(end))
+        {
+            return start;
+        }
+        return $"{start} → {end}";
+    }
+}
+<div class="card h-100">
+    <div class="card-header">Encounters</div>
+    @if (Model.HasError)
+    {
+        <div class="card-body">
+            <div class="alert alert-danger mb-0" role="alert">@Model.Error</div>
+        </div>
+    }
+    else if (Model.Data.Count == 0)
+    {
+        <div class="card-body text-muted">No encounters recorded.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Date</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Class</th>
+                        <th scope="col">Provider</th>
+                        <th scope="col">Reason</th>
+                        <th scope="col" class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var enc in Model.Data)
+                {
+                    var range = FormatRange(enc.Period);
+                    var type = enc.FirstTypeText() ?? string.Empty;
+                    var classCode = enc.Class?.Code ?? enc.Class?.Display ?? string.Empty;
+                    var provider = enc.FirstParticipantDisplay() ?? string.Empty;
+                    var reason = enc.FirstReasonText() ?? string.Empty;
+                    var link = RowLink();
+                    <tr>
+                        <td class="small">@range</td>
+                        <td class="small">@type</td>
+                        <td class="small font-monospace">@classCode</td>
+                        <td class="small">@provider</td>
+                        <td class="small">@reason</td>
+                        <td class="text-end">
+                            @if (link is not null)
+                            {
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="@link"
+                                   aria-label="Open encounter in OpenEMR">Open</a>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

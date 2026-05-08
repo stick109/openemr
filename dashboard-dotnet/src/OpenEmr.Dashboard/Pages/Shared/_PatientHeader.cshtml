@@ -1,5 +1,6 @@
 @using OpenEmr.Dashboard.Fhir.Records
 @using System.Globalization
+@inject IConfiguration Cfg
 @model OpenEmr.Dashboard.Fhir.Records.FhirPatient
 @functions {
     // Render full name as "Family, Given (Middle)" per plan §6. Falls back to
@@ -104,6 +105,21 @@
     var status = StatusBadge(patient);
     var dobDisplay = string.IsNullOrWhiteSpace(dob) ? "—" : dob;
     var ageDisplay = age.HasValue ? $"{age.Value} y" : "—";
+
+    // Resolve OPENEMR_PUBLIC_URL once for the back-nav links (plan §7b). Trim a
+    // trailing slash so the concatenated URLs do not end up with `//interface/...`.
+    var oeUrlRaw = Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty;
+    var oeUrl = oeUrlRaw.TrimEnd('/');
+    // The patient's local pid is the page route segment; when this partial
+    // is reached we always have one, so route through ViewContext.
+    var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
+    var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
+    var demographicsLink = hasOe
+        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+        : null;
+    var mainTabsLink = hasOe
+        ? $"{oeUrl}/interface/main/tabs/main.php?set_pid={Uri.EscapeDataString(pidValue)}"
+        : null;
 }
 <header class="bg-light border-bottom sticky-top py-2" aria-label="Patient header">
     <div class="container-fluid">
@@ -121,9 +137,24 @@
                 <span class="fw-semibold text-body">MRN</span>
                 <span class="font-monospace">@mrn</span>
             </div>
-            <span class="badge @status.CssClass ms-auto" aria-label="Patient status: @status.Label">
+            <span class="badge @status.CssClass" aria-label="Patient status: @status.Label">
                 @status.Label
             </span>
+            @if (hasOe)
+            {
+                <div class="ms-auto d-flex flex-wrap gap-2" aria-label="OpenEMR navigation">
+                    <a class="btn btn-sm btn-outline-secondary"
+                       href="@mainTabsLink"
+                       aria-label="Back to OpenEMR">
+                        &larr; Back to OpenEMR
+                    </a>
+                    <a class="btn btn-sm btn-outline-primary"
+                       href="@demographicsLink"
+                       aria-label="Open patient in OpenEMR">
+                        Open in OpenEMR
+                    </a>
+                </div>
+            }
         </div>
     </div>
 </header>

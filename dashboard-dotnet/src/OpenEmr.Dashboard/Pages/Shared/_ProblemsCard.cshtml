@@ -1,0 +1,86 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@inject IConfiguration Cfg
+@model OpenEmr.Dashboard.Fhir.Records.CardResult<FhirCondition>
+@{
+    var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
+    var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
+    var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
+
+    // Per plan §7b, problem-list rows route to the legacy add_edit_issue.php
+    // editor. The querystring uses `issue` for the row id and `thispid` for
+    // the patient (verified against interface/patient_file/summary/add_edit_issue.php).
+    string? IssueLink(string? issueId)
+    {
+        if (!hasOe || string.IsNullOrWhiteSpace(issueId))
+        {
+            return null;
+        }
+        return $"{oeUrl}/interface/patient_file/summary/add_edit_issue.php"
+            + $"?issue={Uri.EscapeDataString(issueId)}"
+            + $"&thispid={Uri.EscapeDataString(pidValue)}";
+    }
+}
+<div class="card h-100">
+    <div class="card-header">Problem List</div>
+    @if (Model.HasError)
+    {
+        <div class="card-body">
+            <div class="alert alert-danger mb-0" role="alert">@Model.Error</div>
+        </div>
+    }
+    else if (Model.Data.Count == 0)
+    {
+        <div class="card-body text-muted">No problems recorded.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Problem</th>
+                        <th scope="col">Code</th>
+                        <th scope="col">Onset</th>
+                        <th scope="col">Status</th>
+                        <th scope="col" class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var c in Model.Data)
+                {
+                    var coding = c.FirstCoding();
+                    var display = coding?.Display ?? c.Code?.Text ?? "(unspecified)";
+                    var code = coding?.Code ?? string.Empty;
+                    var onset = c.OnsetDateTime ?? c.RecordedDate ?? string.Empty;
+                    var clinical = c.ClinicalStatusCode();
+                    var verified = c.VerificationStatusCode();
+                    var link = IssueLink(c.Id);
+                    <tr>
+                        <td>@display</td>
+                        <td class="font-monospace small">@code</td>
+                        <td class="small">@onset</td>
+                        <td class="small">
+                            @if (!string.IsNullOrWhiteSpace(clinical))
+                            {
+                                <span class="badge bg-light text-dark border me-1">@clinical</span>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(verified))
+                            {
+                                <span class="badge bg-light text-dark border">@verified</span>
+                            }
+                        </td>
+                        <td class="text-end">
+                            @if (link is not null)
+                            {
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="@link"
+                                   aria-label="Open problem in OpenEMR">Open</a>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

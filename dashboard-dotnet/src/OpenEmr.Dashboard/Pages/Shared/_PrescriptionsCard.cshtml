@@ -1,0 +1,67 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@inject IConfiguration Cfg
+@model OpenEmr.Dashboard.Fhir.Records.CardResult<FhirMedicationRequest>
+@{
+    var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
+    var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
+    var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
+    string? RowLink() => hasOe
+        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+        : null;
+}
+<div class="card h-100">
+    <div class="card-header">Prescriptions (history)</div>
+    @if (Model.HasError)
+    {
+        <div class="card-body">
+            <div class="alert alert-danger mb-0" role="alert">@Model.Error</div>
+        </div>
+    }
+    else if (Model.Data.Count == 0)
+    {
+        <div class="card-body text-muted">No prescription history recorded.</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th scope="col">Drug</th>
+                        <th scope="col">Dose</th>
+                        <th scope="col">Status</th>
+                        <th scope="col">Authored</th>
+                        <th scope="col" class="text-end">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                @foreach (var med in Model.Data)
+                {
+                    var name = med.MedicationCodeableConcept?.Text ?? "(unspecified)";
+                    var dose = med.FirstDosageText() ?? string.Empty;
+                    var link = RowLink();
+                    <tr>
+                        <td>@name</td>
+                        <td class="small">@dose</td>
+                        <td class="small">
+                            @if (!string.IsNullOrWhiteSpace(med.Status))
+                            {
+                                <span class="badge bg-light text-dark border">@med.Status</span>
+                            }
+                        </td>
+                        <td class="small">@(med.AuthoredOn ?? string.Empty)</td>
+                        <td class="text-end">
+                            @if (link is not null)
+                            {
+                                <a class="btn btn-sm btn-outline-primary"
+                                   href="@link"
+                                   aria-label="Open prescription in OpenEMR">Open</a>
+                            }
+                        </td>
+                    </tr>
+                }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>

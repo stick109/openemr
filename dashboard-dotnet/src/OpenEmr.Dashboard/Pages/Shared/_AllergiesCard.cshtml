@@ -1,0 +1,73 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@inject IConfiguration Cfg
+@model OpenEmr.Dashboard.Fhir.Records.CardResult<FhirAllergy>
+@{
+    var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
+    var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
+    var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
+    // Allergies do not have a clean per-row legacy editor; route per-row links
+    // back to the demographics page with the patient already selected.
+    string? RowLink() => hasOe
+        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+        : null;
+
+    static string CriticalityBadgeClass(string? criticality) => criticality?.ToLowerInvariant() switch
+    {
+        "high" => "bg-danger",
+        "low" => "bg-warning text-dark",
+        "unable-to-assess" => "bg-secondary",
+        _ => "bg-secondary",
+    };
+}
+<div class="card h-100">
+    <div class="card-header">Allergies</div>
+    @if (Model.HasError)
+    {
+        <div class="card-body">
+            <div class="alert alert-danger mb-0" role="alert">@Model.Error</div>
+        </div>
+    }
+    else if (Model.Data.Count == 0)
+    {
+        <div class="card-body text-muted">No active allergies recorded.</div>
+    }
+    else
+    {
+        <ul class="list-group list-group-flush">
+            @foreach (var allergy in Model.Data)
+            {
+                var substance = allergy.Code?.Text ?? "(unspecified)";
+                var statusCode = allergy.ClinicalStatusCode();
+                var reaction = allergy.FirstReactionText();
+                var rowLink = RowLink();
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start gap-2">
+                        <div>
+                            <div class="fw-semibold">@substance</div>
+                            <div class="small text-muted">
+                                @if (!string.IsNullOrWhiteSpace(allergy.Criticality))
+                                {
+                                    <span class="badge @CriticalityBadgeClass(allergy.Criticality) me-1">@allergy.Criticality</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(statusCode))
+                                {
+                                    <span class="badge bg-light text-dark border me-1">@statusCode</span>
+                                }
+                                @if (!string.IsNullOrWhiteSpace(reaction))
+                                {
+                                    <span>@reaction</span>
+                                }
+                            </div>
+                        </div>
+                        @if (rowLink is not null)
+                        {
+                            <a class="btn btn-sm btn-outline-primary text-nowrap"
+                               href="@rowLink"
+                               aria-label="Open allergy in OpenEMR">Open</a>
+                        }
+                    </div>
+                </li>
+            }
+        </ul>
+    }
+</div>

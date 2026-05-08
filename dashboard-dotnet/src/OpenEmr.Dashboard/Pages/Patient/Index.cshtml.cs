@@ -54,17 +54,25 @@ public sealed class IndexModel : PageModel
         this.Mrn = FhirPatientRecord.ExtractMrn(patient);
         this.DisplayName = BuildDisplayName(patient);
 
+        // The card fetchers want the FHIR uuid, not the local pid: identifier
+        // search above translated pid → uuid, and downstream search params on
+        // the FHIR resources expect `patient={uuid}`. Bail with empty results
+        // if the patient has no id (defensive — OpenEMR always emits one).
+        var uuid = patient.Id;
+        if (string.IsNullOrWhiteSpace(uuid))
+        {
+            return this.Page();
+        }
+
         // Fan-out: each card gets its own task wrapped in a try/catch, so a
         // single FHIR call's failure surfaces inside that card without
-        // breaking the whole page. T11-T15 replace the no-op fetchers with
-        // real FhirClient calls; this scaffold defines the latency contract
-        // (slowest task governs OnGetAsync wall time).
-        var allergiesTask = SafeFetchAsync(NoopFetchAsync<FhirAllergy>, cancellationToken);
-        var problemsTask = SafeFetchAsync(NoopFetchAsync<FhirCondition>, cancellationToken);
-        var medicationsTask = SafeFetchAsync(NoopFetchAsync<FhirMedicationRequest>, cancellationToken);
-        var prescriptionsTask = SafeFetchAsync(NoopFetchAsync<FhirMedicationRequest>, cancellationToken);
-        var careTeamTask = SafeFetchAsync(NoopFetchAsync<FhirCareTeam>, cancellationToken);
-        var encountersTask = SafeFetchAsync(NoopFetchAsync<FhirEncounter>, cancellationToken);
+        // breaking the whole page. Total wall time is the slowest endpoint.
+        var allergiesTask = SafeFetchAsync(ct => this.fhirClient.GetAllergiesAsync(uuid, ct), cancellationToken);
+        var problemsTask = SafeFetchAsync(ct => this.fhirClient.GetProblemsAsync(uuid, ct), cancellationToken);
+        var medicationsTask = SafeFetchAsync(ct => this.fhirClient.GetActiveMedicationsAsync(uuid, ct), cancellationToken);
+        var prescriptionsTask = SafeFetchAsync(ct => this.fhirClient.GetPrescriptionsAsync(uuid, ct), cancellationToken);
+        var careTeamTask = SafeFetchAsync(ct => this.fhirClient.GetCareTeamAsync(uuid, ct), cancellationToken);
+        var encountersTask = SafeFetchAsync(ct => this.fhirClient.GetEncountersAsync(uuid, ct), cancellationToken);
 
         await Task.WhenAll(
             allergiesTask,
@@ -122,11 +130,4 @@ public sealed class IndexModel : PageModel
             return CardResult<T>.Failure(ex.Message);
         }
     }
-
-    /// <summary>
-    /// Placeholder fetcher returning an empty success. T11-T15 swap this for
-    /// real FhirClient calls (e.g. GetAllergiesByPatientAsync).
-    /// </summary>
-    private static Task<CardResult<T>> NoopFetchAsync<T>(CancellationToken _) =>
-        Task.FromResult(CardResult<T>.Empty);
 }

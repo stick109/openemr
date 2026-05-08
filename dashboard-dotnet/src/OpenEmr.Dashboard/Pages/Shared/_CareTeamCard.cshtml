@@ -1,0 +1,65 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@inject IConfiguration Cfg
+@model OpenEmr.Dashboard.Fhir.Records.CardResult<FhirCareTeam>
+@{
+    var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
+    var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
+    var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
+    string? RowLink() => hasOe
+        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+        : null;
+}
+<div class="card h-100">
+    <div class="card-header">Care Team</div>
+    @if (Model.HasError)
+    {
+        <div class="card-body">
+            <div class="alert alert-danger mb-0" role="alert">@Model.Error</div>
+        </div>
+    }
+    else if (Model.Data.Count == 0)
+    {
+        <div class="card-body text-muted">No care team members recorded.</div>
+    }
+    else
+    {
+        <ul class="list-group list-group-flush">
+            @foreach (var team in Model.Data)
+            {
+                if (team.Participant is null || team.Participant.Count == 0)
+                {
+                    continue;
+                }
+                foreach (var p in team.Participant)
+                {
+                    var memberName = p.Member?.Display ?? "(unnamed)";
+                    var role = p.FirstRoleText();
+                    var link = RowLink();
+                    <li class="list-group-item">
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <div class="fw-semibold">@memberName</div>
+                                <div class="small text-muted">
+                                    @if (!string.IsNullOrWhiteSpace(role))
+                                    {
+                                        <span>@role</span>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(team.Status))
+                                    {
+                                        <span class="badge bg-light text-dark border ms-1">@team.Status</span>
+                                    }
+                                </div>
+                            </div>
+                            @if (link is not null)
+                            {
+                                <a class="btn btn-sm btn-outline-primary text-nowrap"
+                                   href="@link"
+                                   aria-label="Open care team in OpenEMR">Open</a>
+                            }
+                        </div>
+                    </li>
+                }
+            }
+        </ul>
+    }
+</div>

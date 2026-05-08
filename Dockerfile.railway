@@ -24,3 +24,14 @@ RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --opt
 RUN mkdir -p /var/uploads/agent \
     && chown apache:apache /var/uploads/agent \
     && chmod 0755 /var/uploads/agent
+
+# Replace the base image's CMD with a Railway-specific wrapper that re-syncs
+# OPENEMR_SETTING_* env vars into the globals table on every container start.
+# The pinned openemr/openemr image only applies those settings inside its
+# first-boot auto_setup path, so without this wrapper a Railway env var change
+# never takes effect after the initial deploy. The COPY above already placed
+# the scripts under docker/railway/; we just need to make them executable —
+# the build context comes from a Windows checkout, which loses the +x bit.
+RUN chmod 0755 /var/www/localhost/htdocs/openemr/docker/railway/entrypoint.sh \
+                /var/www/localhost/htdocs/openemr/docker/railway/sync-openemr-settings.sh
+CMD ["./docker/railway/entrypoint.sh"]

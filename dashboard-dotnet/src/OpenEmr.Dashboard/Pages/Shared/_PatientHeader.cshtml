@@ -1,0 +1,129 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@using System.Globalization
+@model OpenEmr.Dashboard.Fhir.Records.FhirPatient
+@functions {
+    // Render full name as "Family, Given (Middle)" per plan §6. Falls back to
+    // the helper from FhirPatient when no official/usual name is present.
+    private static string DisplayName(FhirPatient patient)
+    {
+        var name = FhirPatient.PreferredName(patient);
+        if (name is null)
+        {
+            return "(unnamed patient)";
+        }
+
+        var family = name.Family ?? string.Empty;
+        var givenList = name.Given ?? Array.Empty<string>();
+        var first = givenList.Count > 0 ? givenList[0] : string.Empty;
+        var middle = givenList.Count > 1 ? string.Join(' ', givenList.Skip(1)) : string.Empty;
+
+        // "Smith, John (Q)"; degrade gracefully when components are missing.
+        var givenPart = string.IsNullOrWhiteSpace(middle) ? first : $"{first} ({middle})";
+        if (!string.IsNullOrWhiteSpace(family) && !string.IsNullOrWhiteSpace(givenPart))
+        {
+            return $"{family}, {givenPart}";
+        }
+
+        var combined = string.Join(' ', new[] { givenPart, family }
+            .Where(part => !string.IsNullOrWhiteSpace(part)));
+        return string.IsNullOrWhiteSpace(combined) ? "(unnamed patient)" : combined;
+    }
+
+    // Compute integer age from a birthDate string. Treats Feb 29 as Mar 1 in
+    // non-leap years so the age does not skip a day. Returns null when the
+    // birthDate is missing or unparseable so the view can render an em-dash.
+    private static int? AgeFromBirthDate(string? birthDate)
+    {
+        if (string.IsNullOrWhiteSpace(birthDate))
+        {
+            return null;
+        }
+
+        if (!DateOnly.TryParseExact(
+                birthDate,
+                new[] { "yyyy-MM-dd", "yyyy-MM", "yyyy" },
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var dob))
+        {
+            return null;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var years = today.Year - dob.Year;
+
+        // Build the "this year's birthday". If the DOB is Feb 29 and the
+        // current year is non-leap, anchor to Mar 1 — never throw.
+        DateOnly anniversary;
+        if (dob.Month == 2 && dob.Day == 29 && !DateTime.IsLeapYear(today.Year))
+        {
+            anniversary = new DateOnly(today.Year, 3, 1);
+        }
+        else
+        {
+            anniversary = new DateOnly(today.Year, dob.Month, dob.Day);
+        }
+
+        if (today < anniversary)
+        {
+            years -= 1;
+        }
+
+        return years < 0 ? 0 : years;
+    }
+
+    private static (string Label, string CssClass) StatusBadge(FhirPatient patient)
+    {
+        if (patient.DeceasedBoolean == true)
+        {
+            return ("Deceased", "bg-danger");
+        }
+
+        if (patient.Active == false)
+        {
+            return ("Inactive", "bg-secondary");
+        }
+
+        // Default to Active when active=true, or active is unset (FHIR servers
+        // routinely omit the field for currently-active patients).
+        return ("Active", "bg-success");
+    }
+
+    private static string GenderDisplay(string? gender) =>
+        string.IsNullOrWhiteSpace(gender)
+            ? "unknown"
+            : char.ToUpperInvariant(gender[0]) + gender[1..].ToLowerInvariant();
+}
+@{
+    var patient = Model;
+    var name = DisplayName(patient);
+    var dob = patient.BirthDate;
+    var age = AgeFromBirthDate(dob);
+    var gender = GenderDisplay(patient.Gender);
+    var mrn = FhirPatient.ExtractMrn(patient) ?? "(none)";
+    var status = StatusBadge(patient);
+    var dobDisplay = string.IsNullOrWhiteSpace(dob) ? "—" : dob;
+    var ageDisplay = age.HasValue ? $"{age.Value} y" : "—";
+}
+<header class="bg-light border-bottom sticky-top py-2" aria-label="Patient header">
+    <div class="container-fluid">
+        <div class="d-flex flex-wrap align-items-center gap-3">
+            <h1 class="h4 mb-0 me-3" aria-label="Patient name">@name</h1>
+            <div class="text-muted small" aria-label="Date of birth and age">
+                <span class="fw-semibold text-body">DOB</span>
+                <span>@dobDisplay</span>
+                <span class="mx-1">·</span>
+                <span>@ageDisplay</span>
+            </div>
+            <span class="badge rounded-pill bg-info-subtle text-info-emphasis border border-info-subtle"
+                  aria-label="Gender @gender">@gender</span>
+            <div class="text-muted small ms-md-2" aria-label="Medical record number">
+                <span class="fw-semibold text-body">MRN</span>
+                <span class="font-monospace">@mrn</span>
+            </div>
+            <span class="badge @status.CssClass ms-auto" aria-label="Patient status: @status.Label">
+                @status.Label
+            </span>
+        </div>
+    </div>
+</header>

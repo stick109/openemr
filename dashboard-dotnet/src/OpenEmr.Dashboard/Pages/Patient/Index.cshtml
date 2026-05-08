@@ -4,19 +4,59 @@
     ViewData["Title"] = $"Patient {Model.Pid}";
 }
 
-<div class="px-4 py-4">
-    <h1 class="display-6">@Model.DisplayName</h1>
-    <dl class="row mb-0">
-        <dt class="col-sm-2">MRN</dt>
-        <dd class="col-sm-10">@(Model.Mrn ?? "(none)")</dd>
+@if (Model.FhirPatient is not null)
+{
+    <partial name="_PatientHeader" model="Model.FhirPatient" />
+}
 
-        <dt class="col-sm-2">Date of birth</dt>
-        <dd class="col-sm-10">@(Model.FhirPatient?.BirthDate ?? "(unknown)")</dd>
+<div class="container-fluid py-3">
+    <div class="row g-3">
+        @* T11 swaps this placeholder for: <partial name="_AllergiesCard" model="Model.Allergies" /> *@
+        <div class="col-12 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Allergies</div>
+                <div class="card-body text-muted">Loading...</div>
+            </div>
+        </div>
 
-        <dt class="col-sm-2">Local pid</dt>
-        <dd class="col-sm-10">@Model.Pid</dd>
-    </dl>
-    <p class="text-muted small mt-3 mb-0">
-        Header partial and clinical cards land in subsequent tasks (T9-T10).
-    </p>
+        @* T12 swaps this placeholder for: <partial name="_ProblemsCard" model="Model.Problems" /> *@
+        <div class="col-12 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Problem List</div>
+                <div class="card-body text-muted">Loading...</div>
+            </div>
+        </div>
+
+        @* T13 swaps this placeholder for: <partial name="_MedicationsCard" model="Model.Medications" /> *@
+        <div class="col-12 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Medications (active)</div>
+                <div class="card-body text-muted">Loading...</div>
+            </div>
+        </div>
+
+        @* T13 swaps this placeholder for: <partial name="_PrescriptionsCard" model="Model.Prescriptions" /> *@
+        <div class="col-12 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Prescriptions (history)</div>
+                <div class="card-body text-muted">Loading...</div>
+            </div>
+        </div>
+
+        @* T14 swaps this placeholder for: <partial name="_CareTeamCard" model="Model.CareTeam" /> *@
+        <div class="col-12 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Care Team</div>
+                <div class="card-body text-muted">Loading...</div>
+            </div>
+        </div>
+
+        @* T15 swaps this placeholder for: <partial name="_EncountersCard" model="Model.Encounters" /> *@
+        <div class="col-12 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header">Encounters</div>
+                <div class="card-body text-muted">Loading...</div>
+            </div>
+        </div>
+    </div>
 </div>

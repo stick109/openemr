@@ -112,7 +112,20 @@ function Get-ComposeDirectory {
 function Invoke-DockerCompose {
     param([string[]]$ComposeArguments)
 
-    & docker compose --project-name $ProjectName @ComposeArguments
+    # Windows PowerShell 5.1 wraps each native-command stderr line as a
+    # NativeCommandError. ``docker compose up`` prints progress messages
+    # ("Network ... Created", "Container ... Started") to stderr, which
+    # would terminate the pipeline under the script's
+    # ``$ErrorActionPreference = 'Stop'``. Drop to ``Continue`` for just
+    # the compose call and use ``$LASTEXITCODE`` for the real outcome.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & docker compose --project-name $ProjectName @ComposeArguments
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "docker compose $($ComposeArguments -join ' ') failed with exit code $LASTEXITCODE."
     }

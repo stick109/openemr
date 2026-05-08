@@ -65,7 +65,23 @@ function Invoke-DockerBuild {
     $arguments += $ImageName
     $arguments += $Context
 
-    & docker @arguments
+    # Windows PowerShell 5.1 wraps each line a native command writes to
+    # stderr as a NativeCommandError ErrorRecord. ``docker build`` prints
+    # buildkit progress to stderr ("#0 building with...", "#1 [internal]
+    # load build definition", etc.), so under ``$ErrorActionPreference =
+    # 'Stop'`` (set at the top of this script) the first such line
+    # terminates the pipeline before ``$LASTEXITCODE`` can be checked.
+    # Switch to ``Continue`` for just the docker call so progress output
+    # does not abort the build, then restore the prior preference and
+    # rely on ``$LASTEXITCODE`` for the real success/failure signal.
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & docker @arguments
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
     if ($LASTEXITCODE -ne 0) {
         throw "docker $($arguments -join ' ') failed with exit code $LASTEXITCODE."
     }

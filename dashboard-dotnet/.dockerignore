@@ -1,8 +1,9 @@
-bin/
-obj/
+**/bin/
+**/obj/
+**/*.user
+**/.vs/
+**/TestResults/
 tests/
-*.user
-.vs/
 Dockerfile
 .dockerignore
 .git

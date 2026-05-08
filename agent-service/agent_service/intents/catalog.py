@@ -443,7 +443,10 @@ _FREE_TEXT: Final[IntentDefinition] = IntentDefinition(
     goal_template="Answer the clinician's free-form question.",
     # Free-text questions are open-ended -- the model needs the union of
     # the read-only chart tools so it can pick the right one(s) based on
-    # what the clinician actually asked.
+    # what the clinician actually asked. ``retrieve_guidelines`` is
+    # included so the model can ground answers about treatment
+    # recommendations, screening, etc. in the bundled clinical-guideline
+    # corpus when no patient-chart tool fits the question.
     allowed_tools=(
         "get_basic_patient_data",
         "get_current_medications",
@@ -451,12 +454,16 @@ _FREE_TEXT: Final[IntentDefinition] = IntentDefinition(
         "get_recent_events",
         "get_changes_since_last_visit",
         "get_source_detail",
+        "retrieve_guidelines",
     ),
     # Mirrors PHP AgentIntentCatalog::FREE_TEXT max_records=30.
     max_rows=30,
     # Mirrors PHP AgentIntentCatalog::FREE_TEXT lookback_days=365.
     lookback_days=365,
     # Union of source types the read tools above can surface.
+    # ``guidelines`` matches ``retrieve_guidelines.source_types``; without
+    # it the executor's ``_has_required_source_types`` guard would short-
+    # circuit the tool call before the RAG pipeline ever runs.
     allowed_source_types=(
         "patient_record",
         "medications",
@@ -466,6 +473,7 @@ _FREE_TEXT: Final[IntentDefinition] = IntentDefinition(
         "labs",
         "encounters",
         "procedures",
+        "guidelines",
     ),
 )
 

@@ -115,6 +115,11 @@ final class AgentAccessBroker
                 'allergies',
                 'problems',
                 'document',
+                // Plural ``guidelines`` matches ``retrieve_guidelines``'
+                // ``source_types`` tuple; the executor short-circuits
+                // unless the run context's allowed source types include
+                // it.
+                'guidelines',
                 // Citation-ID prefixes used by ``get_source_detail``.
                 'demographics',
                 'medication',
@@ -124,12 +129,19 @@ final class AgentAccessBroker
                 'problem',
                 'result',
                 'encounter',
+                // Singular ``guideline`` is the leading segment of every
+                // citation emitted by ``retrieve_guidelines`` (e.g.
+                // ``guideline:uspstf-diabetes-screening-001``); needed so
+                // ``get_source_detail`` drilldown on those citations is
+                // not refused.
+                'guideline',
             ],
             'tools' => [
                 'get_basic_patient_data',
                 'get_recent_events',
                 'get_changes_since_last_visit',
                 'get_source_detail',
+                'retrieve_guidelines',
             ],
         ],
         [

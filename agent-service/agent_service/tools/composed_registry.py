@@ -17,12 +17,13 @@ This module composes the three real registries minted in earlier steps:
   (M12) -- four document/lab/intake tools (extractor, RAG, lab proposal,
   citation region).
 
-Document tools that depend on a configured pipeline / citation index
-(``retrieve_guidelines``, ``get_document_citation_region``) are wired
-with ``None`` for those resources; M12 already handles ``None`` by
-returning a deterministic empty result bag with a typed warning, so the
-agent loop's success path is exercisable in production until those
-collaborators land in later milestones.
+``retrieve_guidelines`` is wired with a ``pipeline_factory`` that loads
+the bundled clinical-guideline corpus and builds sparse + dense indexes
+once at first use; the indexes are immutable after construction so we
+share them across pipeline instances. ``get_document_citation_region``
+still has no ``citation_lookup`` -- M12 returns an empty result bag with
+a typed warning when the lookup is absent, so the tool stays advertisable
+until that collaborator lands.
 
 Public surface:
 
@@ -33,7 +34,14 @@ Public surface:
 
 from __future__ import annotations
 
+import functools
+
 from agent_service.auth.copilot_run_context import CopilotRunContext
+from agent_service.rag.bm25_index import BM25Index
+from agent_service.rag.corpus_loader import load_corpus
+from agent_service.rag.dense_index import DenseIndex, fake_embed
+from agent_service.rag.pipeline import RAGPipeline
+from agent_service.rag.reranker import FakeReranker
 from agent_service.repository.openemr import OpenEmrReadRepository
 from agent_service.tools.document_tools import document_tool_registry
 from agent_service.tools.patient_evidence_tools import (
@@ -44,6 +52,44 @@ from agent_service.tools.source_drilldown import source_drilldown_tool_registry
 
 
 __all__ = ["compose_production_registry"]
+
+
+@functools.cache
+def _local_rag_indexes() -> tuple[BM25Index, DenseIndex]:
+    """Load the bundled clinical-guideline corpus and build sparse + dense indexes.
+
+    Cached at module level: the corpus is immutable once loaded and the
+    indexes are non-trivial to build, so subsequent calls reuse the same
+    instances. Cache key is the empty argument tuple, so a single set of
+    indexes is shared across all pipeline factory invocations within a
+    process.
+    """
+    chunks = load_corpus()
+    return (
+        BM25Index(chunks),
+        DenseIndex.from_chunks_with_fake_embeddings(chunks, dim=64),
+    )
+
+
+def _build_local_rag_pipeline() -> RAGPipeline:
+    """Factory returning a fresh ``RAGPipeline`` over the bundled local corpus.
+
+    ``RAGPipeline`` is cheap to construct (it holds references to the
+    cached indexes plus a stateless reranker), so a new instance per tool
+    call satisfies the per-call factory contract M12 expects without any
+    per-call indexing cost.
+
+    The reranker and embedder are the deterministic local fakes
+    (``FakeReranker``, ``fake_embed``) so this wiring works without any
+    external service or downloaded model.
+    """
+    bm25, dense = _local_rag_indexes()
+    return RAGPipeline(
+        bm25_index=bm25,
+        dense_index=dense,
+        reranker=FakeReranker(),
+        embed_fn=lambda q: fake_embed(q, dim=64),
+    )
 
 
 def compose_production_registry(
@@ -70,12 +116,12 @@ def compose_production_registry(
     future tool starts colliding, the agent loop will fail loudly at
     request time rather than silently masking a bug.
 
-    Document tools (``retrieve_guidelines``,
-    ``get_document_citation_region``) are wired without a pipeline
-    factory or citation lookup. M12 already handles a ``None`` for those
-    resources by returning an empty result bag with a typed warning, so
-    the tool stays advertisable but degrades gracefully until the real
-    collaborators are wired (M13/M21).
+    ``retrieve_guidelines`` receives :func:`_build_local_rag_pipeline` so
+    the RAG tool returns real chunks from the bundled corpus.
+    ``get_document_citation_region`` still has no citation lookup; M12
+    handles ``None`` for that resource by returning an empty result bag
+    with a typed warning, so the tool stays advertisable until the
+    collaborator lands (M21).
     """
     del context  # unused today; reserved for per-run registry tailoring.
 
@@ -83,10 +129,7 @@ def compose_production_registry(
     for source in (
         patient_evidence_tool_registry(repository),
         source_drilldown_tool_registry(repository),
-        # ``pipeline_factory`` and ``citation_lookup`` intentionally
-        # left unset until those collaborators land. M12 gracefully
-        # surfaces a typed warning when they are absent.
-        document_tool_registry(),
+        document_tool_registry(pipeline_factory=_build_local_rag_pipeline),
     ):
         for name in source.list_names():
             composed.register(source.get(name))

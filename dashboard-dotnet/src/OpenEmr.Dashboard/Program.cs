@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
+using OpenEmr.Dashboard.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 var cfg = builder.Configuration;
@@ -24,6 +25,7 @@ builder.Services.AddAuthentication(o =>
     o.CallbackPath = "/signin-oidc";
     o.SignedOutCallbackPath = "/signout-callback-oidc";
     o.RequireHttpsMetadata = !env.IsDevelopment();
+    o.BackchannelHttpHandler = new OpenEmrDiscoveryFixupHandler { InnerHandler = new HttpClientHandler() };
     o.Scope.Clear();
     foreach (var s in new[]
     {

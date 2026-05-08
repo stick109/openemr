@@ -1,5 +1,5 @@
 param(
-    [string]$ProjectName = "openemr"
+    [string]$ProjectName = "development-easy"
 )
 
 $ErrorActionPreference = "Stop"

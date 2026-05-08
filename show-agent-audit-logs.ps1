@@ -12,7 +12,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI was not found. Install Docker Desktop, then run this script again."
 }
 
-$ProjectName = "openemr"
+$ProjectName = "development-easy"
 
 # Both queries anchor their cutoff in MySQL via NOW() - INTERVAL so we do not
 # have to reconcile the host clock against the container clock.

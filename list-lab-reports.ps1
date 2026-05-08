@@ -17,7 +17,7 @@ param(
     [Parameter(Mandatory, ParameterSetName = "All")]
     [switch]$All,
 
-    [string]$ProjectName = "openemr",
+    [string]$ProjectName = "development-easy",
     [string]$ReportsDir
 )
 

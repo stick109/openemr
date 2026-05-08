@@ -120,7 +120,7 @@ param(
     [Switch]$SkipDocker,
     [string]$AgentUrl = "http://localhost:8010",
     [string]$Secret,
-    [string]$ComposeProject = "openemr"
+    [string]$ComposeProject = "development-easy"
 )
 
 $ErrorActionPreference = "Continue"

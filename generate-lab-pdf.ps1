@@ -17,7 +17,7 @@
 
 param(
     [Parameter(Mandatory)][int]$PatientId,
-    [string]$ProjectName = "openemr",
+    [string]$ProjectName = "development-easy",
     [string]$Panel,
     [string]$Model = "gpt-4o-mini",
     [string]$OutFile,

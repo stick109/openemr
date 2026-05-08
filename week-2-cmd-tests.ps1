@@ -296,7 +296,7 @@ function Invoke-SlowTests {
 
     # Live HTTP smoke tests against the running agent-service sidecar.
     # The script is self-contained: it has its own group skipping,
-    # docker-project detection (via `docker compose -p openemr`), and
+    # docker-project detection (via `docker compose -p development-easy`), and
     # graceful behaviour when the sidecar is unreachable. We invoke it
     # as a child script and let its exit code drive PASS/FAIL here.
     # Skipped under -SkipDocker since the suite needs a running stack

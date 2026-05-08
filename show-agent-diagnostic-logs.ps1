@@ -13,7 +13,7 @@ if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker CLI was not found. Install Docker Desktop, then run this script again."
 }
 
-$ProjectName = "openemr"
+$ProjectName = "development-easy"
 $culture = [System.Globalization.CultureInfo]::InvariantCulture
 
 function Find-JsonSegmentEnd {

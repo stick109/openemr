@@ -433,7 +433,7 @@ if ($SkipDocker) {
     Test-Step "Docker: compose config validates (S23)" {
         Push-Location "docker/development-easy"
         try {
-            & docker compose --project-name openemr config --quiet
+            & docker compose --project-name development-easy config --quiet
             if ($LASTEXITCODE -ne 0) { throw "compose config returned $LASTEXITCODE" }
         } finally { Pop-Location }
     }
@@ -441,7 +441,7 @@ if ($SkipDocker) {
     # Try /healthz only if the agent-service container is actually running.
     $sidecarRunning = $false
     try {
-        $ps = & docker compose --project-name openemr ps --services --filter "status=running" 2>$null
+        $ps = & docker compose --project-name development-easy ps --services --filter "status=running" 2>$null
         if ($ps -match 'agent-service') { $sidecarRunning = $true }
     } catch {}
 
@@ -458,13 +458,13 @@ if ($SkipDocker) {
     # DB checks - require mysql container running
     $mysqlRunning = $false
     try {
-        $ps = & docker compose --project-name openemr ps --services --filter "status=running" 2>$null
+        $ps = & docker compose --project-name development-easy ps --services --filter "status=running" 2>$null
         if ($ps -match '^mysql$') { $mysqlRunning = $true }
     } catch {}
 
     if ($mysqlRunning) {
         Test-Step "Docker: form_upload_intake_form_citation table exists (S17 / Option B)" {
-            $out = & docker compose --project-name openemr exec -T mysql mariadb -uroot -proot openemr -e "SHOW TABLES LIKE 'form_upload_intake_form_citation';" 2>&1
+            $out = & docker compose --project-name development-easy exec -T mysql mariadb -uroot -proot openemr -e "SHOW TABLES LIKE 'form_upload_intake_form_citation';" 2>&1
             if ($LASTEXITCODE -ne 0) { throw "mariadb query failed: $out" }
             if ($out -notmatch 'form_upload_intake_form_citation') {
                 throw "table form_upload_intake_form_citation not found - if Option B has not been merged, register the form via Admin -> Forms -> Forms Administration"
@@ -473,7 +473,7 @@ if ($SkipDocker) {
         }
 
         Test-Step "Docker: registry row for upload_intake_form (S14 / Option B)" {
-            $out = & docker compose --project-name openemr exec -T mysql mariadb -uroot -proot openemr -N -B -e "SELECT name, state FROM registry WHERE directory='upload_intake_form';" 2>&1
+            $out = & docker compose --project-name development-easy exec -T mysql mariadb -uroot -proot openemr -N -B -e "SELECT name, state FROM registry WHERE directory='upload_intake_form';" 2>&1
             if ($LASTEXITCODE -ne 0) { throw "mariadb query failed: $out" }
             if (-not $out -or $out -notmatch '\S') {
                 throw "no registry row for upload_intake_form - if Option B has not been merged, register the form via Admin -> Forms -> Forms Administration"

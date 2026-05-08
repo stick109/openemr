@@ -2,7 +2,7 @@ param(
     [ValidateSet("development-easy", "development-easy-light", "development-easy-redis", "production")]
     [string]$Profile = "development-easy",
 
-    [string]$ProjectName = "openemr",
+    [string]$ProjectName = "development-easy",
 
     [int]$DockerStartupTimeoutSeconds = 120,
 

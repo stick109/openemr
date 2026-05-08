@@ -22,7 +22,7 @@ param(
     [Parameter(Mandatory)]
     [ValidateSet('Demographics', 'MedicalHistory', 'Consent')]
     [string]$FormType,
-    [string]$ProjectName = "openemr",
+    [string]$ProjectName = "development-easy",
     [string]$Model = "gpt-4o-mini",
     [string]$OutFile,
     [int]$Seed,

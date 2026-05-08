@@ -560,14 +560,14 @@ if ($SkipDocker) {
     Test-Step "Docker: compose config validates" {
         Push-Location "docker/development-easy"
         try {
-            & docker compose --project-name openemr config --quiet
+            & docker compose --project-name development-easy config --quiet
             if ($LASTEXITCODE -ne 0) { throw "compose config returned $LASTEXITCODE" }
         } finally { Pop-Location }
     }
 
     $sidecarRunning = $false
     try {
-        $ps = & docker compose --project-name openemr ps --services --filter "status=running" 2>$null
+        $ps = & docker compose --project-name development-easy ps --services --filter "status=running" 2>$null
         if ($ps -match 'agent-service') { $sidecarRunning = $true }
     } catch {}
 

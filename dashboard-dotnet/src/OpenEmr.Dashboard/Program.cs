@@ -1,7 +1,9 @@
+using System.Net.Http.Headers;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using OpenEmr.Dashboard.Auth;
+using OpenEmr.Dashboard.Fhir;
 
 var builder = WebApplication.CreateBuilder(args);
 var cfg = builder.Configuration;
@@ -48,6 +50,51 @@ builder.Services.AddAuthentication(o =>
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddTransient<BearerTokenHandler>();
+builder.Services.AddTransient<RefreshTokenMiddleware>();
+builder.Services.AddHttpClient(RefreshTokenMiddleware.HttpClientName)
+    .ConfigurePrimaryHttpMessageHandler(() =>
+    {
+        var handler = new HttpClientHandler();
+        if (env.IsDevelopment())
+        {
+            // Mirror the OIDC backchannel: dev-easy may front OpenEMR with a
+            // self-signed cert. Production uses Railway private DNS with valid
+            // certs so this branch is dev-only.
+            handler.ServerCertificateCustomValidationCallback =
+                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+        }
+        return handler;
+    });
+
+builder.Services.AddHttpClient<FhirClient>(c =>
+{
+    var fhirBase = cfg["OPENEMR_FHIR_BASE_URL"]
+        ?? throw new InvalidOperationException("OPENEMR_FHIR_BASE_URL is not configured.");
+    if (!fhirBase.EndsWith('/'))
+    {
+        fhirBase += "/";
+    }
+    c.BaseAddress = new Uri(fhirBase);
+    c.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/fhir+json"));
+})
+.ConfigurePrimaryHttpMessageHandler(() =>
+{
+    var handler = new HttpClientHandler();
+    if (env.IsDevelopment())
+    {
+        // Mirror the OIDC backchannel: dev-easy uses HTTP locally, but if a
+        // self-signed HTTPS endpoint is ever wired in front of OpenEMR, the
+        // dashboard should not refuse it. Production runs on Railway private
+        // DNS with valid certs so this branch is dev-only.
+        handler.ServerCertificateCustomValidationCallback =
+            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+    }
+    return handler;
+})
+.AddHttpMessageHandler<BearerTokenHandler>();
+
 builder.Services.AddRazorPages()
     .AddRazorPagesOptions(o =>
     {
@@ -69,6 +116,7 @@ app.UseStaticFiles();
 app.UseRouting();
 
 app.UseAuthentication();
+app.UseMiddleware<RefreshTokenMiddleware>();
 app.UseAuthorization();
 
 app.MapRazorPages();

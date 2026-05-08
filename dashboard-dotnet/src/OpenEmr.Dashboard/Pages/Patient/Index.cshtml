@@ -1,0 +1,22 @@
+@page "{pid}"
+@model OpenEmr.Dashboard.Pages.Patient.IndexModel
+@{
+    ViewData["Title"] = $"Patient {Model.Pid}";
+}
+
+<div class="px-4 py-4">
+    <h1 class="display-6">@Model.DisplayName</h1>
+    <dl class="row mb-0">
+        <dt class="col-sm-2">MRN</dt>
+        <dd class="col-sm-10">@(Model.Mrn ?? "(none)")</dd>
+
+        <dt class="col-sm-2">Date of birth</dt>
+        <dd class="col-sm-10">@(Model.FhirPatient?.BirthDate ?? "(unknown)")</dd>
+
+        <dt class="col-sm-2">Local pid</dt>
+        <dd class="col-sm-10">@Model.Pid</dd>
+    </dl>
+    <p class="text-muted small mt-3 mb-0">
+        Header partial and clinical cards land in subsequent tasks (T9-T10).
+    </p>
+</div>

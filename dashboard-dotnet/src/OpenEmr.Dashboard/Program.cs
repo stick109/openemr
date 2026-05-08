@@ -21,11 +21,19 @@ builder.Services.AddAuthentication(o =>
     o.ResponseType = "code";
     o.UsePkce = true;
     o.SaveTokens = true;
-    o.GetClaimsFromUserInfoEndpoint = true;
+    // OpenEMR advertises /userinfo in discovery but the endpoint returns 404
+    // for token-bearing requests in current builds. The id_token already
+    // includes the claims this dashboard needs, so we skip the second hop.
+    o.GetClaimsFromUserInfoEndpoint = false;
     o.CallbackPath = "/signin-oidc";
     o.SignedOutCallbackPath = "/signout-callback-oidc";
     o.RequireHttpsMetadata = !env.IsDevelopment();
-    o.BackchannelHttpHandler = new OpenEmrDiscoveryFixupHandler { InnerHandler = new HttpClientHandler() };
+    var inner = new HttpClientHandler();
+    if (env.IsDevelopment())
+    {
+        inner.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+    }
+    o.BackchannelHttpHandler = new OpenEmrDiscoveryFixupHandler { InnerHandler = inner };
     o.Scope.Clear();
     foreach (var s in new[]
     {

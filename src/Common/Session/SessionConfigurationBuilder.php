@@ -93,11 +93,20 @@ class SessionConfigurationBuilder
     /** @return array<string, mixed> */
     public static function forOAuth(string $webRoot = ''): array
     {
+        // Production OpenEMR serves OAuth over HTTPS so SameSite=None + Secure
+        // is required for cross-site SMART app launches. Dev-easy serves OAuth
+        // over HTTP via host.docker.internal:8300; browsers reject
+        // SameSite=None without Secure (since Chrome 80) and drop the cookie
+        // entirely, breaking the redirect from /authorize to /provider/login.
+        // OPENEMR_OAUTH_COOKIE_INSECURE opts dev-easy into Lax + non-secure
+        // without affecting production.
+        $rawInsecure = getenv('OPENEMR_OAUTH_COOKIE_INSECURE') ?: ($_ENV['OPENEMR_OAUTH_COOKIE_INSECURE'] ?? '');
+        $allowInsecure = filter_var($rawInsecure, FILTER_VALIDATE_BOOL);
         return (new self())
             ->setName(SessionUtil::OAUTH_SESSION_ID)
             ->setCookiePath((!empty($webRoot)) ? $webRoot . SessionUtil::OAUTH_WEBROOT : SessionUtil::OAUTH_WEBROOT)
-            ->setCookieSameSite('None')
-            ->setCookieSecure(true)
+            ->setCookieSameSite($allowInsecure ? 'Lax' : 'None')
+            ->setCookieSecure(!$allowInsecure)
             ->build();
     }
 

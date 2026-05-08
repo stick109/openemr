@@ -70,6 +70,9 @@ services:
       SELENIUM_BASE_URL: "http://openemr"
       OPENEMR_DOCKER_ENV_TAG: easy-dev-docker
       OPENEMR_SETTING_site_addr_oath: 'http://host.docker.internal:${WT_HTTP_PORT:-8300}'
+      # Dev-easy only: allow OAuth session cookies over HTTP. Production OpenEMR
+      # serves OAuth over HTTPS where cookie_secure stays on by default.
+      OPENEMR_OAUTH_COOKIE_INSECURE: '1'
       OPENEMR_SETTING_oauth_password_grant: 3
       OPENEMR_SETTING_rest_system_scopes_api: 1
       OPENEMR_SETTING_rest_api: 1

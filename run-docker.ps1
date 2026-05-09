@@ -628,9 +628,6 @@ try {
         }
 
         Wait-OpenEmrEndpoints -HttpEndpoint $httpEndpoint -HttpsEndpoint $httpsEndpoint -AgentEndpoint $agentEndpoint -ExpectedServices $expectedServices -PollSeconds $ReadinessPollSeconds
-
-        Write-Host "Opening HTTPS endpoint in the default browser..."
-        Start-Process -FilePath $httpsEndpoint
     }
 }
 finally {

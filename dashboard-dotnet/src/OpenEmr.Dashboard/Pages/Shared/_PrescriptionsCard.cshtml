@@ -5,8 +5,11 @@
     var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
     var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
     var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
-    string? RowLink() => hasOe
-        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+    // Same UNION-aware shim as the Medications card — the prescription history
+    // is just the intent=order subset of MedicationRequest, and its UUIDs land
+    // in the prescriptions table, which open_medication_by_uuid.php handles.
+    string? RowLink(string? medicationUuid) => hasOe && !string.IsNullOrWhiteSpace(medicationUuid)
+        ? $"{oeUrl}/interface/patient_file/summary/open_medication_by_uuid.php?uuid={Uri.EscapeDataString(medicationUuid)}&pid={Uri.EscapeDataString(pidValue)}"
         : null;
 }
 <div class="card h-100">
@@ -39,7 +42,7 @@
                 {
                     var name = med.MedicationCodeableConcept?.Text ?? "(unspecified)";
                     var dose = med.FirstDosageText() ?? string.Empty;
-                    var link = RowLink();
+                    var link = RowLink(med.Id);
                     <tr>
                         <th scope="row" class="fw-normal">@name</th>
                         <td class="small">@dose</td>

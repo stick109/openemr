@@ -5,9 +5,11 @@
     var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
     var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
     var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
-    // No clean per-row legacy editor for active meds; route to demographics.
-    string? RowLink() => hasOe
-        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+    // FHIR MedicationRequest is a UNION of two physical tables (prescriptions
+    // and lists); open_medication_by_uuid.php resolves the UUID against both
+    // and 302s to the right legacy editor for whichever owns the row.
+    string? RowLink(string? medicationUuid) => hasOe && !string.IsNullOrWhiteSpace(medicationUuid)
+        ? $"{oeUrl}/interface/patient_file/summary/open_medication_by_uuid.php?uuid={Uri.EscapeDataString(medicationUuid)}&pid={Uri.EscapeDataString(pidValue)}"
         : null;
 }
 <div class="card h-100">
@@ -30,7 +32,7 @@
                 var name = med.MedicationCodeableConcept?.Text ?? "(unspecified)";
                 var dose = med.FirstDosageText();
                 var authored = med.AuthoredOn;
-                var link = RowLink();
+                var link = RowLink(med.Id);
                 <li class="list-group-item">
                     <div class="d-flex justify-content-between align-items-start gap-2">
                         <div>

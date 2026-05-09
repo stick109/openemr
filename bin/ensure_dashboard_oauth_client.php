@@ -130,6 +130,18 @@ try {
     fail("MySQL connect failed: " . $e->getMessage());
 }
 
+// Diagnostic marker: stamp client_name with a timestamp before we attempt
+// encryption, so MySQL inspection alone can confirm whether the script ran
+// (and how far it got). Updated again to the real client name on success.
+try {
+    $diag = $pdo->prepare(
+        'UPDATE oauth_clients SET client_name = ? WHERE client_id = ?'
+    );
+    $diag->execute(['DEBUG_PDO_OK_' . date('His'), $clientId]);
+} catch (\Throwable $ignored) {
+    // Best-effort; failure to update the marker should not abort the run.
+}
+
 // Encrypt the plaintext secret with THIS instance's CryptoGen so the row
 // is decryptable on this exact site. siteDir is provided explicitly so we
 // don't need OEGlobalsBag (which globals.php would otherwise initialize).
@@ -139,6 +151,14 @@ $crypto = new CryptoGen(new NullLogger(), $siteDir);
 try {
     $encryptedSecret = $crypto->encryptStandard($plainSecret);
 } catch (\Throwable $e) {
+    // Capture the error text into client_name so we can diagnose without
+    // shell access. Truncated to fit varchar(80) and stripped of newlines.
+    try {
+        $diag = $pdo->prepare('UPDATE oauth_clients SET client_name = ? WHERE client_id = ?');
+        $marker = 'DEBUG_ENC_FAIL: ' . str_replace(["\r","\n"], ' ', $e->getMessage());
+        $diag->execute([substr($marker, 0, 80), $clientId]);
+    } catch (\Throwable $ignored) {
+    }
     fail("CryptoGen->encryptStandard failed: " . $e->getMessage());
 }
 

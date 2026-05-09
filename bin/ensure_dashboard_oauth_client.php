@@ -58,6 +58,47 @@ require_once __DIR__ . '/../vendor/autoload.php';
 use OpenEMR\Common\Crypto\CryptoGen;
 use Psr\Log\NullLogger;
 
+/**
+ * Adapter that lets CryptoGen run without the legacy `library/sql.inc.php`
+ * being included. The real CryptoGen reads/creates per-site DB keys via
+ * the global `sqlQueryNoLog()` / `sqlStatementNoLog()` helpers; this
+ * subclass overrides the protected wrappers and routes them through a
+ * vanilla PDO connection instead, keeping the script free of OpenEMR's
+ * web-context bootstrap.
+ */
+final class StandaloneCryptoGen extends CryptoGen
+{
+    public function __construct(
+        private readonly PDO $pdo,
+        ?\Psr\Log\LoggerInterface $logger = null,
+        ?string $siteDir = null,
+    ) {
+        parent::__construct($logger, $siteDir);
+    }
+
+    /**
+     * @param array<int, mixed> $binds
+     * @return array<string, mixed>|false
+     */
+    protected function sqlQueryNoLog(string $statement, array $binds = []): array|false
+    {
+        $stmt = $this->pdo->prepare($statement);
+        $stmt->execute($binds);
+        $row = $stmt->fetch(PDO::FETCH_ASSOC);
+        return $row === false ? false : $row;
+    }
+
+    /**
+     * @param array<int, mixed> $binds
+     */
+    protected function sqlStatementNoLog(string $statement, array $binds = []): mixed
+    {
+        $stmt = $this->pdo->prepare($statement);
+        $stmt->execute($binds);
+        return $stmt;
+    }
+}
+
 function envTrimmed(string $name): string
 {
     $raw = getenv($name);
@@ -163,7 +204,7 @@ try {
 // is decryptable on this exact site. siteDir is provided explicitly so we
 // don't need OEGlobalsBag (which globals.php would otherwise initialize).
 $siteDir = __DIR__ . '/../sites/default';
-$crypto = new CryptoGen(new NullLogger(), $siteDir);
+$crypto = new StandaloneCryptoGen($pdo, new NullLogger(), $siteDir);
 
 try {
     $encryptedSecret = $crypto->encryptStandard($plainSecret);

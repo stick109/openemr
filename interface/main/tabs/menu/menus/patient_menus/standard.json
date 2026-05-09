@@ -18,6 +18,16 @@
         "children": [],
         "requirement": 0
     },
+    {
+        "label": "Modern Dashboard{{patient file}}",
+        "menu_id": "modern_dashboard",
+        "target": "main",
+        "on_click":"top.restoreSession()",
+        "url": "interface/patient_file/summary/modern_dashboard.php?pid=",
+        "pid":"true",
+        "children": [],
+        "requirement": 0
+    },
 	{
         "label": "History",
         "menu_id": "history",

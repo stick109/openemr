@@ -112,6 +112,14 @@ function Get-ComposeDirectory {
 function Invoke-DockerCompose {
     param([string[]]$ComposeArguments)
 
+    # Inject the repo-root .env file when present so secrets like
+    # DASHBOARD_OIDC_CLIENT_ID survive the script's cd into the compose
+    # subdir (Compose v2 looks for .env in the working directory only).
+    $envFilePath = Join-Path $PSScriptRoot ".env"
+    if (Test-Path $envFilePath) {
+        $ComposeArguments = @("--env-file", $envFilePath) + $ComposeArguments
+    }
+
     # Windows PowerShell 5.1 wraps each native-command stderr line as a
     # NativeCommandError. ``docker compose up`` prints progress messages
     # ("Network ... Created", "Container ... Started") to stderr, which

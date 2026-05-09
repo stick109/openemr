@@ -97,6 +97,10 @@ services:
       OPENEMR_SETTING_SMTP_Auth: 'TRUE'
       OPENEMR_SETTING_practice_return_email_path: 'noreply@openemr.local'
       OPENEMR_SETTING_Patient_Reminder_Sender_Name: 'OpenEMR Reminders'
+      # Browser-reachable URL of the Modern Dashboard (.NET) sidecar. The
+      # patient-menu shim at interface/patient_file/summary/modern_dashboard.php
+      # reads this and breaks out of the OpenEMR top frame to land here.
+      OPENEMR_DASHBOARD_URL: 'http://localhost:${WT_DASHBOARD_PORT:-8400}'
       OPENEMR_AGENT_SIDECAR_URL: 'http://agent-service:8010'
       OPENEMR_AGENT_SIDECAR_SECRET: '${OPENEMR_AGENT_SIDECAR_SECRET:-dev-shared-secret}'
       # Shared with the agent-service container; the legacy intake-form

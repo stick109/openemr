@@ -368,7 +368,78 @@ translate to a FHIR uuid for downstream calls. Adding `'pid'` to the
 identifier search-field array in `FhirPatientService` was the smallest
 change that made this work without inventing a new search parameter.
 
-## 7. How to extend
+**6.5.6 Suppressing the OpenEMR top-frame "Leave site?" prompt.**
+`interface/main/tabs/main.php` registers a `beforeunload` listener via
+`addEventListener` that pops a "Leave site?" prompt to protect users from
+unsaved chart edits. The prompt fires when the redirect shim navigates
+the top frame to the cross-origin dashboard. The shim sets
+`window.top.timed_out = true` before assigning `window.top.location.replace()`,
+which is the same flag OpenEMR's listener already checks to skip the prompt
+during session-timeout reloads. Setting `onbeforeunload = null` does not
+remove `addEventListener` listeners, so the flag is the right path. See
+`interface/patient_file/summary/modern_dashboard.php`.
+
+**6.5.7 Auto-trust an active OpenEMR core session
+(`OPENEMR_OAUTH_TRUST_CORE_SESSION`).**
+A clinician already signed into OpenEMR's web UI should not have to enter
+their credentials again when the menu hand-off triggers the dashboard's
+OIDC flow. When the env var is set on the openemr-web service,
+`AuthorizationController::oauthAuthorizationFlow` detects an active core
+session via the existing `OpenEMR` cookie, auto-approves the request for
+any enabled client, and skips both `/provider/login` and
+`/scope-authorize-confirm`. The path mirrors the SMART launch's
+`processAuthorizeFlowForLaunch` but does not require the launch parameter
+or the autosubmit cookie-rebind dance because the core session is already
+first-party with the OAuth server. Note that `getLoggedInCoreUserUuid`'s
+`restoreOAuthSession` swaps `$this->session` for a fresh instance, so the
+flow re-populates `nonce`, `csrf`, `scopes`, `client_id`, `redirect_uri`,
+and `site_id` from the `AuthorizationRequest` before serializing the
+trusted-user row. See `processAuthorizeFlowForCoreSession` in
+`src/RestControllers/AuthorizationController.php`. Production sets the
+env var to `1`; dev-easy compose ships it on by default. Single-tenant
+trust only — leave the env var unset for installations where the OAuth
+server fronts multiple OpenEMR core sessions you do not control.
+
+**6.5.8 Origin parity for cookie-bound auth (dev-easy and prod).**
+The trust-core-session path requires the OpenEMR session cookie set when
+the user logs into the web UI to follow the OAuth flow. Cookies are scoped
+by host, so the user has to access OpenEMR at the same hostname as the
+OAuth issuer. Dev-easy ships with `OPENEMR_SETTING_site_addr_oath` set to
+`http://host.docker.internal:8300` and the recommended login URL is also
+`http://host.docker.internal:8300/` (not `localhost:8300`). Production
+sets `site_addr_oath` to its own public Railway URL where this is a
+non-issue.
+
+## 7. Clinical Co-Pilot card
+
+The dashboard ships a "Clinical Co-Pilot" card alongside the six clinical
+cards on `/Patient/{pid}`. It mirrors the legacy
+`OpenEMR\Services\Agent\AgentIntentCatalog` button set (Basic patient
+data, Current medications, Allergies to confirm, Recent events, Changed
+since last visit). Clicking an intent posts the patient's already-loaded
+FHIR record plus the intent's prompt to OpenAI's Chat Completions API
+and renders the response inline.
+
+The dashboard does not proxy through OpenEMR's `/apis/default/api/agent/intent`
+route — that endpoint enforces an OpenEMR session + an `APICSRFTOKEN`
+header, neither of which a cross-origin OAuth client can satisfy without
+re-implementing the session bridge. Calling OpenAI directly from the
+dashboard backend keeps the integration simple, the patient JSON out of
+OpenEMR's request log, and the latency to one network hop.
+
+Configuration:
+
+| Variable | Purpose |
+|---|---|
+| `OPENAI_API_KEY` | API key passed as `Authorization: Bearer …`. Card disables itself with a "not configured" notice when this is absent so the page never crashes on a fresh deploy. |
+| `OPENAI_MODEL` | Model identifier; defaults to `gpt-4o-mini`. Override per environment if a different model is preferred. |
+
+Files: `dashboard-dotnet/src/OpenEmr.Dashboard/Copilot/CopilotIntent.cs`
+(intent catalog + prompts), `…/Copilot/CopilotService.cs` (OpenAI client),
+`…/Pages/Shared/_CopilotCard.cshtml` (UI partial), and the
+`OnPostCopilotAsync` handler on `IndexModel`.
+
+## 8. How to extend
 
 ### 7.1 Add a new card to the existing patient page
 

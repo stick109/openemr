@@ -68,7 +68,11 @@ public sealed class IndexModel : PageModel
     /// returns plain text the card renders inline. Kept on the same Razor
     /// page so the form posts back to /Patient/{pid}?handler=Copilot.
     /// </summary>
-    public async Task<IActionResult> OnPostCopilotAsync(string pid, [FromForm] string intentId, CancellationToken cancellationToken)
+    public async Task<IActionResult> OnPostCopilotAsync(
+        string pid,
+        [FromForm] string intentId,
+        [FromForm] string? userGoal,
+        CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(pid))
         {
@@ -82,6 +86,13 @@ public sealed class IndexModel : PageModel
         {
             return this.BadRequest($"Unknown Co-Pilot intent: {intentId}");
         }
+        // free_text needs the typed prompt; reject empty submissions before
+        // we round-trip to OpenAI.
+        var isFreeText = string.Equals(intentId, nameof(Copilot.CopilotIntent.FreeText), StringComparison.OrdinalIgnoreCase);
+        if (isFreeText && string.IsNullOrWhiteSpace(userGoal))
+        {
+            return this.BadRequest("userGoal is required for the free_text intent.");
+        }
 
         var patient = await this.fhirClient.GetPatientByIdentifierAsync(pid, cancellationToken);
         if (patient is null)
@@ -93,6 +104,7 @@ public sealed class IndexModel : PageModel
 
         var output = await this.copilotService.RunIntentAsync(
             intentId,
+            userGoal,
             patient,
             this.Allergies,
             this.Problems,

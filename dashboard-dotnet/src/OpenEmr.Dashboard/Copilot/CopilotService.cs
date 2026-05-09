@@ -43,6 +43,7 @@ public sealed class CopilotService
 
     public async Task<string> RunIntentAsync(
         string intentId,
+        string? userGoal,
         FhirPatient patient,
         CardResult<FhirAllergy> allergies,
         CardResult<FhirCondition> problems,
@@ -60,6 +61,16 @@ public sealed class CopilotService
         var intent = CopilotIntents.Lookup(intentId)
             ?? throw new ArgumentException($"Unknown Co-Pilot intent: {intentId}", nameof(intentId));
 
+        // free_text mirrors the legacy PHP agent panel: the user's typed prompt
+        // becomes the task instruction. Catalog intents use their fixed prompt.
+        var taskPrompt = string.Equals(intentId, nameof(CopilotIntent.FreeText), StringComparison.OrdinalIgnoreCase)
+            ? (userGoal ?? string.Empty).Trim()
+            : intent.Prompt;
+        if (string.IsNullOrWhiteSpace(taskPrompt))
+        {
+            return "Type a question or instruction first.";
+        }
+
         var contextJson = BuildPatientContext(patient, allergies, problems, medications, prescriptions, careTeam, encounters);
 
         var requestBody = new
@@ -68,7 +79,7 @@ public sealed class CopilotService
             messages = new object[]
             {
                 new { role = "system", content = "You are a Clinical Co-Pilot embedded in an EHR. Respond in plain text suitable for a primary-care clinician glancing at a chart. Never invent data; if the chart is silent on something, say so. Do not include the words 'Patient' or any name in your output." },
-                new { role = "user", content = $"Patient data (JSON, FHIR R4 selected fields):\n{contextJson}\n\nTask: {intent.Prompt}" },
+                new { role = "user", content = $"Patient data (JSON, FHIR R4 selected fields):\n{contextJson}\n\nTask: {taskPrompt}" },
             },
             temperature = 0.2,
             max_tokens = 400,

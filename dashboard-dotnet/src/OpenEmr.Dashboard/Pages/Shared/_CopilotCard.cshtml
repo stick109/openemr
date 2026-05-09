@@ -14,23 +14,39 @@
         }
         else
         {
-            <p class="text-muted small mb-2">Pick an intent. The dashboard sends the patient's loaded FHIR record to OpenAI and renders the response below.</p>
-            <div class="d-flex flex-wrap gap-2 mb-3" id="copilot-buttons-@Model.Pid">
-                @foreach (var intent in Model.CopilotIntents)
-                {
+            <p class="text-muted small mb-2">Pick an intent or type your own question. The dashboard sends the patient's loaded FHIR record to OpenAI and renders the response below.</p>
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-3" id="copilot-toolbar-@Model.Pid">
+                <div class="d-flex flex-wrap gap-2" id="copilot-buttons-@Model.Pid">
+                    @foreach (var intent in Model.CopilotIntents)
+                    {
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary copilot-btn"
+                                data-intent-id="@intent.Id"
+                                data-prompt-text="@intent.Prompt">
+                            @intent.Label
+                        </button>
+                    }
+                </div>
+                <div class="input-group input-group-sm flex-grow-1" style="min-width: 18rem; max-width: 32rem;">
+                    <input type="text"
+                           class="form-control copilot-input"
+                           id="copilot-input-@Model.Pid"
+                           placeholder="Ask the Co-Pilot…"
+                           aria-label="Free-text Co-Pilot prompt" />
                     <button type="button"
-                            class="btn btn-sm btn-outline-primary copilot-btn"
-                            data-intent-id="@intent.Id">
-                        @intent.Label
+                            class="btn btn-secondary copilot-send"
+                            id="copilot-send-@Model.Pid"
+                            disabled>
+                        Send
                     </button>
-                }
+                </div>
             </div>
             <div id="copilot-output-@Model.Pid"
                  role="status"
                  aria-live="polite"
                  class="border rounded p-2 bg-light small"
                  style="min-height: 4rem; white-space: pre-wrap;">
-                Click an intent to summon the Co-Pilot.
+                Click an intent or type a question to summon the Co-Pilot.
             </div>
         }
     </div>
@@ -41,29 +57,87 @@
     <script>
         (function () {
             const pid = @Json.Serialize(Model.Pid);
-            const buttons = document.querySelectorAll(`#copilot-buttons-${CSS.escape(pid)} .copilot-btn`);
-            const output = document.querySelector(`#copilot-output-${CSS.escape(pid)}`);
-            buttons.forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    output.textContent = `Running ${btn.textContent.trim()}…`;
-                    buttons.forEach(b => b.disabled = true);
-                    try {
-                        const form = new FormData();
-                        form.append('intentId', btn.dataset.intentId);
-                        const res = await fetch(`/Patient/${encodeURIComponent(pid)}?handler=Copilot`, {
-                            method: 'POST',
-                            body: form,
-                            headers: { 'Accept': 'text/plain' }
-                        });
-                        const text = await res.text();
-                        output.textContent = res.ok ? text : `Co-Pilot failed (HTTP ${res.status}). ${text}`;
-                    } catch (e) {
-                        output.textContent = `Co-Pilot request failed: ${e.message}`;
-                    } finally {
-                        buttons.forEach(b => b.disabled = false);
+            const escapedPid = CSS.escape(pid);
+            const buttons = document.querySelectorAll(`#copilot-buttons-${escapedPid} .copilot-btn`);
+            const output = document.querySelector(`#copilot-output-${escapedPid}`);
+            const input = document.querySelector(`#copilot-input-${escapedPid}`);
+            const sendBtn = document.querySelector(`#copilot-send-${escapedPid}`);
+
+            function setBusy(busy) {
+                buttons.forEach(b => b.disabled = busy);
+                if (sendBtn) {
+                    sendBtn.disabled = busy || (input && input.value.trim() === '');
+                }
+                if (input) {
+                    input.disabled = busy;
+                }
+            }
+
+            async function runCopilot(intentId, label, userGoal) {
+                output.textContent = `Running ${label}…`;
+                setBusy(true);
+                try {
+                    const form = new FormData();
+                    form.append('intentId', intentId);
+                    if (typeof userGoal === 'string' && userGoal !== '') {
+                        form.append('userGoal', userGoal);
                     }
+                    const res = await fetch(`/Patient/${encodeURIComponent(pid)}?handler=Copilot`, {
+                        method: 'POST',
+                        body: form,
+                        headers: { 'Accept': 'text/plain' }
+                    });
+                    const text = await res.text();
+                    output.textContent = res.ok ? text : `Co-Pilot failed (HTTP ${res.status}). ${text}`;
+                } catch (e) {
+                    output.textContent = `Co-Pilot request failed: ${e.message}`;
+                } finally {
+                    setBusy(false);
+                }
+            }
+
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const promptPreview = btn.dataset.promptText || '';
+                    if (input) {
+                        input.value = promptPreview;
+                        syncSendState();
+                    }
+                    runCopilot(btn.dataset.intentId, btn.textContent.trim());
                 });
             });
+
+            function syncSendState() {
+                if (!sendBtn || !input) {
+                    return;
+                }
+                sendBtn.disabled = input.value.trim() === '';
+            }
+
+            function submitFreeText() {
+                if (!input) {
+                    return;
+                }
+                const userGoal = input.value.trim();
+                if (userGoal === '') {
+                    return;
+                }
+                runCopilot('FreeText', 'Free text', userGoal);
+            }
+
+            if (input) {
+                input.addEventListener('input', syncSendState);
+                input.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                        event.preventDefault();
+                        submitFreeText();
+                    }
+                });
+            }
+            if (sendBtn) {
+                sendBtn.addEventListener('click', submitFreeText);
+            }
+            syncSendState();
         })();
     </script>
 }

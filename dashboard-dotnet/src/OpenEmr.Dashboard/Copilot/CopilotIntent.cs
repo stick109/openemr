@@ -15,10 +15,14 @@ public enum CopilotIntent
     AllergiesToConfirm,
     RecentEvents,
     ChangedSinceLastVisit,
+    FreeText,
 }
 
 public static class CopilotIntents
 {
+    // Intents the card renders as quick-pick buttons. FreeText is intentionally
+    // omitted — its prompt is supplied at request time by the user via the
+    // textbox+Send input, the same way the legacy PHP panel works.
     public static readonly IReadOnlyList<(CopilotIntent Id, string Label, string Prompt)> Catalog = new[]
     {
         (CopilotIntent.BasicPatientData,
@@ -38,16 +42,28 @@ public static class CopilotIntents
             "Compare the patient's most recent encounter to the prior one. Call out new or removed problems, new medications, or new allergies. Two sentences max."),
     };
 
+    // FreeText is a valid intent id but does not appear in the button catalog;
+    // its prompt comes from the user-typed userGoal at submission time.
+    private static readonly (CopilotIntent Id, string Label, string Prompt) FreeTextEntry =
+        (CopilotIntent.FreeText, "Free text", string.Empty);
+
     public static (string Label, string Prompt)? Lookup(string id)
     {
-        if (Enum.TryParse<CopilotIntent>(id, ignoreCase: true, out var parsed))
+        if (!Enum.TryParse<CopilotIntent>(id, ignoreCase: true, out var parsed))
         {
-            foreach (var entry in Catalog)
+            return null;
+        }
+
+        if (parsed == CopilotIntent.FreeText)
+        {
+            return (FreeTextEntry.Label, FreeTextEntry.Prompt);
+        }
+
+        foreach (var entry in Catalog)
+        {
+            if (entry.Id == parsed)
             {
-                if (entry.Id == parsed)
-                {
-                    return (entry.Label, entry.Prompt);
-                }
+                return (entry.Label, entry.Prompt);
             }
         }
         return null;

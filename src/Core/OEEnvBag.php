@@ -50,7 +50,7 @@ class OEEnvBag extends ParameterBag
     private const UTF8_BOM = "\xEF\xBB\xBF";
 
     /**
-     * @param array<array-key, mixed> $parameters
+     * @param array<string, mixed> $parameters
      */
     public function __construct(array $parameters = [])
     {
@@ -65,8 +65,8 @@ class OEEnvBag extends ParameterBag
     }
 
     /**
-     * @param array<array-key, mixed> $parameters
-     * @return array<array-key, mixed>
+     * @param array<string, mixed> $parameters
+     * @return array<string, mixed>
      */
     private static function stripUtf8Boms(array $parameters): array
     {

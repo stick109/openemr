@@ -29,10 +29,6 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# BuildKit's provenance attestation step can hang for several minutes on
-# Windows + Docker Desktop with large images like OpenEMR. Disable it.
-$env:BUILDX_NO_DEFAULT_ATTESTATIONS = "1"
-
 function Test-DockerDaemon {
     $ErrorActionPreference = "Continue"
     try {

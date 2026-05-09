@@ -30,6 +30,10 @@ services:
     build:
       context: ../..
       dockerfile: Dockerfile.railway
+      # Skip SLSA provenance attestation: BuildKit's final
+      # "resolving provenance for metadata file" step can hang for many
+      # minutes on Windows + Docker Desktop with the large OpenEMR image.
+      provenance: false
     ports:
     - "${WT_HTTP_PORT:-8300}:80"
     - "${WT_HTTPS_PORT:-9300}:443"

@@ -5,8 +5,12 @@
     var oeUrl = (Cfg["OPENEMR_PUBLIC_URL"] ?? string.Empty).TrimEnd('/');
     var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
     var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
-    string? RowLink() => hasOe
-        ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
+    // The FHIR Encounter id is a UUID; encounter_top.php needs the legacy
+    // numeric form_encounter.encounter id. open_by_uuid.php is the shim that
+    // resolves the UUID server-side and 302s into encounter_top.php with the
+    // active patient + encounter set.
+    string? RowLink(string? encounterUuid) => hasOe && !string.IsNullOrWhiteSpace(encounterUuid)
+        ? $"{oeUrl}/interface/patient_file/encounter/open_by_uuid.php?uuid={Uri.EscapeDataString(encounterUuid)}&pid={Uri.EscapeDataString(pidValue)}"
         : null;
 
     static string FormatRange(FhirPeriod? p)
@@ -62,7 +66,7 @@
                     var classCode = enc.Class?.Code ?? enc.Class?.Display ?? string.Empty;
                     var provider = enc.FirstParticipantDisplay() ?? string.Empty;
                     var reason = enc.FirstReasonText() ?? string.Empty;
-                    var link = RowLink();
+                    var link = RowLink(enc.Id);
                     <tr>
                         <th scope="row" class="small fw-normal">@range</th>
                         <td class="small">@type</td>

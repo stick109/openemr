@@ -552,16 +552,23 @@ if (-not (Test-Path $composeFile)) {
     throw "Compose file not found at $composeDirectory\docker-compose.yml."
 }
 
+$buildArguments = @("build")
+if ($Pull) {
+    $buildArguments += "--pull"
+}
+
+# We deliberately split the build out from `up` instead of using
+# `up --build`. With Compose v2 + the `docker` BuildKit driver, a single
+# `up --build` invocation that recreates a service with a `container_name:`
+# override and `${VAR:-}` environment interpolations (e.g. dashboard-dotnet's
+# DASHBOARD_OIDC_CLIENT_ID/SECRET) sometimes lands the recreated container
+# with empty values for those vars even though `compose config` resolves
+# them correctly. Running `compose build` followed by a separate
+# `compose up -d` re-injects the env block on every recreate and avoids
+# the bug.
 $upArguments = @("up")
 if (-not $Foreground) {
     $upArguments += "-d"
-}
-if (-not $NoBuild) {
-    $upArguments += "--build"
-}
-if ($Pull) {
-    $upArguments += "--pull"
-    $upArguments += "always"
 }
 
 Push-Location (Join-Path $repoRoot $composeDirectory)
@@ -591,6 +598,9 @@ try {
         Invoke-DockerCompose -ComposeArguments @("stop")
     }
 
+    if (-not $NoBuild) {
+        Invoke-DockerCompose -ComposeArguments $buildArguments
+    }
     Invoke-DockerCompose -ComposeArguments $upArguments
 
     if (-not $Foreground) {

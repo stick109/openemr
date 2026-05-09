@@ -302,7 +302,14 @@ final class OpenAIClient
      */
     private function getApiKey(): string
     {
-        $key = trim($this->env->getString('OPENAI_API_KEY'));
+        // Trim a UTF-8 BOM in addition to whitespace. Default trim() does not
+        // remove U+FEFF (the 3-byte sequence EF BB BF), and pasting the key
+        // into a Railway / .env editor from a UTF-8-with-BOM source leaks
+        // the BOM into the value. Symfony's HttpClient validates auth_bearer
+        // against a strict character set and rejects the BOM with
+        // "Invalid character found in option auth_bearer", which surfaces as
+        // a generic "intake form could not be processed" error to the user.
+        $key = trim($this->env->getString('OPENAI_API_KEY'), " \t\n\r\0\x0B\xEF\xBB\xBF");
         if ($key === '') {
             throw new OpenAIMissingKeyException(
                 'OPENAI_API_KEY environment variable is not set.'

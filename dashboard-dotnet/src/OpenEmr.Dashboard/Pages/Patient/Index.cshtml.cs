@@ -1,18 +1,22 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
+using OpenEmr.Dashboard.Copilot;
 using OpenEmr.Dashboard.Fhir;
 using OpenEmr.Dashboard.Fhir.Records;
 using FhirPatientRecord = OpenEmr.Dashboard.Fhir.Records.FhirPatient;
 
 namespace OpenEmr.Dashboard.Pages.Patient;
 
+[IgnoreAntiforgeryToken]
 public sealed class IndexModel : PageModel
 {
     private readonly FhirClient fhirClient;
+    private readonly CopilotService copilotService;
 
-    public IndexModel(FhirClient fhirClient)
+    public IndexModel(FhirClient fhirClient, CopilotService copilotService)
     {
         this.fhirClient = fhirClient;
+        this.copilotService = copilotService;
     }
 
     public string Pid { get; private set; } = string.Empty;
@@ -35,6 +39,10 @@ public sealed class IndexModel : PageModel
 
     public CardResult<FhirEncounter> Encounters { get; private set; } = CardResult<FhirEncounter>.Empty;
 
+    public bool CopilotEnabled => this.copilotService.IsConfigured;
+
+    public IReadOnlyList<(CopilotIntent Id, string Label, string Prompt)> CopilotIntents => Copilot.CopilotIntents.Catalog;
+
     public async Task<IActionResult> OnGetAsync(string pid, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(pid))
@@ -50,23 +58,65 @@ public sealed class IndexModel : PageModel
             return this.NotFound();
         }
 
+        await this.PopulateCardsAsync(patient, cancellationToken);
+        return this.Page();
+    }
+
+    /// <summary>
+    /// Co-Pilot card form-post target. Fetches the same FHIR data the page
+    /// already loaded, hands it (plus the chosen intent) to OpenAI, and
+    /// returns plain text the card renders inline. Kept on the same Razor
+    /// page so the form posts back to /Patient/{pid}?handler=Copilot.
+    /// </summary>
+    public async Task<IActionResult> OnPostCopilotAsync(string pid, [FromForm] string intentId, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(pid))
+        {
+            return this.NotFound();
+        }
+        if (string.IsNullOrWhiteSpace(intentId))
+        {
+            return this.BadRequest("intentId is required.");
+        }
+        if (Copilot.CopilotIntents.Lookup(intentId) is null)
+        {
+            return this.BadRequest($"Unknown Co-Pilot intent: {intentId}");
+        }
+
+        var patient = await this.fhirClient.GetPatientByIdentifierAsync(pid, cancellationToken);
+        if (patient is null)
+        {
+            return this.NotFound();
+        }
+
+        await this.PopulateCardsAsync(patient, cancellationToken);
+
+        var output = await this.copilotService.RunIntentAsync(
+            intentId,
+            patient,
+            this.Allergies,
+            this.Problems,
+            this.Medications,
+            this.Prescriptions,
+            this.CareTeam,
+            this.Encounters,
+            cancellationToken);
+
+        return this.Content(output, "text/plain; charset=utf-8");
+    }
+
+    private async Task PopulateCardsAsync(FhirPatientRecord patient, CancellationToken cancellationToken)
+    {
         this.FhirPatient = patient;
         this.Mrn = FhirPatientRecord.ExtractMrn(patient);
         this.DisplayName = BuildDisplayName(patient);
 
-        // The card fetchers want the FHIR uuid, not the local pid: identifier
-        // search above translated pid → uuid, and downstream search params on
-        // the FHIR resources expect `patient={uuid}`. Bail with empty results
-        // if the patient has no id (defensive — OpenEMR always emits one).
         var uuid = patient.Id;
         if (string.IsNullOrWhiteSpace(uuid))
         {
-            return this.Page();
+            return;
         }
 
-        // Fan-out: each card gets its own task wrapped in a try/catch, so a
-        // single FHIR call's failure surfaces inside that card without
-        // breaking the whole page. Total wall time is the slowest endpoint.
         var allergiesTask = SafeFetchAsync(ct => this.fhirClient.GetAllergiesAsync(uuid, ct), cancellationToken);
         var problemsTask = SafeFetchAsync(ct => this.fhirClient.GetProblemsAsync(uuid, ct), cancellationToken);
         var medicationsTask = SafeFetchAsync(ct => this.fhirClient.GetActiveMedicationsAsync(uuid, ct), cancellationToken);
@@ -74,13 +124,7 @@ public sealed class IndexModel : PageModel
         var careTeamTask = SafeFetchAsync(ct => this.fhirClient.GetCareTeamAsync(uuid, ct), cancellationToken);
         var encountersTask = SafeFetchAsync(ct => this.fhirClient.GetEncountersAsync(uuid, ct), cancellationToken);
 
-        await Task.WhenAll(
-            allergiesTask,
-            problemsTask,
-            medicationsTask,
-            prescriptionsTask,
-            careTeamTask,
-            encountersTask);
+        await Task.WhenAll(allergiesTask, problemsTask, medicationsTask, prescriptionsTask, careTeamTask, encountersTask);
 
         this.Allergies = allergiesTask.Result;
         this.Problems = problemsTask.Result;
@@ -88,8 +132,6 @@ public sealed class IndexModel : PageModel
         this.Prescriptions = prescriptionsTask.Result;
         this.CareTeam = careTeamTask.Result;
         this.Encounters = encountersTask.Result;
-
-        return this.Page();
     }
 
     private static string BuildDisplayName(FhirPatientRecord patient)
@@ -107,10 +149,6 @@ public sealed class IndexModel : PageModel
         return string.IsNullOrWhiteSpace(combined) ? "(unnamed patient)" : combined;
     }
 
-    /// <summary>
-    /// Wraps a per-card fetcher so a thrown exception becomes a CardResult
-    /// with a non-null Error. The page never blows up because of one bad call.
-    /// </summary>
     private static async Task<CardResult<T>> SafeFetchAsync<T>(
         Func<CancellationToken, Task<CardResult<T>>> fetch,
         CancellationToken cancellationToken)
@@ -121,8 +159,6 @@ public sealed class IndexModel : PageModel
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-            // Caller cancelled (request abort); propagate to short-circuit
-            // the rest of OnGetAsync rather than swallow.
             throw;
         }
         catch (Exception ex)

@@ -588,6 +588,24 @@ class AuthorizationController
                 } // otherwise we will proceed with the authorization flow for people to login
             }
 
+            // OPENEMR_OAUTH_TRUST_CORE_SESSION (env or OE_SITE_DIR config) lets a
+            // first-party, same-origin SPA hand off to its OAuth client without
+            // re-prompting the clinician for credentials. When set, we look up
+            // the user via the active OpenEMR core session cookie and complete
+            // the authorization grant immediately for trusted clients,
+            // skipping both /provider/login and /scope-authorize-confirm. The
+            // env var is opt-in so single-page-app integrations (the new
+            // patient dashboard) stay seamless without weakening the standard
+            // SMART app flow that other clients still use.
+            if ($this->trustCoreSessionForAuthorization($authRequest)) {
+                $userUuid = $this->getLoggedInCoreUserUuid($httpRequest);
+                if (!empty($userUuid)) {
+                    $logger->debug("AuthorizationController->oauthAuthorizationFlow() auto-approving for trusted core session", ['userUuid' => $userUuid]);
+                    return $this->processAuthorizeFlowForCoreSession($authRequest, $httpRequest, $response, $userUuid);
+                }
+                $logger->debug("AuthorizationController->oauthAuthorizationFlow() trust-core-session enabled but no core session found, falling back to login form");
+            }
+
             // If needed, serialize into a users session
             if ($this->providerForm) {
                 // used to keep track of the auth flow and avoid the session from being destroyed on login / patient selection
@@ -1641,6 +1659,129 @@ class AuthorizationController
             }
         }
         return false;
+    }
+
+    /**
+     * Returns true when the OPENEMR_OAUTH_TRUST_CORE_SESSION env var is set
+     * AND the OAuth client is enabled (not revoked). Used by the patient-
+     * dashboard handoff so a clinician already signed into the OpenEMR web
+     * UI does not get prompted to re-enter credentials when the SPA's OIDC
+     * flow lands on /authorize with their core session cookie attached.
+     */
+    private function trustCoreSessionForAuthorization(AuthorizationRequest $authRequest): bool
+    {
+        $raw = getenv('OPENEMR_OAUTH_TRUST_CORE_SESSION');
+        if ($raw === false || $raw === '') {
+            $raw = $_ENV['OPENEMR_OAUTH_TRUST_CORE_SESSION'] ?? '';
+        }
+        $enabled = filter_var($raw, FILTER_VALIDATE_BOOL);
+        if (!$enabled) {
+            return false;
+        }
+        $client = $authRequest->getClient();
+        if (!($client instanceof ClientEntity)) {
+            return false;
+        }
+        if (!$client->isEnabled()) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Auto-approve an authorization request when the requester already holds
+     * an active OpenEMR core session cookie. Mirrors processAuthorizeFlowForLaunch
+     * but does not require the launch parameter and does not require the
+     * autosubmit cookie-rebind dance because the core session is already
+     * first-party with the OAuth server (same Apache vhost).
+     *
+     * @param AuthorizationRequest $authRequest
+     * @param HttpRestRequest $request
+     * @param ResponseInterface $response
+     * @param string $userUuid
+     * @return ResponseInterface
+     * @throws \JsonException
+     */
+    private function processAuthorizeFlowForCoreSession(AuthorizationRequest $authRequest, HttpRestRequest $request, ResponseInterface $response, string $userUuid): ResponseInterface
+    {
+        // getLoggedInCoreUserUuid() (called before us in oauthAuthorizationFlow)
+        // detours through the core session and ends with restoreOAuthSession,
+        // which replaces $this->session with a fresh OAuth session instance.
+        // That fresh session does NOT carry the nonce/csrf/scopes/client_id
+        // writes oauthAuthorizationFlow performed before the detour. We
+        // re-populate them here from $authRequest and $request so the id_token
+        // ends up with the nonce echo and /token's CSRF gate sees the state.
+        $session = $this->session;
+        $client = $authRequest->getClient();
+        $scopes = $client instanceof ClientEntity ? $client->getScopes() : [];
+
+        $session->set('csrf', $authRequest->getState() ?? '');
+        $scopeQueryParam = $request->getQueryParams()['scope'] ?? null;
+        if (!is_string($scopeQueryParam)) {
+            $scopeQueryParam = implode(' ', array_map(
+                fn($scope) => $scope->getIdentifier(),
+                $authRequest->getScopes() ?: []
+            ));
+        }
+        $session->set('scopes', $scopeQueryParam);
+        $session->set('client_id', $request->getQueryParams()['client_id'] ?? ($client?->getIdentifier() ?? ''));
+        if ($client instanceof ClientEntity) {
+            $session->set('client_role', $client->getClientRole());
+        }
+        $session->set('launch', $request->getQueryParams()['launch'] ?? null);
+        $session->set('redirect_uri', $authRequest->getRedirectUri() ?? null);
+        $nonce = $request->getQueryParams()['nonce'] ?? null;
+        if (!empty($nonce)) {
+            $session->set('nonce', $nonce);
+        }
+        if (empty($session->get('site_id'))) {
+            $defaultSite = $this->globalsBag->get('site_id') ?: 'default';
+            $session->set('site_id', $defaultSite);
+        }
+
+        $scopesById = array_combine($scopes, $scopes);
+        $authRequest = $this->updateAuthRequestWithUserApprovedScopes($authRequest, $scopesById);
+        $include_refresh_token = $this->shouldIncludeRefreshTokenForScopes($authRequest->getScopes());
+        $server = $this->getAuthorizationServer($this->getScopeRepository($this->session), $include_refresh_token);
+
+        $this->serializeUserSession($authRequest, $session);
+        $apiSession = $this->session->all();
+        $user = $this->getUserRepository()->getUserEntityByIdentifier($userUuid);
+        $authRequest->setUser($user);
+        $authRequest->setAuthorizationApproved(true);
+        $result = $server->completeAuthorizationRequest($authRequest, $response);
+        $redirect = $result->getHeader('Location')[0];
+        $authorization = parse_url($redirect, PHP_URL_QUERY);
+        $code = [];
+        parse_str($authorization, $code);
+        $code = $code["code"] ?? null;
+        if (!empty($code)) {
+            $apiSession['client_id'] = $client->getIdentifier();
+            $apiSession['user_id'] = $userUuid;
+            $apiSession['scopes'] = implode(" ", $scopes);
+            $apiSession['persist_login'] = 0;
+            // The /token endpoint enforces a non-empty 'csrf' on the restored
+            // session (see oauthAuthorizeToken's CSRF check). The interactive
+            // login path sets this in oauthAuthorizationFlow before /scope-
+            // authorize-confirm; we are skipping that step so we copy the
+            // auth request state in by hand. Mirrors $session->set('csrf',
+            // $authRequest->getState()) at the top of oauthAuthorizationFlow.
+            $apiSession['csrf'] = $authRequest->getState();
+            unset($apiSession['csrf_private_key']);
+            $session_cache = json_encode($apiSession, JSON_THROW_ON_ERROR);
+            $this->saveTrustedUser(
+                $apiSession['client_id'],
+                $apiSession['user_id'],
+                $apiSession['scopes'],
+                $apiSession['persist_login'],
+                $code,
+                $session_cache
+            );
+        }
+
+        $this->getSystemLogger()->debug("AuthorizationController->processAuthorizeFlowForCoreSession() sending server response");
+        $session->invalidate();
+        return $result;
     }
 
     /**

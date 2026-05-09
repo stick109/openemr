@@ -1,0 +1,69 @@
+@model OpenEmr.Dashboard.Pages.Patient.IndexModel
+
+<div class="card h-100" data-card-id="copilot">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h2 class="h6 mb-0">Clinical Co-Pilot</h2>
+        <small class="text-muted">AI summary</small>
+    </div>
+    <div class="card-body">
+        @if (!Model.CopilotEnabled)
+        {
+            <div role="status" class="text-muted small">
+                Co-Pilot is not configured (OPENAI_API_KEY missing on the dashboard service).
+            </div>
+        }
+        else
+        {
+            <p class="text-muted small mb-2">Pick an intent. The dashboard sends the patient's loaded FHIR record to OpenAI and renders the response below.</p>
+            <div class="d-flex flex-wrap gap-2 mb-3" id="copilot-buttons-@Model.Pid">
+                @foreach (var intent in Model.CopilotIntents)
+                {
+                    <button type="button"
+                            class="btn btn-sm btn-outline-primary copilot-btn"
+                            data-intent-id="@intent.Id">
+                        @intent.Label
+                    </button>
+                }
+            </div>
+            <div id="copilot-output-@Model.Pid"
+                 role="status"
+                 aria-live="polite"
+                 class="border rounded p-2 bg-light small"
+                 style="min-height: 4rem; white-space: pre-wrap;">
+                Click an intent to summon the Co-Pilot.
+            </div>
+        }
+    </div>
+</div>
+
+@if (Model.CopilotEnabled)
+{
+    <script>
+        (function () {
+            const pid = @Json.Serialize(Model.Pid);
+            const buttons = document.querySelectorAll(`#copilot-buttons-${CSS.escape(pid)} .copilot-btn`);
+            const output = document.querySelector(`#copilot-output-${CSS.escape(pid)}`);
+            buttons.forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    output.textContent = `Running ${btn.textContent.trim()}…`;
+                    buttons.forEach(b => b.disabled = true);
+                    try {
+                        const form = new FormData();
+                        form.append('intentId', btn.dataset.intentId);
+                        const res = await fetch(`/Patient/${encodeURIComponent(pid)}?handler=Copilot`, {
+                            method: 'POST',
+                            body: form,
+                            headers: { 'Accept': 'text/plain' }
+                        });
+                        const text = await res.text();
+                        output.textContent = res.ok ? text : `Co-Pilot failed (HTTP ${res.status}). ${text}`;
+                    } catch (e) {
+                        output.textContent = `Co-Pilot request failed: ${e.message}`;
+                    } finally {
+                        buttons.forEach(b => b.disabled = false);
+                    }
+                });
+            });
+        })();
+    </script>
+}

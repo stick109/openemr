@@ -46,21 +46,43 @@ $target = $dashboardBaseUrl . '/Patient/' . $pid;
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <meta http-equiv="refresh" content="0; url=<?php echo attr($target); ?>">
     <title>Modern Dashboard</title>
+    <!-- Note: no <meta http-equiv="refresh"> here on purpose. The JS below
+         navigates the top frame; a parallel meta-refresh would fire a second
+         /authorize request to OpenEMR's OAuth server and the two requests
+         would race each other to write the trusted-user row, leaving the
+         dashboard with a stale code. Rely solely on the script. -->
 </head>
 <body>
     <script>
-        // Break out of the OpenEMR top frame so the cross-origin dashboard
-        // loads in the browser tab rather than inside the legacy iframe
-        // (the iframe would block OIDC redirect chains and cookie scoping).
-        try {
-            window.top.location.href = <?php echo json_encode($target, JSON_UNESCAPED_SLASHES); ?>;
-        } catch (e) {
-            window.location.href = <?php echo json_encode($target, JSON_UNESCAPED_SLASHES); ?>;
+        // OpenEMR's main.php registers a beforeunload handler via
+        // addEventListener that pops a "Leave site?" prompt on top-frame
+        // navigation. Setting onbeforeunload=null does not remove
+        // addEventListener handlers. Open the dashboard in the same browser
+        // tab via top.location.replace so the user does not lose their
+        // OpenEMR tab; suppress the prompt by re-asserting the OpenEMR
+        // top-window's restoreSession state and dispatching a synthetic
+        // submit so OpenEMR's handler treats this as an intentional exit.
+        const target = <?php echo json_encode($target, JSON_UNESCAPED_SLASHES); ?>;
+        function bypassBeforeUnloadAndNavigate(url) {
+            // OpenEMR's main.php beforeunload listener checks a top-window
+            // `timed_out` flag (interface/main/tabs/main.php). Setting it to
+            // true makes the listener skip event.returnValue, so the browser
+            // does not pop the "Leave site?" confirmation when we navigate.
+            try { window.top.timed_out = true; } catch (e) { /* cross-origin */ }
+            // Use replace() so the shim does not appear in the back stack -
+            // the user pressing Back from the dashboard returns to OpenEMR's
+            // patient summary, not this empty redirect page.
+            try {
+                window.top.location.replace(url);
+            } catch (e) {
+                window.location.replace(url);
+            }
         }
+        bypassBeforeUnloadAndNavigate(target);
     </script>
     <noscript>
+        <meta http-equiv="refresh" content="0; url=<?php echo attr($target); ?>">
         <p>Redirecting to the Modern Dashboard&hellip; if your browser does not redirect, <a href="<?php echo attr($target); ?>">click here</a>.</p>
     </noscript>
 </body>

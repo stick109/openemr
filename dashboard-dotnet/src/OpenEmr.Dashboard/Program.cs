@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.OpenIdConnect;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.HttpOverrides;
 using OpenEmr.Dashboard.Auth;
+using OpenEmr.Dashboard.Copilot;
 using OpenEmr.Dashboard.Fhir;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -95,6 +96,15 @@ builder.Services.AddHttpClient<FhirClient>(c =>
     return handler;
 })
 .AddHttpMessageHandler<BearerTokenHandler>();
+
+// Clinical Co-Pilot card calls OpenAI directly from the dashboard backend
+// rather than proxying through OpenEMR's session+CSRF-bound agent route.
+// The HttpClient is registered without auth handlers; CopilotService attaches
+// the OpenAI bearer token per request.
+builder.Services.AddHttpClient<CopilotService>(c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(30);
+});
 
 builder.Services.AddRazorPages()
     .AddRazorPagesOptions(o =>

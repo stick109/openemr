@@ -101,6 +101,12 @@ services:
       # patient-menu shim at interface/patient_file/summary/modern_dashboard.php
       # reads this and breaks out of the OpenEMR top frame to land here.
       OPENEMR_DASHBOARD_URL: 'http://localhost:${WT_DASHBOARD_PORT:-8400}'
+      # Trust the active OpenEMR core session for OAuth authorization so the
+      # patient-dashboard SPA does not double-prompt a clinician who is
+      # already signed into the EHR. Skips both the OAuth login form and the
+      # scope-authorize-confirm screen for enabled clients when a valid core
+      # session cookie is attached. Production uses the same flag.
+      OPENEMR_OAUTH_TRUST_CORE_SESSION: '1'
       OPENEMR_AGENT_SIDECAR_URL: 'http://agent-service:8010'
       OPENEMR_AGENT_SIDECAR_SECRET: '${OPENEMR_AGENT_SIDECAR_SECRET:-dev-shared-secret}'
       # Shared with the agent-service container; the legacy intake-form
@@ -307,6 +313,11 @@ services:
       DASHBOARD_OIDC_REDIRECT_URI: 'http://localhost:${WT_DASHBOARD_PORT:-8400}/signin-oidc'
       ASPNETCORE_URLS: 'http://+:8080'
       ASPNETCORE_ENVIRONMENT: '${DASHBOARD_ASPNETCORE_ENVIRONMENT:-Development}'
+      # Clinical Co-Pilot card uses OpenAI directly (chart-summary intents
+      # built from the FHIR data already loaded on the page). The key is
+      # shared with the Python sidecar/openemr containers via .env.
+      OPENAI_API_KEY: '${OPENAI_API_KEY:-}'
+      OPENAI_MODEL: '${OPENAI_MODEL:-gpt-4o-mini}'
     extra_hosts:
     # Linux Docker hosts don't auto-resolve host.docker.internal; Windows
     # and macOS Docker Desktop do, where this line is a harmless no-op.

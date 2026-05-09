@@ -215,65 +215,93 @@ function Invoke-RailwayWithInput {
     param(
         [string[]]$Arguments,
         [securestring]$Secret,
-        [switch]$SuppressSuccessOutput
+        [switch]$SuppressSuccessOutput,
+        [int]$MaxAttempts = 4,
+        [int]$BackoffSeconds = 5
     )
 
     $railwayExecutable = Resolve-RailwayExecutable
 
     $credential = New-Object System.Net.NetworkCredential("", $Secret)
     $plainText = $credential.Password
-    $process = $null
+    $attempt = 0
     try {
-        $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-        $startInfo.FileName = $railwayExecutable
-        $startInfo.WorkingDirectory = (Get-Location).ProviderPath
-        Set-ProcessStartInfoArguments -StartInfo $startInfo -Arguments $Arguments
-        $startInfo.RedirectStandardInput = $true
-        $startInfo.RedirectStandardOutput = $true
-        $startInfo.RedirectStandardError = $true
-        $startInfo.UseShellExecute = $false
+        while ($true) {
+            $attempt++
+            $process = $null
+            try {
+                $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+                $startInfo.FileName = $railwayExecutable
+                $startInfo.WorkingDirectory = (Get-Location).ProviderPath
+                Set-ProcessStartInfoArguments -StartInfo $startInfo -Arguments $Arguments
+                $startInfo.RedirectStandardInput = $true
+                $startInfo.RedirectStandardOutput = $true
+                $startInfo.RedirectStandardError = $true
+                $startInfo.UseShellExecute = $false
 
-        $process = [System.Diagnostics.Process]::Start($startInfo)
-        # Write raw UTF-8 bytes WITHOUT a BOM. The default StandardInput
-        # StreamWriter inherits an encoding (typically [Text.Encoding]::UTF8)
-        # whose EmitUTF8Identifier is true, which prepends EF BB BF to the
-        # first write. That BOM ends up inside the secret on Railway and
-        # silently breaks every consumer that compares the value byte-for-byte
-        # or validates it against a strict character set (Symfony HttpClient
-        # auth_bearer, OAuth client_id, shared-secret HMAC, etc.).
-        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-        $bytes = $utf8NoBom.GetBytes($plainText)
-        $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
-        $process.StandardInput.BaseStream.Close()
+                $process = [System.Diagnostics.Process]::Start($startInfo)
+                # Write raw UTF-8 bytes WITHOUT a BOM. The default StandardInput
+                # StreamWriter inherits an encoding (typically [Text.Encoding]::UTF8)
+                # whose EmitUTF8Identifier is true, which prepends EF BB BF to the
+                # first write. That BOM ends up inside the secret on Railway and
+                # silently breaks every consumer that compares the value byte-for-byte
+                # or validates it against a strict character set (Symfony HttpClient
+                # auth_bearer, OAuth client_id, shared-secret HMAC, etc.).
+                $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+                $bytes = $utf8NoBom.GetBytes($plainText)
+                $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+                $process.StandardInput.BaseStream.Close()
 
-        $standardOutput = $process.StandardOutput.ReadToEnd()
-        $standardError = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
+                $standardOutput = $process.StandardOutput.ReadToEnd()
+                $standardError = $process.StandardError.ReadToEnd()
+                $process.WaitForExit()
 
-        if ($process.ExitCode -ne 0) {
-            if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
-                Write-Host $standardOutput.TrimEnd()
+                if ($process.ExitCode -eq 0) {
+                    if (-not $SuppressSuccessOutput) {
+                        if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
+                            Write-Host $standardOutput.TrimEnd()
+                        }
+                        if (-not [string]::IsNullOrWhiteSpace($standardError)) {
+                            Write-Host $standardError.TrimEnd()
+                        }
+                    }
+                    return
+                }
+
+                # Railway's GraphQL endpoint occasionally returns transient
+                # network timeouts mid-deploy ("error sending request for url
+                # ... operation timed out"). Retry idempotent commands a few
+                # times with simple backoff before giving up; the alternative
+                # is half-completed env-var syncs and aborted deploys whenever
+                # the user's network or Railway hiccups for a few seconds.
+                $combinedText = "$standardOutput`n$standardError"
+                $isTransient = $combinedText -match 'operation timed out|error sending request|connection (?:reset|refused|closed)|temporarily unavailable|503'
+
+                if ($isTransient -and $attempt -lt $MaxAttempts) {
+                    $sleep = $BackoffSeconds * $attempt
+                    Write-Warning "railway $($Arguments[0]) returned transient error on attempt $attempt of $MaxAttempts; retrying after $sleep s."
+                    Start-Sleep -Seconds $sleep
+                    continue
+                }
+
+                if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
+                    Write-Host $standardOutput.TrimEnd()
+                }
+                if (-not [string]::IsNullOrWhiteSpace($standardError)) {
+                    Write-Error $standardError.TrimEnd()
+                }
+                throw "railway $($Arguments -join ' ') failed with exit code $($process.ExitCode)."
             }
-            if (-not [string]::IsNullOrWhiteSpace($standardError)) {
-                Write-Error $standardError.TrimEnd()
-            }
-            throw "railway $($Arguments -join ' ') failed with exit code $($process.ExitCode)."
-        }
-        if (-not $SuppressSuccessOutput) {
-            if (-not [string]::IsNullOrWhiteSpace($standardOutput)) {
-                Write-Host $standardOutput.TrimEnd()
-            }
-            if (-not [string]::IsNullOrWhiteSpace($standardError)) {
-                Write-Host $standardError.TrimEnd()
+            finally {
+                if ($null -ne $process) {
+                    $process.Dispose()
+                }
             }
         }
     }
     finally {
         $plainText = $null
         $credential = $null
-        if ($null -ne $process) {
-            $process.Dispose()
-        }
     }
 }
 

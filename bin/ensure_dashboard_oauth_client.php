@@ -47,8 +47,12 @@ const DEFAULT_SCOPE = 'openid fhirUser offline_access api:fhir '
     . 'user/Patient.rs user/AllergyIntolerance.rs user/Condition.rs '
     . 'user/MedicationRequest.rs user/CareTeam.rs user/Encounter.rs';
 
-// We do not want a HTML/login redirect just because a globals require chain
-// noticed an unauthenticated CLI session.
+// CLI-mode bootstrap: globals.php dies with "Invalid URL" when neither
+// $_GET['site'] nor $_SERVER['HTTP_HOST'] is set (sites/ exists, so its
+// is_dir() guard short-circuits before the "default" fallback). Stub
+// HTTP_HOST to the canonical site name so the require completes.
+$_SERVER['HTTP_HOST'] = $_SERVER['HTTP_HOST'] ?? 'default';
+// And don't trigger the auth.inc.php login redirect from a CLI session.
 $ignoreAuth = true;
 require_once __DIR__ . '/../interface/globals.php';
 

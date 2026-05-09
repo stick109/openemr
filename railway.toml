@@ -17,4 +17,4 @@ restartPolicyMaxRetries = 10
 # `invalid_client` / "Decryption failed HMAC authentication" on /token.
 # `|| true` keeps a transient one-deploy failure from blocking Apache; the
 # next deploy will retry, and operators can run the same script manually.
-preDeployCommand = "php /var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php || true"
+preDeployCommand = "sh -c 'php /var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php; exit 0'"

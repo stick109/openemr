@@ -27,6 +27,11 @@ final class DemographicsDispatcher
      * Map from JSON field path to `patient_data` column name. Nested keys
      * use dotted-path notation that {@see lookupNested()} resolves.
      *
+     * Emergency contact name + phone are NOT in this map — `patient_data`
+     * has no dedicated name column, so the two fields are combined into
+     * `phone_contact` by {@see composePhoneContact()} and applied as a
+     * synthetic field after the rest of the map runs.
+     *
      * @var array<string, string>
      */
     private const PATIENT_FIELD_MAP = [
@@ -40,7 +45,6 @@ final class DemographicsDispatcher
         'address.zip' => 'postal_code',
         'phone' => 'phone_home',
         'email' => 'email',
-        'emergencyContact.name' => 'phone_contact',
         'emergencyContact.relationship' => 'contact_relationship',
     ];
 
@@ -83,6 +87,20 @@ final class DemographicsDispatcher
             if ($entry->applied && $newValue !== null) {
                 $patientUpdates[$column] = $newValue;
             }
+        }
+
+        $emergencyName = $this->normaliseString(
+            $this->lookupNested($extracted, 'emergencyContact.name')
+        );
+        $emergencyPhone = $this->normaliseString(
+            $this->lookupNested($extracted, 'emergencyContact.phone')
+        );
+        $phoneContactValue = self::composePhoneContact($emergencyName, $emergencyPhone);
+        $phoneContactOld = $this->normaliseString($existing['phone_contact'] ?? null);
+        $phoneContactEntry = $this->buildEntry('phone_contact', $phoneContactOld, $phoneContactValue);
+        $diff[] = $phoneContactEntry;
+        if ($phoneContactEntry->applied && $phoneContactValue !== null) {
+            $patientUpdates['phone_contact'] = $phoneContactValue;
         }
 
         if ($patientUpdates !== []) {
@@ -229,6 +247,38 @@ final class DemographicsDispatcher
         }
 
         return new DiffEntry($field, $oldValue, $newValue, true);
+    }
+
+    /**
+     * Build the value to write into `patient_data.phone_contact`.
+     *
+     * `patient_data` has no dedicated column for the emergency contact's
+     * name, so the OpenAI-extracted name and phone are combined into a
+     * single string. The format `Name <phone>` is unambiguous and
+     * trivially parseable by downstream consumers (one regex on the angle
+     * brackets recovers both halves), and degrades gracefully when only
+     * one half is present:
+     *
+     *   - both present  → `Jane Smith <555-123-4567>`
+     *   - only name     → `Jane Smith`
+     *   - only phone    → `555-123-4567`
+     *   - neither       → `null` (caller skips the column)
+     */
+    public static function composePhoneContact(?string $name, ?string $phone): ?string
+    {
+        $name = ($name === null || $name === '') ? null : $name;
+        $phone = ($phone === null || $phone === '') ? null : $phone;
+
+        if ($name === null && $phone === null) {
+            return null;
+        }
+        if ($name === null) {
+            return $phone;
+        }
+        if ($phone === null) {
+            return $name;
+        }
+        return $name . ' <' . $phone . '>';
     }
 
     /**

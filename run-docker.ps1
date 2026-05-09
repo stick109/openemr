@@ -103,6 +103,24 @@ function Confirm-DockerCompose {
     throw "Docker CLI is installed, but the Docker daemon is not running. Start Docker Desktop, then run this script again."
 }
 
+function Invoke-DockerSoftCleanup {
+    # Reclaim space from dangling (untagged) images and stale build cache.
+    # Both prunes are non-destructive: tagged images, running containers,
+    # named volumes, and in-use cache are left alone. Failures here should
+    # never block a build, so exit codes are intentionally ignored.
+    Write-Host "Pruning dangling images and stale build cache..."
+
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        & docker image prune --force | Out-Host
+        & docker builder prune --force | Out-Host
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+}
+
 function Get-ComposeDirectory {
     param([string]$SelectedProfile)
 
@@ -522,6 +540,7 @@ function Wait-OpenEmrEndpoints {
 }
 
 Confirm-DockerCompose
+Invoke-DockerSoftCleanup
 
 Set-PortOverride -Name "WT_HTTP_PORT" -Value $HttpPort
 Set-PortOverride -Name "WT_HTTPS_PORT" -Value $HttpsPort

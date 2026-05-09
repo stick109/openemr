@@ -30,9 +30,12 @@ RUN mkdir -p /var/uploads/agent \
 # mounted) and before Apache starts. Done at build time as a one-shot sed
 # instead of replacing ENTRYPOINT, to keep the rest of openemr.sh's
 # bootstrap (mysql wait, install, key initialization, etc.) intact.
-# Idempotent: skipped if the marker is already present.
-RUN chmod 0755 /var/www/localhost/htdocs/openemr/bin/railway-startup.sh \
-    && if ! grep -q 'railway-startup.sh' /var/www/localhost/htdocs/openemr/openemr.sh; then \
-        sed -i 's|exec /usr/sbin/httpd -D FOREGROUND|exec /var/www/localhost/htdocs/openemr/bin/railway-startup.sh|' \
+# The ensure script is invoked via `php` directly rather than a wrapper
+# .sh file, because openemr.sh's auto_setup runs `find . -not -perm 600
+# -exec chmod 600 {}` which would strip the executable bit from any
+# wrapper script. `php` is always executable; the ensure .php file just
+# needs to be readable. Idempotent: skipped if the marker is present.
+RUN if ! grep -q 'ensure_dashboard_oauth_client' /var/www/localhost/htdocs/openemr/openemr.sh; then \
+        sed -i 's|exec /usr/sbin/httpd -D FOREGROUND|php /var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php \|\| true ; exec /usr/sbin/httpd -D FOREGROUND|' \
             /var/www/localhost/htdocs/openemr/openemr.sh ; \
     fi

@@ -8,7 +8,7 @@ param(
 
     [int]$ReadinessPollSeconds = 10,
 
-    [switch]$Build,
+    [switch]$NoBuild,
 
     [switch]$Pull,
 
@@ -537,7 +537,7 @@ $upArguments = @("up")
 if (-not $Foreground) {
     $upArguments += "-d"
 }
-if ($Build) {
+if (-not $NoBuild) {
     $upArguments += "--build"
 }
 if ($Pull) {

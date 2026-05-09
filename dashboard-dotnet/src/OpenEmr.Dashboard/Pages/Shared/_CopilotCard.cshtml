@@ -27,14 +27,14 @@
                         </button>
                     }
                 </div>
-                <div class="input-group input-group-sm flex-grow-1" style="min-width: 18rem; max-width: 32rem;">
+                <div class="d-flex flex-grow-1 gap-1" style="min-width: 18rem; max-width: 32rem;">
                     <input type="text"
-                           class="form-control copilot-input"
+                           class="form-control form-control-sm copilot-input"
                            id="copilot-input-@Model.Pid"
                            placeholder="Ask the Co-Pilot…"
                            aria-label="Free-text Co-Pilot prompt" />
                     <button type="button"
-                            class="btn btn-secondary copilot-send"
+                            class="btn btn-sm btn-secondary copilot-send"
                             id="copilot-send-@Model.Pid"
                             disabled>
                         Send

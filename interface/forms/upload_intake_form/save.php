@@ -49,6 +49,7 @@ use OpenEMR\Services\Intake\Dispatcher\DemographicsDispatcher;
 use OpenEMR\Services\Intake\Dispatcher\MedicalHistoryDispatcher;
 use OpenEMR\Services\Intake\Exception\IngestionFailedException;
 use OpenEMR\Services\Intake\Exception\IntakeFormException;
+use OpenEMR\Services\Intake\Exception\LabReportClassifiedException;
 use OpenEMR\Services\Intake\IntakeFormIngestService;
 use OpenEMR\Services\Intake\OpenAi\OpenAIClient;
 use Symfony\Component\HttpFoundation\File\UploadedFile;
@@ -138,9 +139,54 @@ if ($pidInt <= 0 || $encounterInt <= 0) {
 }
 
 // -----------------------------------------------------------------------
-// Routing: lab_pdf -> sidecar; intake form types -> IntakeFormIngestService
+// Routing: lab_pdf -> sidecar; intake form types -> IntakeFormIngestService.
+// The Auto path may also escalate to the sidecar if the classifier
+// recognises an uploaded PDF as a lab report (LabReportClassifiedException).
 // -----------------------------------------------------------------------
 $useSidecar = $formType === 'lab_pdf';
+
+if (!$useSidecar) {
+    // -- Legacy intake-form path (Demographics, MedicalHistory, Consent) --
+    // Contract: IntakeFormIngestService throws IntakeFormException (a
+    // \RuntimeException subclass) for any recoverable failure — validation,
+    // OpenAI errors, downstream DB problems. Anything outside that hierarchy
+    // (\Error, \TypeError, etc.) is genuinely unexpected and is allowed to
+    // propagate to the global handler. The service returns an IngestResult
+    // DTO; `insertedRowId` is the form_upload_intake_form row id that
+    // FormService::addForm() needs to wire the encounter timeline entry.
+    try {
+        $service = new IntakeFormIngestService(
+            openAiClient: new OpenAIClient($logger, OEEnvBag::getInstance()),
+            logger: $logger,
+            clock: ServiceContainer::getClock(),
+            demographicsDispatcher: new DemographicsDispatcher($logger),
+            medicalHistoryDispatcher: new MedicalHistoryDispatcher($logger, ServiceContainer::getClock()),
+            consentDispatcher: new ConsentDispatcher(),
+            session: $session,
+        );
+        $result = $service->ingest($pidInt, $encounterInt, $tmpPath, $formType);
+    } catch (LabReportClassifiedException $e) {
+        // Auto-classifier flagged the PDF as a lab report. Switch to the
+        // sidecar path below — this is the same dispatch we would have
+        // run had the user picked "Lab Report" up front, so the lab data
+        // lands in procedure_* instead of being misfiled as MedicalHistory.
+        $logger->info('Auto-detected lab report; re-routing to sidecar path.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'form_type' => $formType,
+        ]);
+        $formType = 'lab_pdf';
+        $useSidecar = true;
+    } catch (IntakeFormException $e) {
+        $logger->error('IntakeFormIngestService::ingest failed.', [
+            'pid' => $pidInt,
+            'encounter' => $encounterInt,
+            'form_type' => $formType,
+            'exception' => $e,
+        ]);
+        $renderFailure(xl('The intake form could not be processed. Please retry or contact support.'));
+    }
+}
 
 if ($useSidecar) {
     // -- Sidecar path (lab_pdf, and potentially intake_form in Week 2) ---
@@ -284,35 +330,6 @@ if ($useSidecar) {
         insertedRowId: $insertedRowId,
         diffPreview: [],
     );
-} else {
-    // -- Legacy intake-form path (Demographics, MedicalHistory, Consent) --
-    // Contract: IntakeFormIngestService throws IntakeFormException (a
-    // \RuntimeException subclass) for any recoverable failure — validation,
-    // OpenAI errors, downstream DB problems. Anything outside that hierarchy
-    // (\Error, \TypeError, etc.) is genuinely unexpected and is allowed to
-    // propagate to the global handler. The service returns an IngestResult
-    // DTO; `insertedRowId` is the form_upload_intake_form row id that
-    // FormService::addForm() needs to wire the encounter timeline entry.
-    try {
-        $service = new IntakeFormIngestService(
-            openAiClient: new OpenAIClient($logger, OEEnvBag::getInstance()),
-            logger: $logger,
-            clock: ServiceContainer::getClock(),
-            demographicsDispatcher: new DemographicsDispatcher($logger),
-            medicalHistoryDispatcher: new MedicalHistoryDispatcher($logger, ServiceContainer::getClock()),
-            consentDispatcher: new ConsentDispatcher(),
-            session: $session,
-        );
-        $result = $service->ingest($pidInt, $encounterInt, $tmpPath, $formType);
-    } catch (IntakeFormException $e) {
-        $logger->error('IntakeFormIngestService::ingest failed.', [
-            'pid' => $pidInt,
-            'encounter' => $encounterInt,
-            'form_type' => $formType,
-            'exception' => $e,
-        ]);
-        $renderFailure(xl('The intake form could not be processed. Please retry or contact support.'));
-    }
 }
 
 if ($result->insertedRowId === null || $result->insertedRowId <= 0) {

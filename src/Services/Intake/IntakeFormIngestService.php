@@ -39,6 +39,7 @@ use OpenEMR\Services\Intake\Dispatcher\MedicalHistoryDispatcher;
 use OpenEMR\Services\Intake\Exception\AmbiguousFormException;
 use OpenEMR\Services\Intake\Exception\IngestionFailedException;
 use OpenEMR\Services\Intake\Exception\InvalidUploadException;
+use OpenEMR\Services\Intake\Exception\LabReportClassifiedException;
 use OpenEMR\Services\Intake\OpenAi\Exception\OpenAIException;
 use OpenEMR\Services\Intake\OpenAi\OpenAIClient;
 use OpenEMR\Services\Intake\OpenAi\OpenAIStructuredRequest;
@@ -235,6 +236,24 @@ final class IntakeFormIngestService
         if ($resolved === null) {
             throw new AmbiguousFormException(
                 'Classifier returned an unknown form type.'
+            );
+        }
+
+        // Lab reports are out of scope for this service's OpenAI extraction
+        // path: their data has to land in procedure_order / procedure_report /
+        // procedure_result via LabPdfDispatcher on the agent-service sidecar,
+        // not in the lists / patient_data tables this service writes to. The
+        // form's save handler catches LabReportClassifiedException and
+        // re-routes the same upload through the sidecar; without this
+        // shortcut, save.php would fall through to MedicalHistoryDispatcher
+        // and silently file the lab as a Medical History entry.
+        if ($resolved === IntakeFormType::LabPdf) {
+            $this->logger->info('Intake form auto-classified as lab report; deferring to sidecar.', [
+                'form_type' => $resolved->value,
+                'confidence' => $confidence,
+            ]);
+            throw new LabReportClassifiedException(
+                'Auto-classifier identified the upload as a lab report; rerun via the sidecar path.'
             );
         }
 

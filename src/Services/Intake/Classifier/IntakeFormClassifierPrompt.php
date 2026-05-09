@@ -29,7 +29,10 @@ final class IntakeFormClassifierPrompt
     public const SCHEMA_NAME = 'intake_form_classifier';
 
     public const SYSTEM_PROMPT = 'You classify clinical-intake PDF forms. '
-        . 'Choose exactly one of: Demographics, MedicalHistory, Consent. '
+        . 'Choose exactly one of: Demographics, MedicalHistory, Consent, lab_pdf. '
+        . 'Use lab_pdf for laboratory result reports (CBC, BMP, CMP, lipid panel, '
+        . 'A1c, urinalysis, microbiology, pathology, etc.) — anything that lists '
+        . 'analyte / test names with numeric results, units, and reference ranges. '
         . 'Return strict JSON.';
 
     public const USER_PROMPT = 'Identify the form type for the attached PDF. '
@@ -100,7 +103,7 @@ final class IntakeFormClassifierPrompt
             'properties' => [
                 'form_type' => [
                     'type' => 'string',
-                    'enum' => ['Demographics', 'MedicalHistory', 'Consent'],
+                    'enum' => ['Demographics', 'MedicalHistory', 'Consent', 'lab_pdf'],
                 ],
                 'confidence' => [
                     'type' => 'number',

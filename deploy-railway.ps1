@@ -68,11 +68,13 @@ param(
 
     # ── Dashboard-dotnet sidecar deployment ─────────────────────────────
     # The ASP.NET patient dashboard, deployed as a third Railway service
-    # alongside openemr-web and agent-service.  Set to $true to enable the
-    # third deployment pass (T21).  Service must already exist in the
-    # Railway project (created once in T20 via `railway add --service
-    # dashboard-dotnet`).
-    [switch]$DeployDashboardDotnet,
+    # alongside openemr-web and agent-service.  Defaults to $true so a
+    # plain `./deploy-railway.ps1` redeploys all three services and
+    # production stays in sync with master.  Set to $false to opt out
+    # (e.g. when iterating on openemr-web only).  Service must already
+    # exist in the Railway project (create once via `railway add
+    # --service dashboard-dotnet`).
+    [bool]$DeployDashboardDotnet = $true,
 
     # Railway service name for the dashboard.  Must match the name used
     # when the service was created.

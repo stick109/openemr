@@ -109,4 +109,43 @@ class OEEnvBagIsolatedTest extends TestCase
             unset($_ENV[$key], $_SERVER[$key]);
         }
     }
+
+    public function testConstructorStripsLeadingUtf8Bom(): void
+    {
+        $bom = "\xEF\xBB\xBF";
+
+        $bag = new OEEnvBag([
+            'API_KEY' => $bom . 'sk-proj-abc123',
+            'OIDC_CLIENT_ID' => $bom . 'dashboard-client',
+        ]);
+
+        $this->assertSame('sk-proj-abc123', $bag->getString('API_KEY'));
+        $this->assertSame('dashboard-client', $bag->getString('OIDC_CLIENT_ID'));
+    }
+
+    public function testConstructorStripsOnlyLeadingBomNotEmbedded(): void
+    {
+        $bom = "\xEF\xBB\xBF";
+
+        $bag = new OEEnvBag([
+            'EMBEDDED' => 'prefix' . $bom . 'suffix',
+        ]);
+
+        // An embedded BOM is unusual but legal data; only the leading-BOM
+        // paste-from-Windows hazard is in scope for the boundary defense.
+        $this->assertSame('prefix' . $bom . 'suffix', $bag->getString('EMBEDDED'));
+    }
+
+    public function testConstructorLeavesCleanValuesUnchanged(): void
+    {
+        $bag = new OEEnvBag([
+            'CLEAN' => 'sk-proj-abc123',
+            'EMPTY' => '',
+            'NUMERIC' => 42,
+        ]);
+
+        $this->assertSame('sk-proj-abc123', $bag->getString('CLEAN'));
+        $this->assertSame('', $bag->getString('EMPTY'));
+        $this->assertSame(42, $bag->getInt('NUMERIC'));
+    }
 }

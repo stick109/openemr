@@ -36,10 +36,46 @@ class OEEnvBag extends ParameterBag
 {
     use SingletonTrait;
 
+    /**
+     * UTF-8 BOM bytes (EF BB BF). Pasting an env var into Railway / a .env
+     * editor from a UTF-8-with-BOM source, or staging a secret via a
+     * PowerShell script that writes the BOM-emitting default UTF-8 encoder,
+     * leaks the BOM into the value. Symfony's HttpClient validates
+     * `auth_bearer` against a strict character set and rejects the BOM,
+     * OAuth servers compare client_ids byte-for-byte, HMAC verifiers see a
+     * 3-byte mismatch — and the user sees a generic error with no obvious
+     * cause. Strip the BOM at the boundary so every downstream consumer is
+     * covered by one defense, instead of repeating the trim per call site.
+     */
+    private const UTF8_BOM = "\xEF\xBB\xBF";
+
+    /**
+     * @param array<array-key, mixed> $parameters
+     */
+    public function __construct(array $parameters = [])
+    {
+        parent::__construct(self::stripUtf8Boms($parameters));
+    }
+
     protected static function createInstance(): static
     {
         // `getenv()` with no arguments always returns an array<string, string>;
         // the string-returning overload requires a name argument.
         return new static(array_merge($_SERVER, $_ENV, getenv())); // @phpstan-ignore new.static
+    }
+
+    /**
+     * @param array<array-key, mixed> $parameters
+     * @return array<array-key, mixed>
+     */
+    private static function stripUtf8Boms(array $parameters): array
+    {
+        foreach ($parameters as $key => $value) {
+            if (is_string($value) && str_starts_with($value, self::UTF8_BOM)) {
+                $parameters[$key] = substr($value, strlen(self::UTF8_BOM));
+            }
+        }
+
+        return $parameters;
     }
 }

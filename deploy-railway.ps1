@@ -234,8 +234,17 @@ function Invoke-RailwayWithInput {
         $startInfo.UseShellExecute = $false
 
         $process = [System.Diagnostics.Process]::Start($startInfo)
-        $process.StandardInput.Write($plainText)
-        $process.StandardInput.Close()
+        # Write raw UTF-8 bytes WITHOUT a BOM. The default StandardInput
+        # StreamWriter inherits an encoding (typically [Text.Encoding]::UTF8)
+        # whose EmitUTF8Identifier is true, which prepends EF BB BF to the
+        # first write. That BOM ends up inside the secret on Railway and
+        # silently breaks every consumer that compares the value byte-for-byte
+        # or validates it against a strict character set (Symfony HttpClient
+        # auth_bearer, OAuth client_id, shared-secret HMAC, etc.).
+        $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+        $bytes = $utf8NoBom.GetBytes($plainText)
+        $process.StandardInput.BaseStream.Write($bytes, 0, $bytes.Length)
+        $process.StandardInput.BaseStream.Close()
 
         $standardOutput = $process.StandardOutput.ReadToEnd()
         $standardError = $process.StandardError.ReadToEnd()
@@ -939,28 +948,11 @@ if ($DeployDashboardDotnet) {
     }
 }
 
-# ── Post-deploy: ensure the dashboard OAuth client row is in sync ───────
-# `oauth_clients.client_secret` is encrypted with the running OpenEMR
-# instance's per-site key (CryptoGen). The deploy host can't compute that
-# encryption itself — it lives only inside the openemr-web container —
-# so we shell into the freshly-deployed container and run an idempotent
-# PHP script that re-encrypts and UPSERTs the row using the cleaned
-# DASHBOARD_OIDC_CLIENT_ID / SECRET / REDIRECT_URI env vars.
-#
-# Without this hook, every Railway deploy can leave the dashboard's OAuth
-# client row out-of-sync with the env vars (rotated env-var secret no
-# longer matches the encrypted blob in the DB; or the row was never
-# registered in this environment at all), causing a silent
-# `invalid_client` / "Decryption failed HMAC authentication" on the next
-# /token exchange.
-if (-not $SkipDeploy) {
-    try {
-        Invoke-EnsureDashboardOauthClient -OpenEmrServiceName "openemr-web"
-    }
-    catch {
-        Write-Warning "ensure_dashboard_oauth_client failed: $($_.Exception.Message)"
-        Write-Warning "Dashboard OAuth handoff may not work until this step succeeds."
-        Write-Warning "Re-run ./deploy-railway.ps1 once openemr-web is healthy, or invoke manually with:"
-        Write-Warning "  railway ssh --service openemr-web php /var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php"
-    }
-}
+# Note: ensure_dashboard_oauth_client.php is invoked by Railway's
+# preDeployCommand (see railway.toml), not by this script. The script must
+# run inside the openemr-web container so it can read this instance's
+# per-site CryptoGen keys; preDeployCommand fires inside the new container
+# before traffic is shifted to it, which fits perfectly. Driving it from
+# the deploy host via `railway ssh` was the previous approach but required
+# every operator to register an SSH key with Railway, which is unnecessary
+# friction now that preDeployCommand exists.

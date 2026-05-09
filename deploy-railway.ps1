@@ -736,6 +736,71 @@ function Invoke-RailwayRedeploy {
     Invoke-Railway -Arguments $arguments
 }
 
+function Wait-RailwayServiceDeploymentSuccess {
+    param(
+        [Parameter(Mandatory)][string]$ServiceName,
+        [int]$TimeoutSeconds = 600,
+        [int]$PollIntervalSeconds = 15
+    )
+
+    $previousService = $script:Service
+    $script:Service = $ServiceName
+    try {
+        $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+        while ((Get-Date) -lt $deadline) {
+            $deployment = Get-LatestRailwayDeployment
+            if ($null -ne $deployment) {
+                $status = $deployment.status
+                Write-Host "  $ServiceName latest deployment status: $status"
+                if ($status -eq "SUCCESS") {
+                    return
+                }
+                if ($status -eq "FAILED" -or $status -eq "CRASHED" -or $status -eq "REMOVED") {
+                    throw "$ServiceName deployment ended in status '$status'."
+                }
+            }
+            Start-Sleep -Seconds $PollIntervalSeconds
+        }
+        throw "Timed out after $TimeoutSeconds seconds waiting for $ServiceName deployment to reach SUCCESS."
+    }
+    finally {
+        $script:Service = $previousService
+    }
+}
+
+# Run a one-shot non-interactive `railway ssh` command against a service.
+# Used to invoke post-deploy hooks (e.g. ensure_dashboard_oauth_client.php)
+# that need to execute inside the running container so they can read
+# instance-local secrets (CryptoGen site keys) and emit-encrypt the row.
+function Invoke-RailwayServiceCommand {
+    param(
+        [Parameter(Mandatory)][string]$ServiceName,
+        [Parameter(Mandatory)][string[]]$CommandArguments
+    )
+
+    $sshArgs = @("ssh", "--service", $ServiceName) + $CommandArguments
+    Invoke-Railway -Arguments $sshArgs
+}
+
+function Invoke-EnsureDashboardOauthClient {
+    param(
+        [Parameter(Mandatory)][string]$OpenEmrServiceName
+    )
+
+    Write-Host ""
+    Write-Host "=== Ensuring dashboard OAuth client row in $OpenEmrServiceName ==="
+
+    # Wait for the latest deploy to finish so `railway ssh` lands in the
+    # container that has bin/ensure_dashboard_oauth_client.php and the
+    # cleaned env vars in scope.
+    Wait-RailwayServiceDeploymentSuccess -ServiceName $OpenEmrServiceName
+
+    $scriptPath = "/var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php"
+    Invoke-RailwayServiceCommand `
+        -ServiceName $OpenEmrServiceName `
+        -CommandArguments @("php", $scriptPath)
+}
+
 Confirm-RailwayCli
 Confirm-RailwayLogin
 Confirm-RailwayProject
@@ -871,5 +936,31 @@ if ($DeployDashboardDotnet) {
     finally {
         $script:Service = $previousService
         $script:SyncedDotEnvVariableCount = $previousSyncedCount
+    }
+}
+
+# ── Post-deploy: ensure the dashboard OAuth client row is in sync ───────
+# `oauth_clients.client_secret` is encrypted with the running OpenEMR
+# instance's per-site key (CryptoGen). The deploy host can't compute that
+# encryption itself — it lives only inside the openemr-web container —
+# so we shell into the freshly-deployed container and run an idempotent
+# PHP script that re-encrypts and UPSERTs the row using the cleaned
+# DASHBOARD_OIDC_CLIENT_ID / SECRET / REDIRECT_URI env vars.
+#
+# Without this hook, every Railway deploy can leave the dashboard's OAuth
+# client row out-of-sync with the env vars (rotated env-var secret no
+# longer matches the encrypted blob in the DB; or the row was never
+# registered in this environment at all), causing a silent
+# `invalid_client` / "Decryption failed HMAC authentication" on the next
+# /token exchange.
+if (-not $SkipDeploy) {
+    try {
+        Invoke-EnsureDashboardOauthClient -OpenEmrServiceName "openemr-web"
+    }
+    catch {
+        Write-Warning "ensure_dashboard_oauth_client failed: $($_.Exception.Message)"
+        Write-Warning "Dashboard OAuth handoff may not work until this step succeeds."
+        Write-Warning "Re-run ./deploy-railway.ps1 once openemr-web is healthy, or invoke manually with:"
+        Write-Warning "  railway ssh --service openemr-web php /var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php"
     }
 }

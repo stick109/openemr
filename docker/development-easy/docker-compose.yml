@@ -73,7 +73,15 @@ services:
       SELENIUM_FORCE_HEADLESS: "false"
       SELENIUM_BASE_URL: "http://openemr"
       OPENEMR_DOCKER_ENV_TAG: easy-dev-docker
-      OPENEMR_SETTING_site_addr_oath: 'http://host.docker.internal:${WT_HTTP_PORT:-8300}'
+      # Issuer + advertised /authorize URL for the OAuth server. Must match
+      # the host the clinician's browser uses for OpenEMR (localhost) so the
+      # core EHR session cookie is in scope on the OIDC redirect from
+      # dashboard-dotnet to /oauth2/default/authorize - otherwise
+      # OPENEMR_OAUTH_TRUST_CORE_SESSION cannot see it and the user gets a
+      # second login form. The dashboard container reaches OpenEMR for
+      # backchannel calls via the docker DNS name `openemr` (see
+      # OPENEMR_BACKCHANNEL_INTERNAL_AUTHORITY below).
+      OPENEMR_SETTING_site_addr_oath: 'http://localhost:${WT_HTTP_PORT:-8300}'
       # Dev-easy only: allow OAuth session cookies over HTTP. Production OpenEMR
       # serves OAuth over HTTPS where cookie_secure stays on by default.
       OPENEMR_OAUTH_COOKIE_INSECURE: '1'
@@ -311,9 +319,20 @@ services:
     ports:
     - "${WT_DASHBOARD_PORT:-8400}:8080"
     environment:
-      OPENEMR_OIDC_AUTHORITY: 'http://host.docker.internal:${WT_HTTP_PORT:-8300}/oauth2/default'
+      # Browser-facing OIDC issuer URL. Must match the URL the clinician's
+      # browser uses for OpenEMR so the EHR session cookie is in scope on
+      # the redirect to /authorize.
+      OPENEMR_OIDC_AUTHORITY: 'http://localhost:${WT_HTTP_PORT:-8300}/oauth2/default'
       OPENEMR_PUBLIC_URL: 'http://localhost:${WT_HTTP_PORT:-8300}'
-      OPENEMR_FHIR_BASE_URL: 'http://host.docker.internal:${WT_HTTP_PORT:-8300}/apis/default/fhir/'
+      # BackchannelHostRewriteHandler swaps the request URI's host:port from
+      # the public localhost address to the docker network DNS name when the
+      # dashboard makes server-to-server calls (discovery, JWK, /token), so
+      # those work even though "localhost" inside this container is the
+      # dashboard itself.
+      OPENEMR_BACKCHANNEL_EXTERNAL_AUTHORITY: 'localhost:${WT_HTTP_PORT:-8300}'
+      OPENEMR_BACKCHANNEL_INTERNAL_AUTHORITY: 'openemr'
+      # Server-to-server FHIR calls go directly through the docker network.
+      OPENEMR_FHIR_BASE_URL: 'http://openemr/apis/default/fhir/'
       DASHBOARD_OIDC_CLIENT_ID: '${DASHBOARD_OIDC_CLIENT_ID:-}'
       DASHBOARD_OIDC_CLIENT_SECRET: '${DASHBOARD_OIDC_CLIENT_SECRET:-}'
       DASHBOARD_OIDC_REDIRECT_URI: 'http://localhost:${WT_DASHBOARD_PORT:-8400}/signin-oidc'

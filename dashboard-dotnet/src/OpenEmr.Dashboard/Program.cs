@@ -37,7 +37,14 @@ builder.Services.AddAuthentication(o =>
     {
         inner.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
     }
-    o.BackchannelHttpHandler = new OpenEmrDiscoveryFixupHandler { InnerHandler = inner };
+    DelegatingHandler chain = new OpenEmrDiscoveryFixupHandler { InnerHandler = inner };
+    var externalAuthority = cfg["OPENEMR_BACKCHANNEL_EXTERNAL_AUTHORITY"];
+    var internalAuthority = cfg["OPENEMR_BACKCHANNEL_INTERNAL_AUTHORITY"];
+    if (!string.IsNullOrWhiteSpace(externalAuthority) && !string.IsNullOrWhiteSpace(internalAuthority))
+    {
+        chain = new BackchannelHostRewriteHandler(externalAuthority, internalAuthority) { InnerHandler = chain };
+    }
+    o.BackchannelHttpHandler = chain;
     o.Scope.Clear();
     foreach (var s in new[]
     {

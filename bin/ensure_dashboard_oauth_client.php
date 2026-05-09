@@ -89,30 +89,47 @@ if ($clientName === '') {
     $clientName = DEFAULT_CLIENT_NAME;
 }
 
-// MySQL credentials. Prefer the internal Railway DNS name when present
-// (private network, no proxy fee), fall back to a parsed MYSQL_URL.
-$mysqlHost = envTrimmed('MYSQL_HOST');
-$mysqlPort = envTrimmed('MYSQL_PORT') ?: '3306';
-$mysqlUser = envTrimmed('MYSQL_USER');
-$mysqlPass = envTrimmed('MYSQL_PASS') ?: envTrimmed('MYSQL_PASSWORD') ?: envTrimmed('MYSQLPASSWORD');
-$mysqlDb = envTrimmed('MYSQL_DATABASE') ?: 'openemr';
+// MySQL credentials. preDeployCommand on Railway runs in a transient
+// container whose private-network access is not guaranteed in every
+// region — use MYSQL_PUBLIC_URL (the external proxy hostname) when set,
+// since that's reachable from anywhere with internet egress and the
+// running app container can also use it. Fall back to MYSQL_URL or the
+// individual MYSQL_* vars when no public URL is exposed.
+$mysqlHost = '';
+$mysqlPort = '3306';
+$mysqlUser = '';
+$mysqlPass = '';
+$mysqlDb = 'openemr';
 
-if ($mysqlHost === '' || $mysqlUser === '' || $mysqlPass === '') {
-    $mysqlUrl = envTrimmed('MYSQL_URL');
-    if (
-        $mysqlUrl !== ''
-        && preg_match('#^mysql://([^:]+):([^@]+)@([^:/]+)(?::(\d+))?/(.*)$#', $mysqlUrl, $m) === 1
-    ) {
-        $mysqlUser = $mysqlUser !== '' ? $mysqlUser : $m[1];
-        $mysqlPass = $mysqlPass !== '' ? $mysqlPass : $m[2];
-        $mysqlHost = $mysqlHost !== '' ? $mysqlHost : $m[3];
-        $mysqlPort = $mysqlPort !== '' && $mysqlPort !== '3306' ? $mysqlPort : ($m[4] ?? '3306');
-        $mysqlDb = $mysqlDb !== '' && $mysqlDb !== 'openemr' ? $mysqlDb : ($m[5] ?: 'openemr');
+// Database name: prefer the explicit env var (Railway sets MYSQL_DATABASE),
+// fall back to 'openemr' so a stray URL with /railway as the default DB
+// path doesn't make us connect to the wrong schema.
+$explicitDb = envTrimmed('MYSQL_DATABASE');
+$urlCandidates = [envTrimmed('MYSQL_PUBLIC_URL'), envTrimmed('MYSQL_URL')];
+foreach ($urlCandidates as $url) {
+    if ($url === '') {
+        continue;
+    }
+    if (preg_match('#^mysql://([^:]+):([^@]+)@([^:/]+)(?::(\d+))?/(.*)$#', $url, $m) === 1) {
+        $mysqlUser = $m[1];
+        $mysqlPass = $m[2];
+        $mysqlHost = $m[3];
+        $mysqlPort = $m[4] ?? '3306';
+        $mysqlDb = $explicitDb !== '' ? $explicitDb : ($m[5] !== '' ? $m[5] : 'openemr');
+        break;
     }
 }
 
+if ($mysqlHost === '') {
+    $mysqlHost = envTrimmed('MYSQL_HOST');
+    $mysqlPort = envTrimmed('MYSQL_PORT') ?: '3306';
+    $mysqlUser = envTrimmed('MYSQL_USER');
+    $mysqlPass = envTrimmed('MYSQL_PASS') ?: envTrimmed('MYSQL_PASSWORD') ?: envTrimmed('MYSQLPASSWORD');
+    $mysqlDb = $explicitDb !== '' ? $explicitDb : 'openemr';
+}
+
 if ($mysqlHost === '' || $mysqlUser === '' || $mysqlPass === '') {
-    fail("MySQL connection env vars missing (need MYSQL_HOST/USER/PASS or MYSQL_URL).");
+    fail("MySQL connection env vars missing (need MYSQL_PUBLIC_URL/MYSQL_URL or MYSQL_HOST/USER/PASS).");
 }
 
 try {

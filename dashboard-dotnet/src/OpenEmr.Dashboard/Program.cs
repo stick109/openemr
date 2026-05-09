@@ -11,6 +11,15 @@ var builder = WebApplication.CreateBuilder(args);
 var cfg = builder.Configuration;
 var env = builder.Environment;
 
+// Strip a leading UTF-8 BOM (U+FEFF) and surrounding whitespace from sensitive
+// config values. Pasting an env var from a UTF-8-with-BOM source (e.g. PowerShell
+// Out-File without -Encoding utf8NoBOM) leaks the BOM into the value; without
+// trimming, the BOM is sent to the OAuth server URL-encoded as %EF%BB%BF,
+// producing a silent "invalid_client" / "Client authentication failed" with no
+// in-app diagnostic.
+static string? Sanitize(string? value) =>
+    value?.Trim('\uFEFF', ' ', '\t', '\r', '\n');
+
 builder.Services.AddAuthentication(o =>
 {
     o.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
@@ -19,9 +28,9 @@ builder.Services.AddAuthentication(o =>
 .AddCookie()
 .AddOpenIdConnect(o =>
 {
-    o.Authority = cfg["OPENEMR_OIDC_AUTHORITY"];
-    o.ClientId = cfg["DASHBOARD_OIDC_CLIENT_ID"];
-    o.ClientSecret = cfg["DASHBOARD_OIDC_CLIENT_SECRET"];
+    o.Authority = Sanitize(cfg["OPENEMR_OIDC_AUTHORITY"]);
+    o.ClientId = Sanitize(cfg["DASHBOARD_OIDC_CLIENT_ID"]);
+    o.ClientSecret = Sanitize(cfg["DASHBOARD_OIDC_CLIENT_SECRET"]);
     o.ResponseType = "code";
     o.UsePkce = true;
     o.SaveTokens = true;

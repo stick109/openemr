@@ -117,16 +117,14 @@
     var demographicsLink = hasOe
         ? $"{oeUrl}/interface/patient_file/summary/demographics.php?set_pid={Uri.EscapeDataString(pidValue)}"
         : null;
-    // "Back to OpenEMR" cannot point at interface/main/tabs/main.php — that
-    // file guards on a session-bound `token_main` GET param and calls
-    // authCloseSession() + authLoginScreen() when it's missing, dumping the
-    // user at the login form. token_main is minted only by the login POST
-    // path in main_screen.php, so an external link can't hand it to us.
-    // main_info.php redirects to the calendar (the OpenEMR "home"), uses
-    // the existing session, and works without token_main — which is what
-    // we want for a non-patient-specific "back" link.
+    // "Back to OpenEMR" routes through return_to_main.php — a session-aware
+    // shim that mints a fresh token_main_php and redirects to the tabbed
+    // shell (interface/main/tabs/main.php), reproducing the post-login
+    // landing. tabs/main.php cannot be linked to directly because it
+    // requires the session-bound token_main GET param, and main_info.php
+    // always redirects to the calendar rather than the tabbed shell.
     var mainTabsLink = hasOe
-        ? $"{oeUrl}/interface/main/main_info.php"
+        ? $"{oeUrl}/interface/main/return_to_main.php"
         : null;
 }
 <header class="bg-light border-bottom sticky-top py-2" aria-label="Patient header">

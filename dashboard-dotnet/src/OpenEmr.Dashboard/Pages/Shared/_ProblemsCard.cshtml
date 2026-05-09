@@ -6,18 +6,19 @@
     var pidValue = ViewContext.RouteData.Values["pid"]?.ToString() ?? string.Empty;
     var hasOe = !string.IsNullOrWhiteSpace(oeUrl) && !string.IsNullOrWhiteSpace(pidValue);
 
-    // Per plan §7b, problem-list rows route to the legacy add_edit_issue.php
-    // editor. The querystring uses `issue` for the row id and `thispid` for
-    // the patient (verified against interface/patient_file/summary/add_edit_issue.php).
-    string? IssueLink(string? issueId)
+    // The FHIR Condition id is a UUID; add_edit_issue.php's `issue` parameter
+    // is the legacy numeric lists.id. open_problem_by_uuid.php resolves the
+    // UUID server-side and 302s to the editor with the numeric id, mirroring
+    // the encounter/medication shims under interface/patient_file/.
+    string? IssueLink(string? conditionUuid)
     {
-        if (!hasOe || string.IsNullOrWhiteSpace(issueId))
+        if (!hasOe || string.IsNullOrWhiteSpace(conditionUuid))
         {
             return null;
         }
-        return $"{oeUrl}/interface/patient_file/summary/add_edit_issue.php"
-            + $"?issue={Uri.EscapeDataString(issueId)}"
-            + $"&thispid={Uri.EscapeDataString(pidValue)}";
+        return $"{oeUrl}/interface/patient_file/summary/open_problem_by_uuid.php"
+            + $"?uuid={Uri.EscapeDataString(conditionUuid)}"
+            + $"&pid={Uri.EscapeDataString(pidValue)}";
     }
 }
 <div class="card h-100">

@@ -9,12 +9,11 @@ healthcheckPath = "/meta/health/readyz"
 healthcheckTimeout = 600
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
-# Re-encrypt the dashboard's OAuth client_secret with this instance's
-# CryptoGen site key on every deploy. Idempotent UPSERT against
-# oauth_clients keyed by DASHBOARD_OIDC_CLIENT_ID. Without it, a rotated
-# DASHBOARD_OIDC_CLIENT_SECRET in Railway env vars no longer matches the
-# encrypted blob in the DB and the dashboard handoff dies with
-# `invalid_client` / "Decryption failed HMAC authentication" on /token.
-# `|| true` keeps a transient one-deploy failure from blocking Apache; the
-# next deploy will retry, and operators can run the same script manually.
-preDeployCommand = "sh -c 'php /var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php; exit 0'"
+# Note: the dashboard OAuth-client ensure script (encrypts the
+# DASHBOARD_OIDC_CLIENT_SECRET with this site's CryptoGen drive-side key
+# and UPSERTs the oauth_clients row) is wired into the runtime entrypoint
+# via Dockerfile.railway's sed-patch on openemr.sh, NOT a preDeployCommand.
+# Railway's preDeploy environment is an ephemeral container without the
+# persistent sites/ volume, so CryptoGen there derives a different
+# drive-side key than the running container, and any row it writes fails
+# HMAC validation at /token time ("invalid_client").

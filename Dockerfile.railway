@@ -24,3 +24,15 @@ RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --opt
 RUN mkdir -p /var/uploads/agent \
     && chown apache:apache /var/uploads/agent \
     && chmod 0755 /var/uploads/agent
+
+# Patch the upstream openemr.sh entrypoint so the dashboard OAuth-client
+# ensure script runs after auto_setup (with the persistent sites/ volume
+# mounted) and before Apache starts. Done at build time as a one-shot sed
+# instead of replacing ENTRYPOINT, to keep the rest of openemr.sh's
+# bootstrap (mysql wait, install, key initialization, etc.) intact.
+# Idempotent: skipped if the marker is already present.
+RUN chmod 0755 /var/www/localhost/htdocs/openemr/bin/railway-startup.sh \
+    && if ! grep -q 'railway-startup.sh' /var/www/localhost/htdocs/openemr/openemr.sh; then \
+        sed -i 's|exec /usr/sbin/httpd -D FOREGROUND|exec /var/www/localhost/htdocs/openemr/bin/railway-startup.sh|' \
+            /var/www/localhost/htdocs/openemr/openemr.sh ; \
+    fi

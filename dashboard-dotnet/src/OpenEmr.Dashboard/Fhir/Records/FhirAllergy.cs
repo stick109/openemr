@@ -64,6 +64,33 @@ public sealed record FhirAllergy
     /// </summary>
     public string? ClinicalStatusCode() =>
         this.ClinicalStatus?.Coding is { Count: > 0 } coding ? coding[0].Code : null;
+
+    /// <summary>
+    /// Best-effort allergen display string. OpenEMR's FhirAllergyIntoleranceService
+    /// emits the allergen name on <c>code.coding[0].display</c> (set from the
+    /// diagnosis code description, falling back to <c>lists.title</c>); the FHIR
+    /// <c>code.text</c> field is left empty. Reading only <c>Code.Text</c> caused
+    /// every row to render as "(unspecified)". Returns null when no coding has a
+    /// non-empty display and <c>code.text</c> is also empty.
+    /// </summary>
+    public string? DisplayText()
+    {
+        if (!string.IsNullOrWhiteSpace(this.Code?.Text))
+        {
+            return this.Code.Text;
+        }
+        if (this.Code?.Coding is { Count: > 0 } coding)
+        {
+            foreach (var c in coding)
+            {
+                if (!string.IsNullOrWhiteSpace(c.Display))
+                {
+                    return c.Display;
+                }
+            }
+        }
+        return null;
+    }
 }
 
 public sealed record FhirAllergyReaction

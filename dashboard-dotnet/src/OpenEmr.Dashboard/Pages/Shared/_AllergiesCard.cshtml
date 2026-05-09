@@ -36,7 +36,7 @@
         <ul class="list-group list-group-flush">
             @foreach (var allergy in Model.Data)
             {
-                var substance = allergy.Code?.Text ?? "(unspecified)";
+                var substance = allergy.DisplayText() ?? "(unspecified)";
                 var statusCode = allergy.ClinicalStatusCode();
                 var reaction = allergy.FirstReactionText();
                 var rowLink = RowLink();

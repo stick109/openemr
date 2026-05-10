@@ -398,14 +398,21 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
             return;
         }
 
-        // Split "Name <phone>" -> name + phone. Falls back to treating the
-        // whole string as a phone when no '<' delimiter is present, which
-        // matches OpenEMR's pre-existing UI convention for phone_contact.
+        // Split "Name <phone>" -> name + phone. The DemographicsDispatcher
+        // writes that format when both halves are extracted. Legacy rows
+        // hold either a bare phone or (rarely) a bare name; pick the right
+        // bucket based on whether the string contains any digits.
         $name = '';
-        $phone = $rawPhoneContact;
-        if ($rawPhoneContact !== '' && preg_match('/^(.*)\s*<([^>]+)>\s*$/u', $rawPhoneContact, $m) === 1) {
-            $name = trim($m[1]);
-            $phone = trim($m[2]);
+        $phone = '';
+        if ($rawPhoneContact !== '') {
+            if (preg_match('/^(.*)\s*<([^>]+)>\s*$/u', $rawPhoneContact, $m) === 1) {
+                $name = trim($m[1]);
+                $phone = trim($m[2]);
+            } elseif (preg_match('/\d/', $rawPhoneContact) === 1) {
+                $phone = $rawPhoneContact;
+            } else {
+                $name = $rawPhoneContact;
+            }
         }
 
         $contact = new FHIRPatientContact();

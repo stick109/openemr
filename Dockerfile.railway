@@ -45,12 +45,25 @@ RUN if ! grep -q 'ensure_dashboard_oauth_client' /var/www/localhost/htdocs/opene
 # Ensure the agent-uploads directory inside the persistent sites/ Railway
 # volume exists and is writable by apache before httpd starts. The volume
 # is only mounted at runtime, so this must run from openemr.sh (root
-# context) — we cannot bake it into the image. The mkdir+chown is wrapped
-# in a single shell expression so the sed substitution stays on one line
-# (busybox sed in the openemr base image rejects literal \n in the RHS).
-# Idempotent: the marker comment in the substitution prevents re-injection
-# on subsequent builds; mkdir -p tolerates re-runs at startup.
-RUN if ! grep -q 'agent-uploads-init' /var/www/localhost/htdocs/openemr/openemr.sh; then \
-        sed -i 's|exec /usr/sbin/httpd -D FOREGROUND|{ mkdir -p /var/www/localhost/htdocs/openemr/sites/default/agent-uploads \&\& chown apache:apache /var/www/localhost/htdocs/openemr/sites/default/agent-uploads \&\& chmod 0755 /var/www/localhost/htdocs/openemr/sites/default/agent-uploads ; } || true \&\& : agent-uploads-init \&\& exec /usr/sbin/httpd -D FOREGROUND|' \
+# context) — we cannot bake it into the image. Stage the logic as a
+# standalone script and patch openemr.sh to invoke it; this keeps the
+# busybox-sed substitution to a single literal command (the previous
+# inline brace-group form tripped "bad option in substitution expression"
+# even with no \n characters present). Idempotent: marker filename in
+# the grep guard prevents re-injection across rebuilds.
+RUN printf '%s\n' \
+        '#!/bin/sh' \
+        '# Created by Dockerfile.railway: ensure SharedUploadManager target dir' \
+        '# exists with apache ownership, regardless of how the underlying volume' \
+        '# was created. mkdir -p / chown / chmod tolerate re-runs at startup.' \
+        'set -e' \
+        'TARGET=/var/www/localhost/htdocs/openemr/sites/default/agent-uploads' \
+        'mkdir -p "$TARGET"' \
+        'chown apache:apache "$TARGET"' \
+        'chmod 0755 "$TARGET"' \
+        > /usr/local/bin/ensure_agent_uploads_dir.sh \
+    && chmod 0755 /usr/local/bin/ensure_agent_uploads_dir.sh \
+    && if ! grep -q 'ensure_agent_uploads_dir' /var/www/localhost/htdocs/openemr/openemr.sh; then \
+        sed -i 's|exec /usr/sbin/httpd -D FOREGROUND|/usr/local/bin/ensure_agent_uploads_dir.sh \|\| true ; exec /usr/sbin/httpd -D FOREGROUND|' \
             /var/www/localhost/htdocs/openemr/openemr.sh ; \
     fi

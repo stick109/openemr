@@ -22,10 +22,6 @@
 
 require_once(__DIR__ . '/../../globals.php');
 
-use OpenEMR\Common\Crypto\CryptoGen;
-use OpenEMR\Common\Session\SessionRestoreCookie;
-use OpenEMR\Common\Session\SessionWrapperFactory;
-
 // Resolve the active patient. The menu appends pid via "pid": "true"; the
 // entry url ends in "modern_dashboard.php?pid=", so $_GET['pid'] holds the
 // local pid. Fall back to the session pid if missing.
@@ -45,49 +41,6 @@ $dashboardBaseUrl = getenv('OPENEMR_DASHBOARD_URL') ?: 'http://localhost:8400';
 $dashboardBaseUrl = rtrim($dashboardBaseUrl, '/');
 
 $target = $dashboardBaseUrl . '/Patient/' . $pid;
-
-// Side-channel session restore cookie. The .NET dashboard lives on a
-// different Public-Suffix-List "site" from OpenEMR on Railway
-// (dashboard-dotnet-production.up.railway.app vs
-// openemr-web-production.up.railway.app), so a cross-site click on
-// "Back to OpenEMR" lands at interface/main/return_to_main.php with the
-// SameSite=Strict OpenEMR core cookie suppressed by the browser. Without
-// the side channel, return_to_main.php would create a fresh anonymous
-// session and bounce the user to the login screen even though they were
-// logged in moments before. We capture the active auth keys (authUserID,
-// authUser, authPass, site_id, etc.) into an encrypted SameSite=None
-// cookie that is included on cross-site nav, and return_to_main.php
-// decrypts and reseeds the session before globals.php's auth check runs.
-// CryptoGen's drive key makes the blob unforgeable; the embedded ts
-// stamp + 10 minute TTL bound replay risk if the cookie is ever leaked.
-try {
-    $session = SessionWrapperFactory::getInstance()->getActiveSession();
-    $payload = SessionRestoreCookie::buildPayloadFromSession($session);
-    if (!empty($payload['authUserID']) && !empty($payload['authUser']) && !empty($payload['authPass'])) {
-        $cookieValue = (new SessionRestoreCookie(new CryptoGen(), time()))->encode($payload);
-        $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
-            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
-        // SameSite=None requires Secure; on plain-HTTP local dev fall back to
-        // Lax (the local dashboard is also on localhost so SameSite=Lax is
-        // enough — the bug only repros cross-site on Railway).
-        setcookie(
-            SessionRestoreCookie::COOKIE_NAME,
-            $cookieValue,
-            [
-                'expires' => time() + SessionRestoreCookie::TTL_SECONDS,
-                'path' => '/',
-                'secure' => $isHttps,
-                'httponly' => true,
-                'samesite' => $isHttps ? 'None' : 'Lax',
-            ]
-        );
-    }
-} catch (\Throwable $cookieException) {
-    // Don't break the dashboard handoff if the side-channel cookie fails to
-    // build; the user just gets the existing (broken) cross-site behavior
-    // and bounces to login on return — same as before this fix.
-    error_log('SessionRestoreCookie encode failed: ' . $cookieException->getMessage());
-}
 
 ?><!DOCTYPE html>
 <html lang="en">

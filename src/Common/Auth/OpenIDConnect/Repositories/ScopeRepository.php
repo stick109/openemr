@@ -92,6 +92,21 @@ class ScopeRepository implements ScopeRepositoryInterface
      */
     public function getScopeEntityByIdentifier($identifier): ?ScopeEntity
     {
+        // 'nonce' is a synthetic OpenID Connect scope that finalizeScopes()
+        // injects whenever the active session carries a nonce. It is never
+        // listed in supportedServerScopes — it exists purely as a marker so
+        // the id_token response writer knows to echo back the nonce claim.
+        // When a refresh_token grant comes in, the league library passes the
+        // PERSISTED scopes (which already include 'nonce' if the original
+        // authorization-code grant set a session nonce) back through
+        // validateScopes -> getScopeEntityByIdentifier. Without this guard
+        // the validator returns null and the server replies 400 invalid_scope,
+        // so the dashboard cannot rotate its token after expiry.
+        if ($identifier === 'nonce') {
+            $nonceScope = new ScopeEntity();
+            $nonceScope->setIdentifier('nonce');
+            return $nonceScope;
+        }
         if (empty($this->validationScopes)) {
             $this->getSystemLogger()->debug("ScopeRepository->getScopeEntityByIdentifier() attempting to build validation scopes");
             $currentSmartScopes = $this->getCurrentSmartScopes();

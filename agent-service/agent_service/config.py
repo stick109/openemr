@@ -38,9 +38,25 @@ from functools import lru_cache
 from pathlib import Path
 
 
+# Whitespace characters stripped from every environment-variable read. The
+# critical addition over the default ``str.strip()`` set is U+FEFF (the
+# UTF-8 byte-order mark), which Railway pasted into env vars set via the
+# CLI before the deploy-script's no-BOM stdin write landed. A leftover BOM
+# at the start of OPENAI_API_KEY surfaces here as
+#
+#     UnicodeEncodeError: 'ascii' codec can't encode character '﻿' in
+#     position 7: ordinal not in range(128)
+#
+# when the OpenAI SDK encodes the Authorization header, killing the lab-PDF
+# extractor. Stripping the BOM at the env-read boundary makes the rest of
+# the service immune.
+_ENV_STRIP_CHARS = " \t\r\n\v\f﻿"
+
+
 def _require_env(name: str) -> str:
     """Return the value of *name* from the environment or raise."""
-    value = os.environ.get(name)
+    raw = os.environ.get(name)
+    value = raw.strip(_ENV_STRIP_CHARS) if raw is not None else None
     if not value:
         raise RuntimeError(
             f"Required environment variable {name!r} is not set or empty. "
@@ -50,11 +66,12 @@ def _require_env(name: str) -> str:
 
 
 def _optional_env(name: str, default: str = "") -> str:
-    return os.environ.get(name, default)
+    raw = os.environ.get(name, default)
+    return raw.strip(_ENV_STRIP_CHARS) if raw else raw
 
 
 def _bool_env(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name, "")
+    raw = os.environ.get(name, "").strip(_ENV_STRIP_CHARS)
     if not raw:
         return default
     return raw.strip().lower() in ("1", "true", "yes")
@@ -67,7 +84,7 @@ def _int_env(name: str, default: int) -> int:
     typo (e.g. ``OPENEMR_DB_PORT=33o6``) fails loudly at startup rather
     than silently using the default.
     """
-    raw = os.environ.get(name, "")
+    raw = os.environ.get(name, "").strip(_ENV_STRIP_CHARS)
     if raw == "":
         return default
     try:

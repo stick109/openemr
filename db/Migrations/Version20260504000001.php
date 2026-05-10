@@ -93,15 +93,27 @@ final class Version20260504000001 extends AbstractMigration
         $this->createTable($table);
 
         // Register the new encounter form in the Administrative category.
-        // Verbatim INSERT from intake-forms-plan.md §3.2.
+        // Idempotent INSERT keyed by directory: the registry table has no
+        // UNIQUE on directory, so a plain INSERT VALUES ... would let two
+        // upload_intake_form rows accumulate if this migration ever runs in
+        // parallel with sql/8_1_0-to-8_1_1_upgrade.sql (see the May 2026
+        // duplicate-row incident).  The matching SQL guard lives in that
+        // upgrade file; this stays consistent so re-running either pipeline
+        // is a no-op when the row already exists.  The display name matches
+        // the renamed "Upload Document (Co-Pilot)" entry from
+        // sql/8_1_0-to-8_1_1_upgrade.sql so the two code paths converge.
         $this->addSql(
             "INSERT INTO `registry`"
             . " (`name`, `state`, `directory`, `sql_run`, `unpackaged`, `date`, `priority`,"
-            . " `category`, `nickname`, `patient_encounter`, `therapy_group_encounter`,"
-            . " `aco_spec`, `form_foreign_id`)"
-            . " VALUES"
-            . " ('Upload Intake Form', 1, 'upload_intake_form', 1, 1, NOW(), 0,"
-            . " 'Administrative', '', 1, 0, 'admin|super', NULL)"
+            . "  `category`, `nickname`, `patient_encounter`, `therapy_group_encounter`,"
+            . "  `aco_spec`, `form_foreign_id`)"
+            . " SELECT"
+            . " 'Upload Document (Co-Pilot)', 1, 'upload_intake_form', 1, 1, NOW(), 0,"
+            . " 'Administrative', '', 1, 0, 'admin|super', NULL"
+            . " FROM DUAL"
+            . " WHERE NOT EXISTS ("
+            . "   SELECT 1 FROM `registry` WHERE `directory` = 'upload_intake_form'"
+            . " )"
         );
     }
 

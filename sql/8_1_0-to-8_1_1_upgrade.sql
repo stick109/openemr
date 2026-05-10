@@ -170,15 +170,33 @@ UPDATE `registry`
   WHERE `directory` = 'upload_intake_form' AND `name` = 'Upload Intake Form';
 #EndIf
 
-#IfNotRow2D registry directory upload_intake_form name Upload Document (Co-Pilot)
+-- Idempotent INSERT keyed by directory.  The earlier #IfNotRow2D guard relied
+-- on the SQL upgrader's row-existence check correctly matching values that
+-- contain whitespace and parentheses ("Upload Document (Co-Pilot)").  In
+-- practice the guard skipped past existing rows on at least one production
+-- redeploy and produced two identical Administrative-dropdown entries.  Run
+-- the dedup explicitly here so the upgrade self-heals any prior duplicates,
+-- then INSERT only when no upload_intake_form row exists at all.  The schema
+-- has no UNIQUE on directory, so we use INSERT ... SELECT WHERE NOT EXISTS
+-- for an SQL-level guard that does not depend on the upgrader's parser.
+DELETE r1
+  FROM `registry` r1
+  JOIN `registry` r2
+    ON r1.`directory` = r2.`directory`
+   AND r1.`id` > r2.`id`
+ WHERE r1.`directory` = 'upload_intake_form';
+
 INSERT INTO `registry`
   (`name`, `state`, `directory`, `sql_run`, `unpackaged`, `date`, `priority`,
    `category`, `nickname`, `patient_encounter`, `therapy_group_encounter`,
    `aco_spec`, `form_foreign_id`)
-VALUES
-  ('Upload Document (Co-Pilot)', 1, 'upload_intake_form', 1, 1, NOW(), 0,
-   'Administrative', '', 1, 0, 'admin|super', NULL);
-#EndIf
+SELECT
+  'Upload Document (Co-Pilot)', 1, 'upload_intake_form', 1, 1, NOW(), 0,
+  'Administrative', '', 1, 0, 'admin|super', NULL
+FROM DUAL
+WHERE NOT EXISTS (
+  SELECT 1 FROM `registry` WHERE `directory` = 'upload_intake_form'
+);
 
 --
 -- Register the audit_log_purge background service.

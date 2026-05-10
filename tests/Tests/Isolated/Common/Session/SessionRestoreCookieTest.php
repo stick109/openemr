@@ -73,6 +73,27 @@ class SessionRestoreCookieTest extends TestCase
         $this->assertSame($data, $decoded);
     }
 
+    public function testRoundTripPreservesBinaryStringValues(): void
+    {
+        // authPass in OpenEMR is an MD5-derived raw byte string; json_encode
+        // would normally reject it as "Malformed UTF-8 characters". The
+        // envelope wrapping in encode() must round-trip these byte strings
+        // exactly so the consumer sees the same bytes that were captured.
+        $restore = new SessionRestoreCookie($this->cryptoGen, 1_000);
+        $binaryAuthPass = hex2bin('0102030405060708090a0bff80c1d2e3f4');
+        $data = [
+            'authUser' => 'admin',
+            'authUserID' => 1,
+            'authPass' => $binaryAuthPass,
+        ];
+
+        $encoded = $restore->encode($data);
+        $decoded = $restore->decode($encoded);
+
+        $this->assertSame($data, $decoded);
+        $this->assertSame($binaryAuthPass, $decoded['authPass'] ?? null);
+    }
+
     public function testDecodeRejectsExpiredPayload(): void
     {
         $producer = new SessionRestoreCookie($this->cryptoGen, 1_000);

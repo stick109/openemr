@@ -91,13 +91,29 @@ class SessionRestoreCookie
      * a cookie value. Adds a `ts` timestamp the consumer uses to enforce
      * TTL_SECONDS on decode.
      *
+     * Session values like authPass are MD5-derived raw byte strings that
+     * json_encode rejects with "Malformed UTF-8 characters". To make the
+     * round trip byte-exact regardless of what bytes the session contains,
+     * every value is wrapped in {t, v} envelopes — strings are base64-encoded
+     * (t='b64'), other JSON-friendly scalars/arrays go through unchanged
+     * (t='raw'). decode() inverts the transform.
+     *
      * @param array<string, mixed> $sessionData
      */
     public function encode(array $sessionData): string
     {
+        $envelope = [];
+        foreach ($sessionData as $key => $value) {
+            if (is_string($value)) {
+                $envelope[$key] = ['t' => 'b64', 'v' => base64_encode($value)];
+            } else {
+                $envelope[$key] = ['t' => 'raw', 'v' => $value];
+            }
+        }
+
         $payload = [
             'ts' => $this->now,
-            'data' => $sessionData,
+            'data' => $envelope,
         ];
 
         $json = json_encode($payload, JSON_THROW_ON_ERROR);
@@ -144,8 +160,28 @@ class SessionRestoreCookie
             return null;
         }
 
-        /** @var array<string, mixed> $data */
-        return $data;
+        // Unwrap the {t, v} envelope encode() applied. Tolerate older blobs
+        // produced before the envelope was added by passing them through.
+        $unwrapped = [];
+        foreach ($data as $key => $entry) {
+            if (is_array($entry) && isset($entry['t'], $entry['v'])) {
+                if ($entry['t'] === 'b64' && is_string($entry['v'])) {
+                    $decoded = base64_decode($entry['v'], true);
+                    if ($decoded !== false) {
+                        $unwrapped[$key] = $decoded;
+                        continue;
+                    }
+                }
+                if ($entry['t'] === 'raw') {
+                    $unwrapped[$key] = $entry['v'];
+                    continue;
+                }
+            }
+            $unwrapped[$key] = $entry;
+        }
+
+        /** @var array<string, mixed> $unwrapped */
+        return $unwrapped;
     }
 
     /**

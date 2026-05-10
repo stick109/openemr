@@ -667,7 +667,12 @@ if (OEGlobalsBag::getInstance()->getBoolean('google_signin_enabled') && !empty(O
         <div class='encounter-summary-container'>
             <?php
             $dispatcher = OEGlobalsBag::getInstance()->getKernel()->getEventDispatcher();
-            $event = new EncounterFormsListRenderEvent($session->get('encounter'), $attendant_type);
+            // EncounterSessionUtil::setEncounter stores the encounter as a stringified int,
+            // but EncounterFormsListRenderEvent::__construct requires ?int — passing the raw
+            // session value triggers a TypeError that aborts the entire form-list render.
+            $sessionEncounter = $session->get('encounter');
+            $eventEncounter = is_numeric($sessionEncounter) ? (int) $sessionEncounter : null;
+            $event = new EncounterFormsListRenderEvent($eventEncounter, $attendant_type);
             $event->setGroupId($groupId ?? null);
             $event->setPid($pid ?? null);
             $dispatcher->dispatch($event, EncounterFormsListRenderEvent::EVENT_SECTION_RENDER_PRE);
@@ -1032,7 +1037,10 @@ if (OEGlobalsBag::getInstance()->getBoolean('google_signin_enabled') && !empty(O
         }
 
         $dispatcher = OEGlobalsBag::getInstance()->getKernel()->getEventDispatcher();
-        $event = new EncounterFormsListRenderEvent($session->get('encounter'), $attendant_type);
+        // Same string-vs-int session-encoded encounter mismatch as the PRE event above.
+        $sessionEncounter = $session->get('encounter');
+        $eventEncounter = is_numeric($sessionEncounter) ? (int) $sessionEncounter : null;
+        $event = new EncounterFormsListRenderEvent($eventEncounter, $attendant_type);
         $event->setGroupId($groupId ?? null);
         $event->setPid($pid ?? null);
         $dispatcher->dispatch($event, EncounterFormsListRenderEvent::EVENT_SECTION_RENDER_POST);

@@ -22,8 +22,23 @@ final class SharedUploadManager
 {
     /**
      * Default mount point inside the container for the shared volume.
+     *
+     * Used when neither an explicit constructor argument nor the
+     * OPENEMR_AGENT_SHARED_DIR environment variable is set. Local dev-easy
+     * mounts a named Docker volume here; production deployments without
+     * that volume must point OPENEMR_AGENT_SHARED_DIR at a path that lives
+     * on a persistent volume (e.g. inside the sites/ Railway volume).
      */
     public const DEFAULT_SHARED_DIR = '/var/uploads/agent';
+
+    /**
+     * Environment variable name that overrides DEFAULT_SHARED_DIR. Set this
+     * in environments where the canonical /var/uploads/agent path is not on
+     * a persistent volume (Railway prod stores PDFs ephemerally otherwise,
+     * and pdf.php returns 404 after every redeploy because the file was
+     * wiped with the container's writable layer).
+     */
+    public const SHARED_DIR_ENV = 'OPENEMR_AGENT_SHARED_DIR';
 
     /**
      * Maximum allowed length for a trace ID after sanitisation.
@@ -47,10 +62,21 @@ final class SharedUploadManager
         'hl7',
     ];
 
+    private readonly string $sharedDirectory;
+
     public function __construct(
         private readonly LoggerInterface $logger,
-        private readonly string $sharedDirectory = self::DEFAULT_SHARED_DIR,
+        ?string $sharedDirectory = null,
     ) {
+        if ($sharedDirectory !== null) {
+            $this->sharedDirectory = $sharedDirectory;
+            return;
+        }
+
+        $envValue = getenv(self::SHARED_DIR_ENV);
+        $this->sharedDirectory = is_string($envValue) && $envValue !== ''
+            ? $envValue
+            : self::DEFAULT_SHARED_DIR;
     }
 
     /**

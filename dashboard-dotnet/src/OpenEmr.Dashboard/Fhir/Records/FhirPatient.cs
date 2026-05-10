@@ -31,6 +31,36 @@ public sealed record FhirPatient
     public bool? DeceasedBoolean { get; init; }
 
     /// <summary>
+    /// Postal/billing addresses. OpenEMR's FHIR layer emits a single home
+    /// address for most patients; the "use" attribute distinguishes home /
+    /// billing / temp where multiple are present.
+    /// </summary>
+    [JsonPropertyName("address")]
+    public IReadOnlyList<FhirAddress>? Address { get; init; }
+
+    /// <summary>
+    /// Phone numbers and email addresses. OpenEMR maps phone_home/biz/cell
+    /// to <c>telecom[].system='phone'</c> with the corresponding <c>use</c>,
+    /// and email/email_direct to <c>telecom[].system='email'</c>. Emergency
+    /// contact phone (phone_contact) is NOT in this list — it lives in
+    /// <see cref="Contact"/>.
+    /// </summary>
+    [JsonPropertyName("telecom")]
+    public IReadOnlyList<FhirContactPoint>? Telecom { get; init; }
+
+    /// <summary>
+    /// Emergency / next-of-kin contacts (FHIR Patient.contact[]). Each entry
+    /// holds the contact's name, relationship, and phone, sourced on the
+    /// OpenEMR side from patient_data.phone_contact +
+    /// patient_data.contact_relationship. Note: the dashboard-side
+    /// DemographicsDispatcher writes "Name &lt;phone&gt;" into phone_contact
+    /// when both halves are extracted, so the formatted string lives in
+    /// telecom[0].value when OpenEMR splits it back out.
+    /// </summary>
+    [JsonPropertyName("contact")]
+    public IReadOnlyList<FhirPatientContact>? Contact { get; init; }
+
+    /// <summary>
     /// OpenEMR's `pubpid` is emitted as a FHIR identifier whose
     /// <c>type.coding[].code == "PT"</c>. Returns the first matching value, or
     /// <c>null</c> if no PT identifier is present.
@@ -130,4 +160,81 @@ public sealed record FhirCoding
 
     [JsonPropertyName("display")]
     public string? Display { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 Address. OpenEMR populates <c>line</c> as an array of street
+/// strings, <c>city</c>, <c>state</c>, <c>postalCode</c>, and <c>country</c>.
+/// </summary>
+public sealed record FhirAddress
+{
+    [JsonPropertyName("use")]
+    public string? Use { get; init; }
+
+    [JsonPropertyName("type")]
+    public string? Type { get; init; }
+
+    [JsonPropertyName("text")]
+    public string? Text { get; init; }
+
+    [JsonPropertyName("line")]
+    public IReadOnlyList<string>? Line { get; init; }
+
+    [JsonPropertyName("city")]
+    public string? City { get; init; }
+
+    [JsonPropertyName("district")]
+    public string? District { get; init; }
+
+    [JsonPropertyName("state")]
+    public string? State { get; init; }
+
+    [JsonPropertyName("postalCode")]
+    public string? PostalCode { get; init; }
+
+    [JsonPropertyName("country")]
+    public string? Country { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 ContactPoint (telecom). <c>system</c> is "phone" or "email";
+/// <c>use</c> is "home" / "work" / "mobile".
+/// </summary>
+public sealed record FhirContactPoint
+{
+    [JsonPropertyName("system")]
+    public string? System { get; init; }
+
+    [JsonPropertyName("value")]
+    public string? Value { get; init; }
+
+    [JsonPropertyName("use")]
+    public string? Use { get; init; }
+
+    [JsonPropertyName("rank")]
+    public int? Rank { get; init; }
+}
+
+/// <summary>
+/// FHIR R4 Patient.contact (emergency contact / next-of-kin). Holds the
+/// contact's name, relationship, and telecom. OpenEMR currently does not
+/// emit <c>contact[]</c> (its FhirPatientService omits the field), so this
+/// record will only deserialize when a future OpenEMR change adds it.
+/// </summary>
+public sealed record FhirPatientContact
+{
+    [JsonPropertyName("relationship")]
+    public IReadOnlyList<FhirCodeableConcept>? Relationship { get; init; }
+
+    [JsonPropertyName("name")]
+    public FhirHumanName? Name { get; init; }
+
+    [JsonPropertyName("telecom")]
+    public IReadOnlyList<FhirContactPoint>? Telecom { get; init; }
+
+    [JsonPropertyName("address")]
+    public FhirAddress? Address { get; init; }
+
+    [JsonPropertyName("gender")]
+    public string? Gender { get; init; }
 }

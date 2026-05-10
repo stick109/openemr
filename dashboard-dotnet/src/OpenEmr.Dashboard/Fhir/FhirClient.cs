@@ -116,6 +116,18 @@ public sealed class FhirClient
             cancellationToken);
 
     /// <summary>
+    /// Insurance Coverage entries for a patient
+    /// (<c>Coverage?patient={uuid}</c>). The dashboard renders the primary
+    /// (lowest <c>order</c>) Coverage; the rest are kept available for
+    /// future "secondary insurance" cards.
+    /// </summary>
+    public Task<CardResult<FhirCoverage>> GetCoverageAsync(string patientUuid, CancellationToken cancellationToken) =>
+        this.SearchBundleAsync<FhirCoverage>(
+            $"Coverage?patient={Uri.EscapeDataString(patientUuid)}",
+            "coverage",
+            cancellationToken);
+
+    /// <summary>
     /// Issues a FHIR search and returns a <see cref="CardResult{T}"/> per the
     /// per-card-error-isolation contract from plan §5: HTTP failure or invalid
     /// JSON yields <see cref="CardResult{T}.Failure"/>; an empty bundle yields

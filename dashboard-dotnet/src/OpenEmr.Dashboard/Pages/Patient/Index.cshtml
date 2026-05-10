@@ -35,6 +35,13 @@
             <partial name="_EncountersCard" model="Model.Encounters" />
         </div>
 
+        @if (Model.FhirPatient is not null)
+        {
+            <div class="col-12 col-lg-8">
+                <partial name="_DemographicsCard" model="(Model.FhirPatient, Model.Coverage)" />
+            </div>
+        }
+
         <div class="col-12">
             <partial name="_CopilotCard" model="Model" />
         </div>

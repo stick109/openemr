@@ -1,0 +1,202 @@
+@using OpenEmr.Dashboard.Fhir.Records
+@model (FhirPatient Patient, CardResult<FhirCoverage> Coverage)
+@functions {
+    private static string? FirstNonEmpty(params string?[] candidates)
+    {
+        foreach (var c in candidates)
+        {
+            if (!string.IsNullOrWhiteSpace(c))
+            {
+                return c;
+            }
+        }
+        return null;
+    }
+
+    private static IReadOnlyList<(string Label, string Value)> CollectAddressLines(FhirPatient patient)
+    {
+        var rows = new List<(string, string)>();
+        var first = patient.Address?.FirstOrDefault();
+        if (first is null)
+        {
+            return rows;
+        }
+        var streetLines = (first.Line is not null && first.Line.Count > 0)
+            ? string.Join(", ", first.Line)
+            : null;
+        if (!string.IsNullOrWhiteSpace(streetLines))
+        {
+            rows.Add(("Street", streetLines));
+        }
+        var cityState = string.Join(", ",
+            new[] { first.City, first.State }
+                .Where(s => !string.IsNullOrWhiteSpace(s))!);
+        var cityStateZip = string.IsNullOrWhiteSpace(first.PostalCode)
+            ? cityState
+            : (string.IsNullOrWhiteSpace(cityState) ? first.PostalCode : $"{cityState} {first.PostalCode}");
+        if (!string.IsNullOrWhiteSpace(cityStateZip))
+        {
+            rows.Add(("City / State / ZIP", cityStateZip));
+        }
+        if (!string.IsNullOrWhiteSpace(first.Country))
+        {
+            rows.Add(("Country", first.Country));
+        }
+        return rows;
+    }
+
+    private static IReadOnlyList<(string Label, string Value)> CollectTelecom(FhirPatient patient)
+    {
+        var rows = new List<(string, string)>();
+        if (patient.Telecom is null)
+        {
+            return rows;
+        }
+        foreach (var t in patient.Telecom)
+        {
+            if (string.IsNullOrWhiteSpace(t.Value))
+            {
+                continue;
+            }
+            var system = (t.System ?? "?").ToLowerInvariant();
+            var use = (t.Use ?? "").ToLowerInvariant();
+            // "Phone (home)" / "Email" / "Phone (mobile)" — use empty parens
+            // when the use is missing rather than printing "(?)".
+            var label = system switch
+            {
+                "phone" => string.IsNullOrEmpty(use) ? "Phone" : $"Phone ({use})",
+                "email" => string.IsNullOrEmpty(use) ? "Email" : $"Email ({use})",
+                _ => string.IsNullOrEmpty(use) ? char.ToUpperInvariant(system[0]) + system[1..] : $"{system} ({use})",
+            };
+            rows.Add((label, t.Value));
+        }
+        return rows;
+    }
+
+    private static (string? Name, string? Relationship, string? Phone)? FirstContact(FhirPatient patient)
+    {
+        var c = patient.Contact?.FirstOrDefault();
+        if (c is null)
+        {
+            return null;
+        }
+        var nameParts = new List<string>();
+        if (c.Name?.Given is not null)
+        {
+            nameParts.AddRange(c.Name.Given.Where(g => !string.IsNullOrWhiteSpace(g)));
+        }
+        if (!string.IsNullOrWhiteSpace(c.Name?.Family))
+        {
+            nameParts.Add(c.Name.Family);
+        }
+        var name = nameParts.Count > 0 ? string.Join(' ', nameParts) : null;
+        var relationship = c.Relationship?
+            .Select(rel => FirstNonEmpty(rel.Text, rel.Coding?.FirstOrDefault()?.Display, rel.Coding?.FirstOrDefault()?.Code))
+            .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s));
+        var phone = c.Telecom?
+            .FirstOrDefault(t => string.Equals(t.System, "phone", StringComparison.OrdinalIgnoreCase))?
+            .Value;
+        if (name is null && relationship is null && string.IsNullOrWhiteSpace(phone))
+        {
+            return null;
+        }
+        return (name, relationship, phone);
+    }
+
+    private static FhirCoverage? PrimaryCoverage(CardResult<FhirCoverage> result)
+    {
+        if (result.HasError || result.Data.Count == 0)
+        {
+            return null;
+        }
+        // Lowest order wins; ties broken by index. OpenEMR populates `order=1`
+        // for the row with `insurance_data.type='primary'`.
+        return result.Data
+            .OrderBy(c => c.Order ?? int.MaxValue)
+            .First();
+    }
+}
+@{
+    var (patient, coverageResult) = Model;
+    var addressRows = CollectAddressLines(patient);
+    var telecomRows = CollectTelecom(patient);
+    var contact = FirstContact(patient);
+    var coverage = PrimaryCoverage(coverageResult);
+    var hasAnything = addressRows.Count > 0
+        || telecomRows.Count > 0
+        || contact is not null
+        || coverage is not null;
+}
+<section class="card h-100" aria-label="Demographics, contacts, and insurance">
+    <div class="card-header py-2">
+        <h2 class="h6 mb-0">Demographics &amp; Insurance</h2>
+    </div>
+    <div class="card-body">
+        @if (!hasAnything)
+        {
+            <p class="text-muted mb-0">No address, contact, or insurance recorded.</p>
+        }
+        else
+        {
+            <dl class="row mb-0 small">
+                @foreach (var (label, value) in addressRows)
+                {
+                    <dt class="col-sm-5 fw-semibold">@label</dt>
+                    <dd class="col-sm-7 mb-2">@value</dd>
+                }
+                @foreach (var (label, value) in telecomRows)
+                {
+                    <dt class="col-sm-5 fw-semibold">@label</dt>
+                    <dd class="col-sm-7 mb-2">@value</dd>
+                }
+                @if (contact is not null)
+                {
+                    <dt class="col-12 fw-semibold mt-2">Emergency contact</dt>
+                    @if (!string.IsNullOrWhiteSpace(contact.Value.Name))
+                    {
+                        <dt class="col-sm-5 ps-3 fw-normal text-muted">Name</dt>
+                        <dd class="col-sm-7 mb-1">@contact.Value.Name</dd>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(contact.Value.Relationship))
+                    {
+                        <dt class="col-sm-5 ps-3 fw-normal text-muted">Relationship</dt>
+                        <dd class="col-sm-7 mb-1">@contact.Value.Relationship</dd>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(contact.Value.Phone))
+                    {
+                        <dt class="col-sm-5 ps-3 fw-normal text-muted">Phone</dt>
+                        <dd class="col-sm-7 mb-2">@contact.Value.Phone</dd>
+                    }
+                }
+                @if (coverage is not null)
+                {
+                    var carrier = coverage.CarrierDisplay();
+                    var planType = coverage.PlanTypeDisplay();
+                    var memberId = coverage.SubscriberId;
+                    var groupNumber = coverage.GroupNumber();
+                    <dt class="col-12 fw-semibold mt-2">Primary insurance</dt>
+                    @if (!string.IsNullOrWhiteSpace(carrier))
+                    {
+                        <dt class="col-sm-5 ps-3 fw-normal text-muted">Carrier</dt>
+                        <dd class="col-sm-7 mb-1">@carrier</dd>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(memberId))
+                    {
+                        <dt class="col-sm-5 ps-3 fw-normal text-muted">Member ID</dt>
+                        <dd class="col-sm-7 mb-1 font-monospace">@memberId</dd>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(groupNumber))
+                    {
+                        <dt class="col-sm-5 ps-3 fw-normal text-muted">Group</dt>
+                        <dd class="col-sm-7 mb-1 font-monospace">@groupNumber</dd>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(planType))
+                    {
+                        <dt class="col-sm-5 ps-3 fw-normal text-muted">Plan type</dt>
+                        <dd class="col-sm-7 mb-2">@planType</dd>
+                    }
+                }
+            </dl>
+        }
+    </div>
+</section>

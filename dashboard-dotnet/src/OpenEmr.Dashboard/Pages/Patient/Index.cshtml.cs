@@ -39,6 +39,8 @@ public sealed class IndexModel : PageModel
 
     public CardResult<FhirEncounter> Encounters { get; private set; } = CardResult<FhirEncounter>.Empty;
 
+    public CardResult<FhirCoverage> Coverage { get; private set; } = CardResult<FhirCoverage>.Empty;
+
     public bool CopilotEnabled => this.copilotService.IsConfigured;
 
     public IReadOnlyList<(CopilotIntent Id, string Label, string Prompt)> CopilotIntents => Copilot.CopilotIntents.Catalog;
@@ -135,8 +137,11 @@ public sealed class IndexModel : PageModel
         var prescriptionsTask = SafeFetchAsync(ct => this.fhirClient.GetPrescriptionsAsync(uuid, ct), cancellationToken);
         var careTeamTask = SafeFetchAsync(ct => this.fhirClient.GetCareTeamAsync(uuid, ct), cancellationToken);
         var encountersTask = SafeFetchAsync(ct => this.fhirClient.GetEncountersAsync(uuid, ct), cancellationToken);
+        var coverageTask = SafeFetchAsync(ct => this.fhirClient.GetCoverageAsync(uuid, ct), cancellationToken);
 
-        await Task.WhenAll(allergiesTask, problemsTask, medicationsTask, prescriptionsTask, careTeamTask, encountersTask);
+        await Task.WhenAll(
+            allergiesTask, problemsTask, medicationsTask, prescriptionsTask,
+            careTeamTask, encountersTask, coverageTask);
 
         this.Allergies = allergiesTask.Result;
         this.Problems = problemsTask.Result;
@@ -144,6 +149,7 @@ public sealed class IndexModel : PageModel
         this.Prescriptions = prescriptionsTask.Result;
         this.CareTeam = careTeamTask.Result;
         this.Encounters = encountersTask.Result;
+        this.Coverage = coverageTask.Result;
     }
 
     private static string BuildDisplayName(FhirPatientRecord patient)

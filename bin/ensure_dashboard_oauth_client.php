@@ -51,7 +51,8 @@ const DEFAULT_CLIENT_NAME = 'Dashboard .NET';
 const DEFAULT_GRANT_TYPES = 'authorization_code refresh_token';
 const DEFAULT_SCOPE = 'openid fhirUser offline_access api:fhir '
     . 'user/Patient.rs user/AllergyIntolerance.rs user/Condition.rs '
-    . 'user/MedicationRequest.rs user/CareTeam.rs user/Encounter.rs';
+    . 'user/MedicationRequest.rs user/CareTeam.rs user/Encounter.rs '
+    . 'user/Coverage.rs';
 
 require_once __DIR__ . '/../vendor/autoload.php';
 

@@ -60,6 +60,7 @@ builder.Services.AddAuthentication(o =>
         "openid", "fhirUser", "offline_access", "api:fhir",
         "user/Patient.rs", "user/AllergyIntolerance.rs", "user/Condition.rs",
         "user/MedicationRequest.rs", "user/CareTeam.rs", "user/Encounter.rs",
+        "user/Coverage.rs",
     })
     {
         o.Scope.Add(s);

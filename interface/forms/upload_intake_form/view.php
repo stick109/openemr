@@ -134,14 +134,27 @@ if ($formRowId > 0) {
 // field_name. The order matters — the citation IDs become the
 // data-citation-id values the JS overlay binds to.
 // ----------------------------------------------------------------------
-/** @var list<array{test_name: string, value: string, unit: string, range: string, citation_id: ?int}> $labRows */
+// Map HL7-style abnormal codes (written by LabPdfDispatcher::ABNORMAL_FLAG_MAP)
+// back to display labels. Keys mirror that constant; keep in sync if either
+// side changes.
+$abnormalDisplay = [
+    'N' => xl('Normal'),
+    'H' => xl('High'),
+    'L' => xl('Low'),
+    'HH' => xl('Critical High'),
+    'LL' => xl('Critical Low'),
+    'A' => xl('Abnormal'),
+];
+
+/** @var list<array{test_name: string, value: string, unit: string, range: string, collection_date: string, abnormal: string, abnormal_label: string, citation_id: ?int}> $labRows */
 $labRows = [];
 if ($procedureReportId > 0) {
     $rawResults = [];
     try {
         $rawResults = QueryUtils::fetchRecords(
             'SELECT `result_text` AS `test_name`, `result` AS `value`,
-                    `units` AS `unit`, `range` AS `range`, `abnormal`
+                    `units` AS `unit`, `range` AS `range`,
+                    `date` AS `collection_date`, `abnormal`
              FROM `procedure_result`
              WHERE `procedure_report_id` = ?
              ORDER BY `procedure_result_id` ASC',
@@ -177,6 +190,13 @@ if ($procedureReportId > 0) {
         $value = isset($rawResult['value']) && is_string($rawResult['value']) ? $rawResult['value'] : '';
         $unit = isset($rawResult['unit']) && is_string($rawResult['unit']) ? $rawResult['unit'] : '';
         $rangeText = isset($rawResult['range']) && is_string($rawResult['range']) ? $rawResult['range'] : '';
+        $collectionDate = isset($rawResult['collection_date']) && is_string($rawResult['collection_date'])
+            ? $rawResult['collection_date']
+            : '';
+        $abnormalCode = isset($rawResult['abnormal']) && is_string($rawResult['abnormal'])
+            ? $rawResult['abnormal']
+            : '';
+        $abnormalLabel = $abnormalDisplay[$abnormalCode] ?? '';
         $key = strtolower(trim($testName));
 
         $citationId = null;
@@ -192,6 +212,9 @@ if ($procedureReportId > 0) {
             'value' => $value,
             'unit' => $unit,
             'range' => $rangeText,
+            'collection_date' => $collectionDate,
+            'abnormal' => $abnormalCode,
+            'abnormal_label' => $abnormalLabel,
             'citation_id' => $citationId,
         ];
     }
@@ -405,13 +428,20 @@ $citationPayloadJson = json_encode([
                                         <?php if ($labRow['unit'] !== '') { ?>
                                             <small class="text-muted"><?php echo text($labRow['unit']); ?></small>
                                         <?php } ?>
+                                        <?php if ($labRow['abnormal_label'] !== '' && $labRow['abnormal'] !== 'N') { ?>
+                                            <span class="badge badge-warning text-dark ml-1"><?php echo text($labRow['abnormal_label']); ?></span>
+                                        <?php } ?>
                                     </span>
                                 </div>
-                                <?php if ($labRow['range'] !== '') { ?>
-                                    <small class="text-muted">
+                                <small class="text-muted d-block">
+                                    <?php if ($labRow['range'] !== '') { ?>
                                         <?php echo xlt('Reference range'); ?>: <?php echo text($labRow['range']); ?>
-                                    </small>
-                                <?php } ?>
+                                    <?php } ?>
+                                    <?php if ($labRow['collection_date'] !== '') { ?>
+                                        <?php if ($labRow['range'] !== '') { ?> &middot; <?php } ?>
+                                        <?php echo xlt('Collected'); ?>: <?php echo text($labRow['collection_date']); ?>
+                                    <?php } ?>
+                                </small>
                             </li>
                         <?php } ?>
                     </ul>

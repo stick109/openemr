@@ -139,5 +139,74 @@ $session = SessionWrapperFactory::getInstance()->getActiveSession();
 $tokenMainPhp = RandomGenUtils::createUniqueToken();
 SessionUtil::setSession('token_main_php', $tokenMainPhp);
 
-header('Location: ' . $web_root . '/interface/main/tabs/main.php?token_main=' . urlencode($tokenMainPhp));
+$tabsUrl = $web_root . '/interface/main/tabs/main.php?token_main=' . urlencode($tokenMainPhp);
+
+// Why a JS-driven redirect instead of `header('Location: ...')`?
+//
+// On Railway, the Back-to-OpenEMR click originates on a different Public-
+// Suffix-List "site" (dashboard-dotnet-production.up.railway.app vs
+// openemr-web-production.up.railway.app). Chrome's SameSite enforcement
+// applies the chain INITIATOR's site to the entire redirect chain: even
+// though tabs/main.php is technically same-site as return_to_main.php, a
+// 302 hop from a cross-site-initiated request is still treated as cross-
+// site for cookie purposes, so the SameSite=Strict OpenEMR core session
+// cookie we just (re)set above is suppressed on the next hop. The user
+// arrives at tabs/main.php anonymously and globals.php dies with
+// "Site ID is missing from session data!".
+//
+// A client-driven `window.location.replace` from this HTML response has
+// THIS document as the navigation initiator, which is same-site as
+// tabs/main.php — the just-set SameSite=Strict cookie ships normally.
+// We use replace() so this shim does not appear in the back stack.
+//
+// Defensive belt-and-suspenders: also emit a SameSite=Lax mirror cookie
+// scoped to the same path, carrying the active PHP session id so even on
+// browsers that still treat the JS-initiated navigation as cross-site,
+// the session is recoverable on the next request. Lax cookies ship on
+// top-level GET navigations regardless of initiator. The mirror cookie
+// uses the same name as the core session so PHP picks it up automatically
+// — Set-Cookie with a weaker SameSite simply replaces the existing
+// per-response cookie attributes.
+$sessionName = session_name();
+$sessionId = session_id();
+$isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+if (is_string($sessionName) && $sessionName !== '' && is_string($sessionId) && $sessionId !== '') {
+    setcookie(
+        $sessionName,
+        $sessionId,
+        [
+            'expires' => 0,
+            'path' => '/',
+            'secure' => $isHttps,
+            // Core cookie sets httponly=false so JS restoreSession() can
+            // mutate it. Mirror that here so we don't accidentally tighten
+            // a downstream constraint the rest of the app depends on.
+            'httponly' => false,
+            'samesite' => 'Lax',
+        ]
+    );
+}
+
+?><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>OpenEMR</title>
+</head>
+<body>
+    <script>
+        // Same-site, JS-initiated navigation. The fresh OpenEMR session
+        // cookie set on this response will be sent by the browser on the
+        // next request because THIS document is the initiator (same site
+        // as the destination), not the cross-site dashboard page.
+        window.location.replace(<?php echo json_encode($tabsUrl, JSON_UNESCAPED_SLASHES); ?>);
+    </script>
+    <noscript>
+        <meta http-equiv="refresh" content="0; url=<?php echo attr($tabsUrl); ?>">
+        <p>Returning to OpenEMR&hellip; if your browser does not redirect, <a href="<?php echo attr($tabsUrl); ?>">click here</a>.</p>
+    </noscript>
+</body>
+</html>
+<?php
 exit();

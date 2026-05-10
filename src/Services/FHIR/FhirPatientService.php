@@ -20,6 +20,7 @@ use OpenEMR\FHIR\R4\FHIRElement\FHIRString;
 use OpenEMR\FHIR\R4\FHIRElement\FHIRUri;
 use OpenEMR\FHIR\R4\FHIRResource\FHIRDomainResource;
 use OpenEMR\FHIR\R4\FHIRResource\FHIRPatient\FHIRPatientCommunication;
+use OpenEMR\FHIR\R4\FHIRResource\FHIRPatient\FHIRPatientContact;
 use OpenEMR\Services\CodeTypesService;
 use OpenEMR\Services\FHIR\Traits\BulkExportSupportAllOperationsTrait;
 use OpenEMR\Services\FHIR\Traits\FhirBulkExportDomainResourceTrait;
@@ -217,6 +218,7 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
         $this->parseOpenEMRPatientName($patientResource, $dataRecord);
         $this->parseOpenEMRPatientAddress($patientResource, $dataRecord);
         $this->parseOpenEMRPatientTelecom($patientResource, $dataRecord);
+        $this->parseOpenEMRPatientContact($patientResource, $dataRecord);
 
         $this->parseOpenEMRDateOfBirth($patientResource, $dataRecord['DOB'] ?? null);
         $this->parseOpenEMRGenderAndBirthSex($patientResource, $dataRecord['sex'] ?? 'Unknown');
@@ -370,6 +372,61 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
             //    May have characteristics of all other use codes, suitable for urgent matters,
             //    not the first choice for routine business."
         }
+    }
+
+    /**
+     * Emit FHIR Patient.contact[] for the emergency / next-of-kin contact
+     * captured on the patient_data row (phone_contact + contact_relationship).
+     *
+     * patient_data has no dedicated column for the contact's name, so the
+     * intake-form pipeline writes "Name <phone>" into phone_contact when
+     * both halves are extracted from the source PDF (see
+     * {@see \OpenEMR\Services\Intake\Dispatcher\DemographicsDispatcher::composePhoneContact()}).
+     * Split the same delimiter back out here so a downstream consumer like
+     * the .NET dashboard sees a structured contact entry instead of a
+     * stuffed phone string.
+     *
+     * Emits nothing when no contact data is recorded — Patient.contact is
+     * an optional array, so an empty value simply omits the field.
+     */
+    private function parseOpenEMRPatientContact(FHIRPatient $patientResource, $dataRecord): void
+    {
+        $rawPhoneContact = trim((string)($dataRecord['phone_contact'] ?? ''));
+        $relationship = trim((string)($dataRecord['contact_relationship'] ?? ''));
+
+        if ($rawPhoneContact === '' && $relationship === '') {
+            return;
+        }
+
+        // Split "Name <phone>" -> name + phone. Falls back to treating the
+        // whole string as a phone when no '<' delimiter is present, which
+        // matches OpenEMR's pre-existing UI convention for phone_contact.
+        $name = '';
+        $phone = $rawPhoneContact;
+        if ($rawPhoneContact !== '' && preg_match('/^(.*)\s*<([^>]+)>\s*$/u', $rawPhoneContact, $m) === 1) {
+            $name = trim($m[1]);
+            $phone = trim($m[2]);
+        }
+
+        $contact = new FHIRPatientContact();
+
+        if ($name !== '') {
+            $humanName = new FHIRHumanName();
+            $humanName->setText($name);
+            $contact->setName($humanName);
+        }
+
+        if ($phone !== '') {
+            $contact->addTelecom(UtilsService::createContactPoint($phone, 'phone', 'home'));
+        }
+
+        if ($relationship !== '') {
+            $relConcept = new FHIRCodeableConcept();
+            $relConcept->setText($relationship);
+            $contact->addRelationship($relConcept);
+        }
+
+        $patientResource->addContact($contact);
     }
 
     private function parseOpenEMRGenderAndBirthSex(FHIRPatient $patientResource, $sex)

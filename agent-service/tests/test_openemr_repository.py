@@ -388,6 +388,30 @@ class TestRowCapsAndLookback:
         # LIMIT placeholder is the last parameter in the medications query.
         assert params[-1] == 10
 
+    def test_get_current_medications_sql_avoids_zero_date_literal(self) -> None:
+        """Pin the query against the MySQL 9 ``NO_ZERO_DATE`` regression.
+
+        Railway runs MySQL 9.4 with strict ``NO_ZERO_DATE`` in ``sql_mode``.
+        Comparing a DATE column directly against the literal
+        ``'0000-00-00'`` raises ``OperationalError(1525, "Incorrect
+        DATETIME value: '0000-00-00'")`` and breaks the chart copilot's
+        Current medications panel. The other "active list" queries
+        (allergies, problems, etc.) already rely on ``IS NULL`` plus the
+        activity flag — keep the medication query consistent so a future
+        edit can't reintroduce the literal without flunking this test.
+        """
+        cursor = FakeCursor(rows=[])
+        factory, _ = _factory_returning(cursor)
+        repo = OpenEmrReadRepository(connection_factory=factory)
+        repo.get_current_medications(context=_make_context())
+
+        sql, _ = cursor.executed[0]
+        assert "0000-00-00" not in sql, (
+            "get_current_medications must not embed the '0000-00-00' "
+            "literal: MySQL 9 strict mode (NO_ZERO_DATE) refuses the "
+            "comparison."
+        )
+
     def test_lookback_days_applied_to_recent_events(self) -> None:
         cursor = FakeCursor(rows=[])
         factory, _ = _factory_returning(cursor)

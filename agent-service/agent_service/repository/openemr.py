@@ -361,8 +361,14 @@ class OpenEmrReadRepository:
             "  AND p.patient_id = %s "
             "WHERE l.pid = %s "
             "  AND l.type = 'medication' "
-            "  AND (l.activity = 1 OR l.enddate IS NULL "
-            "    OR l.enddate = '0000-00-00' OR l.enddate >= CURDATE()) "
+            # Match the same shape as get_active_allergies / problems below.
+            # The bare ``l.enddate = '0000-00-00'`` literal blew up under
+            # MySQL 9's strict mode with ``NO_ZERO_DATE`` (Railway prod)
+            # because the engine refuses to compare a DATE column to that
+            # zero-date literal. ``IS NULL`` already covers the legitimate
+            # "no end date set" case; OpenEMR sites that wrote a real
+            # ``'0000-00-00'`` sentinel are picked up by the activity flag.
+            "  AND (l.activity = 1 OR l.enddate IS NULL OR l.enddate >= CURDATE()) "
             "ORDER BY COALESCE(l.modifydate, l.date, l.begdate) DESC, l.id DESC "
             "LIMIT %s"
         )

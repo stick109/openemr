@@ -420,6 +420,21 @@ class FhirPatientService extends FhirServiceBase implements IFhirExportableResou
         if ($name !== '') {
             $humanName = new FHIRHumanName();
             $humanName->setText($name);
+            // Also populate given[] / family from a naive whitespace split so
+            // strict FHIR consumers (the .NET dashboard's FhirHumanName record
+            // only deserializes given+family) see a structured name.
+            $parts = preg_split('/\s+/u', $name) ?: [$name];
+            if (count($parts) === 1) {
+                $humanName->addGiven($parts[0]);
+            } else {
+                $family = array_pop($parts);
+                $humanName->setFamily($family);
+                foreach ($parts as $given) {
+                    if ($given !== '') {
+                        $humanName->addGiven($given);
+                    }
+                }
+            }
             $contact->setName($humanName);
         }
 

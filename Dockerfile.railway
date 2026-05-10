@@ -17,10 +17,12 @@ RUN composer install --no-dev --no-interaction --no-progress --prefer-dist --opt
 # Locally the docker-compose entrypoint shim creates this directory with sticky
 # 1777 perms, but that shim does NOT run on Railway — the base image's own
 # entrypoint takes over. Bake the directory into the image with apache
-# ownership so PHP (uid 100) can write to it. Note: this directory is NOT on a
-# persistent volume; files survive a single container lifetime, which is fine
-# for the agent run itself but means re-viewing old uploads after a restart
-# will 404. Migrating uploads to sites/default/documents/ is a follow-up.
+# ownership so PHP (uid 100) can write to it.
+#
+# In production we override the path via OPENEMR_AGENT_SHARED_DIR to point
+# inside the persistent sites/ Railway volume, so files survive container
+# restarts. The /var/uploads/agent fallback is kept only for local dev where
+# a named docker volume is mounted there.
 RUN mkdir -p /var/uploads/agent \
     && chown apache:apache /var/uploads/agent \
     && chmod 0755 /var/uploads/agent
@@ -37,5 +39,16 @@ RUN mkdir -p /var/uploads/agent \
 # needs to be readable. Idempotent: skipped if the marker is present.
 RUN if ! grep -q 'ensure_dashboard_oauth_client' /var/www/localhost/htdocs/openemr/openemr.sh; then \
         sed -i 's|exec /usr/sbin/httpd -D FOREGROUND|php /var/www/localhost/htdocs/openemr/bin/ensure_dashboard_oauth_client.php \|\| true ; exec /usr/sbin/httpd -D FOREGROUND|' \
+            /var/www/localhost/htdocs/openemr/openemr.sh ; \
+    fi
+
+# Ensure the agent-uploads directory inside the persistent sites/ Railway
+# volume exists and is writable by apache before httpd starts. The volume
+# is only mounted at runtime, so this must run from openemr.sh (root
+# context) — we cannot bake it into the image. Idempotent mkdir + chown
+# guarantees correct ownership even if the volume was created with another
+# uid (e.g. root from a prior container) and survives across redeploys.
+RUN if ! grep -q 'agent-uploads-init' /var/www/localhost/htdocs/openemr/openemr.sh; then \
+        sed -i 's|exec /usr/sbin/httpd -D FOREGROUND|# agent-uploads-init: ensure SharedUploadManager target dir exists with apache ownership\n  mkdir -p /var/www/localhost/htdocs/openemr/sites/default/agent-uploads \&\& chown apache:apache /var/www/localhost/htdocs/openemr/sites/default/agent-uploads \&\& chmod 0755 /var/www/localhost/htdocs/openemr/sites/default/agent-uploads || true\n  exec /usr/sbin/httpd -D FOREGROUND|' \
             /var/www/localhost/htdocs/openemr/openemr.sh ; \
     fi
